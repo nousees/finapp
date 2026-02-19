@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: finapp-postgres
+    environment:
+      POSTGRES_USER: finapp
+      POSTGRES_PASSWORD: finapp
+      POSTGRES_DB: finapp
+    ports:
+      - "5432:5432"
+    volumes:
+      - finapp_pgdata:/var/lib/postgresql/data
+      - ./infrastructure/init-collection.sql:/docker-entrypoint-initdb.d/01-init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finapp -d finapp"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  finapp_pgdata:
