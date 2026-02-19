@@ -12,9 +12,6 @@
       ],
       "@shared/*": [
         "src/shared/*"
-      ],
-      "@types/*": [
-        "src/types/*"
       ]
     }
   },
