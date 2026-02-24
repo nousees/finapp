@@ -26,10 +26,15 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.md,
     gap: spacing.sm,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 14,
+    elevation: 2,
   },
   title: {
     fontSize: 18,
-    fontWeight: "700",
+    fontWeight: "800",
     color: colors.text,
   },
   subtitle: {

@@ -11,10 +11,10 @@ const Stack = createNativeStackNavigator<AnalysisStackParamList>();
 export function AnalysisStackNavigator() {
   return (
     <Stack.Navigator screenOptions={defaultStackOptions}>
-      <Stack.Screen name="AnalysisHome" component={AnalysisHomeScreen} options={{ title: "Analysis & Control" }} />
-      <Stack.Screen name="Budgets" component={BudgetsScreen} options={{ title: "Budgets" }} />
-      <Stack.Screen name="Goals" component={GoalsScreen} options={{ title: "Goals" }} />
-      <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: "Notifications" }} />
+      <Stack.Screen name="AnalysisHome" component={AnalysisHomeScreen} options={{ title: "Анализ и контроль" }} />
+      <Stack.Screen name="Budgets" component={BudgetsScreen} options={{ title: "Бюджеты" }} />
+      <Stack.Screen name="Goals" component={GoalsScreen} options={{ title: "Цели" }} />
+      <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: "Уведомления" }} />
     </Stack.Navigator>
   );
 }

@@ -9,8 +9,8 @@ const Stack = createNativeStackNavigator<AssistantStackParamList>();
 export function AssistantStackNavigator() {
   return (
     <Stack.Navigator screenOptions={defaultStackOptions}>
-      <Stack.Screen name="AssistantHome" component={AssistantHomeScreen} options={{ title: "Voice Assistant" }} />
-      <Stack.Screen name="HabitInsights" component={HabitInsightsScreen} options={{ title: "Habit Insights" }} />
+      <Stack.Screen name="AssistantHome" component={AssistantHomeScreen} options={{ title: "Финансовый ассистент" }} />
+      <Stack.Screen name="HabitInsights" component={HabitInsightsScreen} options={{ title: "Финансовые привычки" }} />
     </Stack.Navigator>
   );
 }

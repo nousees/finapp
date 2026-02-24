@@ -6,23 +6,23 @@ import { colors } from "@shared/theme/colors";
 export function VoiceCaptureScreen() {
   return (
     <Screen>
-      <SectionCard title="Voice Intake" subtitle="Whisper + NER flow UI placeholder">
+      <SectionCard title="Голосовой ввод" subtitle="Whisper + NER, пока без бизнес-логики">
         <View style={styles.recorder}>
           <View style={styles.dot} />
-          <Text style={styles.recorderText}>Tap to start recording</Text>
+          <Text style={styles.recorderText}>Нажмите, чтобы начать запись</Text>
         </View>
       </SectionCard>
 
-      <SectionCard title="Transcription Preview">
+      <SectionCard title="Результат распознавания">
         <Text style={styles.text}>
-          "Potratil 850 rublei na taksi segodnya utrom"
+          "Потратил 850 рублей на такси сегодня утром"
         </Text>
       </SectionCard>
 
-      <SectionCard title="Extracted Entities">
-        <EntityRow label="amount" value="850 RUB" />
-        <EntityRow label="category" value="Transport" />
-        <EntityRow label="datetime" value="today morning" />
+      <SectionCard title="Извлеченные сущности">
+        <EntityRow label="сумма" value="850 ₽" />
+        <EntityRow label="категория" value="Транспорт" />
+        <EntityRow label="время" value="сегодня утром" />
       </SectionCard>
     </Screen>
   );

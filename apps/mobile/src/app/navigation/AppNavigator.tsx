@@ -23,17 +23,19 @@ export function AppNavigator() {
             height: 62,
             paddingBottom: 6,
             paddingTop: 6,
+            backgroundColor: colors.surface,
+            borderTopColor: "#DCFCE7",
           },
           tabBarIcon: ({ color, size }) => (
             <Ionicons name={iconName(route.name)} size={size} color={color} />
           ),
         })}
       >
-        <Tab.Screen name="Dashboard" component={DashboardStackNavigator} options={{ title: "Home" }} />
-        <Tab.Screen name="DataHub" component={DataStackNavigator} options={{ title: "Data" }} />
-        <Tab.Screen name="Analysis" component={AnalysisStackNavigator} options={{ title: "Control" }} />
-        <Tab.Screen name="Assistant" component={AssistantStackNavigator} options={{ title: "AI" }} />
-        <Tab.Screen name="Profile" component={ProfileStackNavigator} options={{ title: "Profile" }} />
+        <Tab.Screen name="Dashboard" component={DashboardStackNavigator} options={{ title: "Главная" }} />
+        <Tab.Screen name="DataHub" component={DataStackNavigator} options={{ title: "Операции" }} />
+        <Tab.Screen name="Analysis" component={AnalysisStackNavigator} options={{ title: "Контроль" }} />
+        <Tab.Screen name="Assistant" component={AssistantStackNavigator} options={{ title: "Ассистент" }} />
+        <Tab.Screen name="Profile" component={ProfileStackNavigator} options={{ title: "Профиль" }} />
       </Tab.Navigator>
     </NavigationContainer>
   );

@@ -11,7 +11,7 @@ type Props = NativeStackScreenProps<ProfileStackParamList, "ProfileHome">;
 export function ProfileHomeScreen({ navigation }: Props) {
   return (
     <Screen>
-      <SectionCard title="Account">
+      <SectionCard title="Аккаунт">
         <View style={styles.row}>
           <View style={styles.avatar} />
           <View>
@@ -19,12 +19,18 @@ export function ProfileHomeScreen({ navigation }: Props) {
             <Text style={styles.email}>test@finapp.local</Text>
           </View>
         </View>
+        <View style={styles.premium}>
+          <Text style={styles.premiumText}>Premium</Text>
+        </View>
+        <View style={styles.button}>
+          <Text style={styles.buttonText}>Перейти на Premium</Text>
+        </View>
       </SectionCard>
 
-      <SectionCard title="Preferences">
+      <SectionCard title="Параметры">
         <ActionTile
-          title="Settings"
-          description="Language, currency, notifications and security stubs."
+          title="Настройки"
+          description="Язык, валюта, уведомления и безопасность."
           onPress={() => navigation.navigate("Settings")}
         />
       </SectionCard>
@@ -42,7 +48,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#BFDBFE",
+    backgroundColor: "#BBF7D0",
   },
   name: {
     color: colors.text,
@@ -51,5 +57,28 @@ const styles = StyleSheet.create({
   email: {
     color: colors.textSecondary,
     fontSize: 12,
+  },
+  premium: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: colors.warning,
+  },
+  premiumText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  button: {
+    borderRadius: 12,
+    backgroundColor: colors.primaryDark,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  buttonText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
+    fontSize: 14,
   },
 });

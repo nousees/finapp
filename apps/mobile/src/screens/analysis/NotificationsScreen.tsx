@@ -7,7 +7,7 @@ import { colors } from "@shared/theme/colors";
 export function NotificationsScreen() {
   return (
     <Screen>
-      <SectionCard title="Notification Feed" subtitle="Overspend alerts and reminders">
+      <SectionCard title="Лента уведомлений" subtitle="Алерты перерасхода и напоминания">
         {notifications.map((item) => (
           <View key={item.id} style={styles.item}>
             <Text style={styles.title}>{item.title}</Text>

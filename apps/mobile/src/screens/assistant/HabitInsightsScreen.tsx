@@ -6,16 +6,16 @@ import { colors } from "@shared/theme/colors";
 export function HabitInsightsScreen() {
   return (
     <Screen>
-      <SectionCard title="Subscriptions Detector">
+      <SectionCard title="Детектор подписок">
         <InsightCard
-          name="Video Streaming"
-          usage="Usage index: 24%"
-          recommendation="Consider canceling. Low activity in the last 45 days."
+          name="Видео-сервис"
+          usage="Индекс использования: 24%"
+          recommendation="Рекомендуется отключить: низкая активность за последние 45 дней."
         />
         <InsightCard
-          name="Cloud Storage"
-          usage="Usage index: 82%"
-          recommendation="Keep active. High utility for current workflow."
+          name="Облачное хранилище"
+          usage="Индекс использования: 82%"
+          recommendation="Оставить активной: подписка активно используется."
         />
       </SectionCard>
     </Screen>

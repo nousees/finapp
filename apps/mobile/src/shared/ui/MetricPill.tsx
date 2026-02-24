@@ -18,12 +18,13 @@ export function MetricPill({ label, value }: MetricPillProps) {
 
 const styles = StyleSheet.create({
   pill: {
-    backgroundColor: colors.primaryMuted,
+    backgroundColor: colors.backgroundGreen,
     borderRadius: 12,
     padding: spacing.sm,
     borderWidth: 1,
-    borderColor: "#A7F3D0",
+    borderColor: colors.primaryLight,
     gap: 2,
+    minWidth: 120,
   },
   label: {
     fontSize: 12,
@@ -31,7 +32,7 @@ const styles = StyleSheet.create({
   },
   value: {
     fontSize: 16,
-    fontWeight: "700",
-    color: colors.primary,
+    fontWeight: "800",
+    color: colors.primaryDark,
   },
 });

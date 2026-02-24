@@ -9,20 +9,20 @@ type Props = NativeStackScreenProps<AnalysisStackParamList, "AnalysisHome">;
 export function AnalysisHomeScreen({ navigation }: Props) {
   return (
     <Screen>
-      <SectionCard title="Control Center" subtitle="Budgets, goals, alerts and progress tracking">
+      <SectionCard title="Центр контроля" subtitle="Бюджеты, цели, уведомления и прогноз">
         <ActionTile
-          title="Budgets"
-          description="Category limits and overspend alerts."
+          title="Бюджеты"
+          description="Лимиты по категориям и предупреждения о перерасходе."
           onPress={() => navigation.navigate("Budgets")}
         />
         <ActionTile
-          title="Goals"
-          description="Savings targets and progress milestones."
+          title="Цели"
+          description="Финансовые цели, взносы и прогресс по датам."
           onPress={() => navigation.navigate("Goals")}
         />
         <ActionTile
-          title="Notifications"
-          description="Reminder and recommendation feed."
+          title="Уведомления"
+          description="Напоминания и персональные рекомендации."
           onPress={() => navigation.navigate("Notifications")}
         />
       </SectionCard>

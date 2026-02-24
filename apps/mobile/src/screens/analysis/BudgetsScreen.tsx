@@ -7,7 +7,7 @@ import { colors } from "@shared/theme/colors";
 export function BudgetsScreen() {
   return (
     <Screen>
-      <SectionCard title="Budget by Category">
+      <SectionCard title="Бюджеты по категориям">
         {budgets.map((item) => (
           <View key={item.id} style={styles.item}>
             <View style={styles.header}>
@@ -48,6 +48,6 @@ const styles = StyleSheet.create({
   },
   fill: {
     height: 8,
-    backgroundColor: colors.warning,
+    backgroundColor: colors.primaryDark,
   },
 });

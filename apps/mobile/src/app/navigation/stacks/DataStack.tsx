@@ -12,11 +12,11 @@ const Stack = createNativeStackNavigator<DataStackParamList>();
 export function DataStackNavigator() {
   return (
     <Stack.Navigator screenOptions={defaultStackOptions}>
-      <Stack.Screen name="DataHome" component={DataHubScreen} options={{ title: "Data Collection" }} />
-      <Stack.Screen name="TransactionsList" component={TransactionsListScreen} options={{ title: "Transactions" }} />
-      <Stack.Screen name="TransactionCreate" component={TransactionCreateScreen} options={{ title: "Manual Entry" }} />
-      <Stack.Screen name="ImportCenter" component={ImportCenterScreen} options={{ title: "CSV / Excel Import" }} />
-      <Stack.Screen name="VoiceCapture" component={VoiceCaptureScreen} options={{ title: "Voice Input" }} />
+      <Stack.Screen name="DataHome" component={DataHubScreen} options={{ title: "Сбор данных" }} />
+      <Stack.Screen name="TransactionsList" component={TransactionsListScreen} options={{ title: "Транзакции" }} />
+      <Stack.Screen name="TransactionCreate" component={TransactionCreateScreen} options={{ title: "Ручной ввод" }} />
+      <Stack.Screen name="ImportCenter" component={ImportCenterScreen} options={{ title: "Импорт CSV / Excel" }} />
+      <Stack.Screen name="VoiceCapture" component={VoiceCaptureScreen} options={{ title: "Голосовой ввод" }} />
     </Stack.Navigator>
   );
 }

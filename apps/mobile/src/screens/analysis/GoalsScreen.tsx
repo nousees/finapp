@@ -7,13 +7,13 @@ import { colors } from "@shared/theme/colors";
 export function GoalsScreen() {
   return (
     <Screen>
-      <SectionCard title="Financial Goals">
+      <SectionCard title="Финансовые цели">
         {goals.map((goal) => (
           <View style={styles.goal} key={goal.id}>
             <Text style={styles.title}>{goal.title}</Text>
-            <Text style={styles.meta}>Current: {goal.current}</Text>
-            <Text style={styles.meta}>Target: {goal.target}</Text>
-            <Text style={styles.deadline}>Deadline: {goal.deadline}</Text>
+            <Text style={styles.meta}>Накоплено: {goal.current}</Text>
+            <Text style={styles.meta}>Цель: {goal.target}</Text>
+            <Text style={styles.deadline}>Срок: {goal.deadline}</Text>
           </View>
         ))}
       </SectionCard>

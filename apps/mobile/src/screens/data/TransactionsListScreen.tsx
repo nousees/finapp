@@ -8,19 +8,19 @@ import { spacing } from "@shared/theme/spacing";
 export function TransactionsListScreen() {
   return (
     <Screen>
-      <SectionCard title="Search & Filters" subtitle="UI-only placeholders">
+      <SectionCard title="Поиск и фильтры" subtitle="Интерфейс без бизнес-логики">
         <View style={styles.fakeInput}>
-          <Text style={styles.fakeInputText}>Search by merchant, amount, category...</Text>
+          <Text style={styles.fakeInputText}>Поиск по месту, сумме и категории...</Text>
         </View>
         <View style={styles.row}>
-          <Tag label="All" active />
-          <Tag label="Expense" />
-          <Tag label="Income" />
-          <Tag label="Voice" />
+          <Tag label="Все" active />
+          <Tag label="Расходы" />
+          <Tag label="Доходы" />
+          <Tag label="Голос" />
         </View>
       </SectionCard>
 
-      <SectionCard title="Recent Transactions">
+      <SectionCard title="Последние транзакции">
         {recentTransactions.map((item) => (
           <View key={item.id} style={styles.item}>
             <View>
@@ -31,6 +31,14 @@ export function TransactionsListScreen() {
           </View>
         ))}
       </SectionCard>
+      <View style={styles.fabWrap}>
+        <View style={styles.micFab}>
+          <Text style={styles.micFabText}>●</Text>
+        </View>
+        <View style={styles.plusFab}>
+          <Text style={styles.fabText}>+</Text>
+        </View>
+      </View>
     </Screen>
   );
 }
@@ -68,8 +76,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   tagActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: colors.primaryDark,
+    borderColor: colors.primaryDark,
   },
   tagText: {
     color: colors.textSecondary,
@@ -108,5 +116,47 @@ const styles = StyleSheet.create({
   },
   income: {
     color: colors.success,
+  },
+  fabWrap: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+    marginTop: 4,
+    marginBottom: 24,
+  },
+  plusFab: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  micFab: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.primaryLight,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  fabText: {
+    color: "#FFFFFF",
+    fontSize: 22,
+    fontWeight: "800",
+    marginTop: -2,
+  },
+  micFabText: {
+    color: colors.primaryDark,
+    fontSize: 18,
+    fontWeight: "800",
+    marginTop: -1,
   },
 });

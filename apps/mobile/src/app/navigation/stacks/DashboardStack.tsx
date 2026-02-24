@@ -10,7 +10,7 @@ export function DashboardStackNavigator() {
   return (
     <Stack.Navigator screenOptions={defaultStackOptions}>
       <Stack.Screen name="DashboardHome" component={DashboardHomeScreen} options={{ title: "FinApp" }} />
-      <Stack.Screen name="Reports" component={ReportsScreen} options={{ title: "Reports" }} />
+      <Stack.Screen name="Reports" component={ReportsScreen} options={{ title: "Отчеты" }} />
     </Stack.Navigator>
   );
 }

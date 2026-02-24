@@ -6,20 +6,20 @@ import { colors } from "@shared/theme/colors";
 export function ImportCenterScreen() {
   return (
     <Screen>
-      <SectionCard title="File Upload" subtitle="CSV/Excel import flow">
+      <SectionCard title="Загрузка файла" subtitle="Сценарий импорта CSV/Excel">
         <DropArea />
-        <Text style={styles.note}>Supported formats: `.csv`, `.xlsx`</Text>
+        <Text style={styles.note}>Поддерживаемые форматы: `.csv`, `.xlsx`</Text>
       </SectionCard>
 
-      <SectionCard title="Import Preview">
-        <Row label="Detected records" value="128" />
-        <Row label="Valid records" value="124" />
-        <Row label="Warnings" value="4 (amount format)" />
+      <SectionCard title="Предпросмотр импорта">
+        <Row label="Найдено записей" value="128" />
+        <Row label="Валидные записи" value="124" />
+        <Row label="Предупреждения" value="4 (формат суммы)" />
       </SectionCard>
 
-      <SectionCard title="Import History">
-        <HistoryItem name="sber_jan.csv" status="COMPLETED" meta="124 / 128 records" />
-        <HistoryItem name="tbank_feb.xlsx" status="FAILED" meta="date column not found" failed />
+      <SectionCard title="История импорта">
+        <HistoryItem name="sber_jan.csv" status="ЗАВЕРШЕН" meta="124 / 128 записей" />
+        <HistoryItem name="tbank_feb.xlsx" status="ОШИБКА" meta="колонка с датой не найдена" failed />
       </SectionCard>
     </Screen>
   );
@@ -28,8 +28,8 @@ export function ImportCenterScreen() {
 function DropArea() {
   return (
     <View style={styles.dropArea}>
-      <Text style={styles.dropTitle}>Tap to choose file</Text>
-      <Text style={styles.dropSub}>Upload control is stubbed for now.</Text>
+      <Text style={styles.dropTitle}>Нажмите, чтобы выбрать файл</Text>
+      <Text style={styles.dropSub}>Контрол загрузки пока в режиме заглушки.</Text>
     </View>
   );
 }

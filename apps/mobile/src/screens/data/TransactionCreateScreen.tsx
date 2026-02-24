@@ -7,18 +7,18 @@ import { spacing } from "@shared/theme/spacing";
 export function TransactionCreateScreen() {
   return (
     <Screen>
-      <SectionCard title="Manual Transaction">
-        <FakeField label="Amount" value="e.g. 1250.00" />
-        <FakeField label="Type" value="EXPENSE | INCOME | TRANSFER" />
-        <FakeField label="Category" value="Autocomplete placeholder" />
-        <FakeField label="Description" value="Optional notes" />
-        <FakeField label="Date" value="YYYY-MM-DD / DD.MM.YYYY" />
+      <SectionCard title="Новая транзакция">
+        <FakeField label="Сумма" value="например 1250.00" />
+        <FakeField label="Тип" value="РАСХОД | ДОХОД | ПЕРЕВОД" />
+        <FakeField label="Категория" value="Автоподсказка категории" />
+        <FakeField label="Описание" value="Комментарий к операции" />
+        <FakeField label="Дата" value="YYYY-MM-DD / DD.MM.YYYY" />
       </SectionCard>
 
-      <SectionCard title="Validation Stub">
-        <Text style={styles.note}>Button and validation states are UI placeholders only.</Text>
+      <SectionCard title="Сохранение">
+        <Text style={styles.note}>Кнопка и валидации пока работают как визуальная заглушка.</Text>
         <View style={styles.button}>
-          <Text style={styles.buttonText}>Save Transaction</Text>
+          <Text style={styles.buttonText}>Сохранить транзакцию</Text>
         </View>
       </SectionCard>
     </Screen>
@@ -61,7 +61,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   button: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryDark,
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: "center",

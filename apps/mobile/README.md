@@ -19,6 +19,14 @@ npm install
 npm run start
 ```
 
+## Run with Docker
+
+From repository root:
+
+```bash
+docker compose up --build mobile
+```
+
 ## Navigation map
 
 - Tab: `Home` -> `Dashboard`, `Reports`

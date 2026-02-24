@@ -6,11 +6,11 @@ import { colors } from "@shared/theme/colors";
 export function SettingsScreen() {
   return (
     <Screen>
-      <SectionCard title="Application Settings">
-        <SettingRow name="Default currency" value="RUB" />
-        <SettingRow name="Language" value="Russian" />
-        <SettingRow name="Push notifications" value="Enabled" />
-        <SettingRow name="Biometric login" value="Disabled" />
+      <SectionCard title="Настройки приложения">
+        <SettingRow name="Валюта по умолчанию" value="RUB" />
+        <SettingRow name="Язык" value="Русский" />
+        <SettingRow name="Push-уведомления" value="Включены" />
+        <SettingRow name="Биометрический вход" value="Выключен" />
       </SectionCard>
     </Screen>
   );

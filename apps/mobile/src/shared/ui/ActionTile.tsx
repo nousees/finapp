@@ -13,7 +13,7 @@ export function ActionTile({ title, description, onPress }: ActionTileProps) {
     <Pressable style={styles.tile} onPress={onPress}>
       <View style={styles.row}>
         <Text style={styles.title}>{title}</Text>
-        <Text style={styles.arrow}>{"->"}</Text>
+        <Text style={styles.arrow}>{">"}</Text>
       </View>
       <Text style={styles.description}>{description}</Text>
     </Pressable>
@@ -22,10 +22,10 @@ export function ActionTile({ title, description, onPress }: ActionTileProps) {
 
 const styles = StyleSheet.create({
   tile: {
-    backgroundColor: "#F8FAFC",
+    backgroundColor: colors.background,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: "#D9F99D",
     padding: spacing.md,
     gap: spacing.xs,
   },
@@ -41,8 +41,8 @@ const styles = StyleSheet.create({
   },
   arrow: {
     fontSize: 15,
-    color: colors.accent,
-    fontWeight: "700",
+    color: colors.primaryDark,
+    fontWeight: "900",
   },
   description: {
     color: colors.textSecondary,
