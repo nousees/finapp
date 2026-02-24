@@ -12,7 +12,8 @@ module.exports = function babelConfig(api) {
             "@shared": "./src/shared"
           }
         }
-      ]
+      ],
+      "react-native-reanimated/plugin"
     ]
   };
 };

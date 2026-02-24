@@ -9,14 +9,14 @@ type Props = NativeStackScreenProps<AssistantStackParamList, "AssistantHome">;
 export function AssistantHomeScreen({ navigation }: Props) {
   return (
     <Screen>
-      <SectionCard title="Voice Assistant" subtitle="Speech, entities and habit recommendations">
+      <SectionCard title="Голосовой ассистент" subtitle="Речь, сущности и рекомендации по привычкам">
         <ActionTile
-          title="Voice Scenarios"
-          description="UI cards for speech recognition and entity extraction."
+          title="Голосовые сценарии"
+          description="Распознавание речи и извлечение ключевых сущностей."
         />
         <ActionTile
-          title="Habit Insights"
-          description="Subscription usage and recommendation cards."
+          title="Привычки и подписки"
+          description="Индекс использования и рекомендации по экономии."
           onPress={() => navigation.navigate("HabitInsights")}
         />
       </SectionCard>

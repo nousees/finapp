@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { colors } from "@shared/theme/colors";
-import { spacing } from "@shared/theme/spacing";
+import { MaterialIcons } from "@expo/vector-icons";
+import { useAppTheme } from "@shared/theme/ThemeProvider";
+import { radius, spacing } from "@shared/theme/spacing";
 
 type ActionTileProps = {
   title: string;
@@ -9,23 +10,23 @@ type ActionTileProps = {
 };
 
 export function ActionTile({ title, description, onPress }: ActionTileProps) {
+  const { colors } = useAppTheme();
+
   return (
-    <Pressable style={styles.tile} onPress={onPress}>
+    <Pressable style={[styles.tile, { backgroundColor: colors.background, borderColor: colors.border }]} onPress={onPress}>
       <View style={styles.row}>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.arrow}>{"->"}</Text>
+        <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
+        <MaterialIcons name="arrow-forward-ios" size={16} color={colors.primaryDark} />
       </View>
-      <Text style={styles.description}>{description}</Text>
+      <Text style={[styles.description, { color: colors.textMuted }]}>{description}</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   tile: {
-    backgroundColor: "#F8FAFC",
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.border,
     padding: spacing.md,
     gap: spacing.xs,
   },
@@ -35,17 +36,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   title: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: colors.text,
-  },
-  arrow: {
-    fontSize: 15,
-    color: colors.accent,
-    fontWeight: "700",
+    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
   },
   description: {
-    color: colors.textSecondary,
     fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 18,
   },
 });

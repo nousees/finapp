@@ -1,23 +1,23 @@
 import { BudgetItem, GoalItem, NotificationItem, TransactionItem } from "../../types/domain";
 
 export const recentTransactions: TransactionItem[] = [
-  { id: "t1", title: "Coffee", date: "2026-02-18", category: "Food", amount: "-390 RUB", kind: "EXPENSE" },
-  { id: "t2", title: "Taxi", date: "2026-02-18", category: "Transport", amount: "-840 RUB", kind: "EXPENSE" },
-  { id: "t3", title: "Salary", date: "2026-02-17", category: "Income", amount: "+120000 RUB", kind: "INCOME" },
+  { id: "t1", title: "Кофе", date: "18.02.2026", category: "Питание", amount: "-390 ₽", kind: "EXPENSE" },
+  { id: "t2", title: "Такси", date: "18.02.2026", category: "Транспорт", amount: "-840 ₽", kind: "EXPENSE" },
+  { id: "t3", title: "Зарплата", date: "17.02.2026", category: "Доход", amount: "+120 000 ₽", kind: "INCOME" },
 ];
 
 export const budgets: BudgetItem[] = [
-  { id: "b1", category: "Food", spent: "12400 RUB", limit: "18000 RUB", progress: 0.69 },
-  { id: "b2", category: "Transport", spent: "6100 RUB", limit: "8000 RUB", progress: 0.76 },
-  { id: "b3", category: "Entertainment", spent: "4200 RUB", limit: "6000 RUB", progress: 0.7 },
+  { id: "b1", category: "Питание", spent: "12 400 ₽", limit: "18 000 ₽", progress: 0.69 },
+  { id: "b2", category: "Транспорт", spent: "6 100 ₽", limit: "8 000 ₽", progress: 0.76 },
+  { id: "b3", category: "Развлечения", spent: "4 200 ₽", limit: "6 000 ₽", progress: 0.7 },
 ];
 
 export const goals: GoalItem[] = [
-  { id: "g1", title: "Emergency Fund", current: "145000 RUB", target: "300000 RUB", deadline: "2026-12-31" },
-  { id: "g2", title: "New Laptop", current: "45000 RUB", target: "120000 RUB", deadline: "2026-09-01" },
+  { id: "g1", title: "Финансовая подушка", current: "145 000 ₽", target: "300 000 ₽", deadline: "31.12.2026" },
+  { id: "g2", title: "Новый ноутбук", current: "45 000 ₽", target: "120 000 ₽", deadline: "01.09.2026" },
 ];
 
 export const notifications: NotificationItem[] = [
-  { id: "n1", title: "Budget alert", text: "Transport budget reached 76%.", time: "10 min ago" },
-  { id: "n2", title: "Goal update", text: "Emergency fund +2,500 RUB this week.", time: "2 h ago" },
+  { id: "n1", title: "Лимит почти достигнут", text: "Бюджет по транспорту заполнен на 76%.", time: "10 минут назад" },
+  { id: "n2", title: "Прогресс цели", text: "Подушка безопасности +2 500 ₽ за неделю.", time: "2 часа назад" },
 ];

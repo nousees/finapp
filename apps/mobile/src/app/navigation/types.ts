@@ -1,9 +1,30 @@
 export type RootTabParamList = {
-  Dashboard: undefined;
-  DataHub: undefined;
-  Analysis: undefined;
-  Assistant: undefined;
+  Home: undefined;
+  Transactions: undefined;
+  Budgets: undefined;
+  Goals: undefined;
   Profile: undefined;
+};
+
+export type HomeStackParamList = {
+  DashboardHome: undefined;
+  Reports: undefined;
+};
+
+export type TransactionsStackParamList = {
+  TransactionsList: undefined;
+  TransactionCreate: undefined;
+  VoiceCapture: undefined;
+  ImportCenter: undefined;
+};
+
+export type BudgetsStackParamList = {
+  BudgetsHome: undefined;
+  Notifications: undefined;
+};
+
+export type GoalsStackParamList = {
+  GoalsHome: undefined;
 };
 
 export type DashboardStackParamList = {

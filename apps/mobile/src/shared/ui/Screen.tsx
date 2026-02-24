@@ -1,19 +1,34 @@
 import { PropsWithChildren } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { colors } from "@shared/theme/colors";
+import { LinearGradient } from "expo-linear-gradient";
+import { useAppTheme } from "@shared/theme/ThemeProvider";
 import { spacing } from "@shared/theme/spacing";
 
 type ScreenProps = PropsWithChildren<{
   scroll?: boolean;
+  withGradient?: boolean;
 }>;
 
-export function Screen({ children, scroll = true }: ScreenProps) {
-  const content = <View style={styles.content}>{children}</View>;
+export function Screen({ children, scroll = true, withGradient = true }: ScreenProps) {
+  const { colors, gradients, isDark } = useAppTheme();
+  const content = <View style={[styles.content, !scroll ? styles.contentStatic : undefined]}>{children}</View>;
+  const screenGradient = isDark ? gradients.darkScreen : gradients.lightScreen;
 
   return (
-    <SafeAreaView style={styles.root} edges={["top"]}>
-      {scroll ? <ScrollView>{content}</ScrollView> : content}
+    <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]} edges={["top", "bottom"]}>
+      {withGradient ? (
+        <LinearGradient colors={screenGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+      ) : null}
+      <View style={[styles.glowTop, { backgroundColor: isDark ? "#1E293B66" : colors.surfaceAlt }]} />
+      <View style={[styles.glowRight, { backgroundColor: isDark ? "#22C55E1A" : "#DCFCE7" }]} />
+      {scroll ? (
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          {content}
+        </ScrollView>
+      ) : (
+        content
+      )}
     </SafeAreaView>
   );
 }
@@ -21,10 +36,32 @@ export function Screen({ children, scroll = true }: ScreenProps) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: colors.background,
+  },
+  scrollContent: {
+    paddingBottom: 92,
+  },
+  glowTop: {
+    position: "absolute",
+    width: 260,
+    height: 260,
+    top: -110,
+    left: -80,
+    borderRadius: 140,
+  },
+  glowRight: {
+    position: "absolute",
+    width: 210,
+    height: 210,
+    top: 34,
+    right: -90,
+    borderRadius: 120,
   },
   content: {
     padding: spacing.md,
+    paddingBottom: spacing.lg,
     gap: spacing.md,
+  },
+  contentStatic: {
+    flex: 1,
   },
 });
