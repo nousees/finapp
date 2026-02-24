@@ -33,7 +33,7 @@ export function ReportsScreen() {
   );
 }
 
-function FakeBar({ label, value, width }: { label: string; value: string; width: string }) {
+function FakeBar({ label, value, width }: { label: string; value: string; width: `${number}%` }) {
   return (
     <View style={styles.barItem}>
       <View style={styles.barHead}>

@@ -1,6 +1,6 @@
 import { StyleSheet, Text, View } from "react-native";
-import { colors } from "@shared/theme/colors";
-import { spacing } from "@shared/theme/spacing";
+import { useAppTheme } from "@shared/theme/ThemeProvider";
+import { radius, spacing } from "@shared/theme/spacing";
 
 type MetricPillProps = {
   label: string;
@@ -8,31 +8,30 @@ type MetricPillProps = {
 };
 
 export function MetricPill({ label, value }: MetricPillProps) {
+  const { colors } = useAppTheme();
+
   return (
-    <View style={styles.pill}>
-      <Text style={styles.label}>{label}</Text>
-      <Text style={styles.value}>{value}</Text>
+    <View style={[styles.pill, { backgroundColor: colors.surfaceAlt, borderColor: colors.borderStrong }]}>
+      <Text style={[styles.label, { color: colors.textMuted }]}>{label}</Text>
+      <Text style={[styles.value, { color: colors.primaryDark }]}>{value}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   pill: {
-    backgroundColor: colors.backgroundGreen,
-    borderRadius: 12,
+    borderRadius: radius.md,
     padding: spacing.sm,
     borderWidth: 1,
-    borderColor: colors.primaryLight,
     gap: 2,
     minWidth: 120,
   },
   label: {
     fontSize: 12,
-    color: colors.textSecondary,
+    fontFamily: "Inter_500Medium",
   },
   value: {
     fontSize: 16,
-    fontWeight: "800",
-    color: colors.primaryDark,
+    fontFamily: "Inter_700Bold",
   },
 });

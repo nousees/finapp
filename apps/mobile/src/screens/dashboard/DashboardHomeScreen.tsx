@@ -1,115 +1,391 @@
+﻿import { useMemo, useState } from "react";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from "react-native-svg";
 import { DashboardStackParamList } from "@app/navigation/types";
 import { Screen } from "@shared/ui/Screen";
 import { SectionCard } from "@shared/ui/SectionCard";
-import { MetricPill } from "@shared/ui/MetricPill";
-import { ActionTile } from "@shared/ui/ActionTile";
-import { StyleSheet, Text, View } from "react-native";
-import { colors } from "@shared/theme/colors";
+import { useAppTheme } from "@shared/theme/ThemeProvider";
+import { radius, spacing } from "@shared/theme/spacing";
+import { MaterialIcons } from "@expo/vector-icons";
 
 type Props = NativeStackScreenProps<DashboardStackParamList, "DashboardHome">;
 
+const categories = [
+  { id: "food", title: "\u0415\u0434\u0430", percent: 36, amount: `32 840 \u20BD`, color: "#22C55E" },
+  { id: "transport", title: "\u0422\u0440\u0430\u043D\u0441\u043F\u043E\u0440\u0442", percent: 24, amount: `21 490 \u20BD`, color: "#16A34A" },
+  { id: "home", title: "\u0414\u043E\u043C", percent: 18, amount: `16 180 \u20BD`, color: "#86EFAC" },
+  { id: "other", title: "\u041F\u0440\u043E\u0447\u0435\u0435", percent: 22, amount: `19 520 \u20BD`, color: "#BBF7D0" },
+];
+
+const recentTransactions = [
+  { id: "1", title: "\u0412\u043A\u0443\u0441\u0412\u0438\u043B\u043B", category: "\u0415\u0434\u0430", amount: `-2 490 \u20BD`, icon: "restaurant" as const },
+  { id: "2", title: "\u042F\u043D\u0434\u0435\u043A\u0441 Go", category: "\u0422\u0440\u0430\u043D\u0441\u043F\u043E\u0440\u0442", amount: `-780 \u20BD`, icon: "directions-car" as const },
+  { id: "3", title: "\u041B\u0435\u043D\u0442\u0430", category: "\u0414\u043E\u043C", amount: `-3 240 \u20BD`, icon: "home-work" as const },
+  { id: "4", title: "Netflix", category: "\u041F\u043E\u0434\u043F\u0438\u0441\u043A\u0438", amount: `-999 \u20BD`, icon: "movie" as const },
+  { id: "5", title: "\u0417\u0430\u0440\u043F\u043B\u0430\u0442\u0430", category: "\u0414\u043E\u0445\u043E\u0434", amount: `+120 000 \u20BD`, icon: "payments" as const },
+];
+
 export function DashboardHomeScreen({ navigation }: Props) {
+  const { colors, gradients, isDark } = useAppTheme();
+  const [activeCategory, setActiveCategory] = useState(categories[0]);
+  const isPositiveBalance = true;
+  const balanceColor = isPositiveBalance ? colors.success : colors.danger;
+
+  const spentTotal = useMemo(() => categories.reduce((sum, item) => sum + item.percent, 0), []);
+
   return (
     <Screen>
-      <SectionCard title="Осталось на месяц" subtitle="Февраль 2026">
-        <Text style={styles.balance}>51 350 ₽</Text>
-        <View style={styles.metrics}>
-          <MetricPill label="Доходы" value="+143 200 ₽" />
-          <MetricPill label="Расходы" value="-91 850 ₽" />
+      <LinearGradient colors={gradients.success} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.heroCard}>
+        <Text style={styles.balanceLabel}>{"\u041E\u0441\u0442\u0430\u043B\u043E\u0441\u044C \u043D\u0430 \u043C\u0435\u0441\u044F\u0446"}</Text>
+        <Text style={[styles.balanceValue, { color: balanceColor }]}>{`47 820 \u20BD`}</Text>
+      </LinearGradient>
+
+      <SectionCard
+        title={"\u0421\u0442\u0440\u0443\u043A\u0442\u0443\u0440\u0430 \u0440\u0430\u0441\u0445\u043E\u0434\u043E\u0432"}
+        subtitle={"\u041D\u0430\u0436\u043C\u0438\u0442\u0435 \u043D\u0430 \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u044E, \u0447\u0442\u043E\u0431\u044B \u0443\u0432\u0438\u0434\u0435\u0442\u044C \u0434\u0435\u0442\u0430\u043B\u0438"}
+      >
+        <View style={styles.chartRow}>
+          <DonutChart percentage={spentTotal} />
+          <View style={styles.legendWrap}>
+            {categories.map((item) => (
+              <Pressable key={item.id} style={styles.legendItem} onPress={() => setActiveCategory(item)}>
+                <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+                <Text style={[styles.legendText, { color: colors.text }]}>{item.title}</Text>
+                <Text style={[styles.legendPercent, { color: colors.textMuted }]}>{item.percent}%</Text>
+              </Pressable>
+            ))}
+          </View>
         </View>
-        <View style={styles.chart}>
-          <Segment width="46%" color={colors.primaryDark} label="Питание" />
-          <Segment width="28%" color={colors.primary} label="Транспорт" />
-          <Segment width="14%" color={colors.primaryLight} label="Дом" />
-          <Segment width="12%" color="#CBD5E1" label="Другое" />
+
+        <View style={[styles.categoryDetails, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+          <Text style={[styles.categoryTitle, { color: colors.text }]}>{activeCategory.title}</Text>
+          <Text style={[styles.categoryAmount, { color: colors.primaryDark }]}>{activeCategory.amount}</Text>
+          <Text style={[styles.categoryHint, { color: colors.textMuted }]}>
+            {"\u0414\u043E\u043B\u044F \u043E\u0442 \u043C\u0435\u0441\u044F\u0447\u043D\u044B\u0445 \u0440\u0430\u0441\u0445\u043E\u0434\u043E\u0432:"} {activeCategory.percent}%
+          </Text>
         </View>
       </SectionCard>
 
-      <SectionCard title="Цели месяца" subtitle="Прогресс накоплений">
-        <GoalRow title="Подушка безопасности" value="48%" />
-        <GoalRow title="Отпуск" value="63%" />
+      <SectionCard title={"\u0411\u043B\u0438\u0436\u0430\u0439\u0448\u0430\u044F \u0446\u0435\u043B\u044C"}>
+        <View style={styles.goalCard}>
+          <View style={styles.goalLeft}>
+            <View style={[styles.goalIcon, { backgroundColor: colors.surfaceAlt }]}> 
+              <MaterialIcons name="flight-takeoff" size={22} color={colors.primaryDark} />
+            </View>
+            <View style={styles.goalTextWrap}>
+              <Text style={[styles.goalTitle, { color: colors.text }]}>{"\u041F\u0443\u0442\u0435\u0448\u0435\u0441\u0442\u0432\u0438\u0435 \u0432 \u0422\u043E\u043A\u0438\u043E"}</Text>
+              <Text style={[styles.goalHint, { color: colors.textMuted }]}>{`\u041D\u0443\u0436\u043D\u043E \u043E\u0442\u043A\u043B\u0430\u0434\u044B\u0432\u0430\u0442\u044C 18 400 \u20BD/\u043C\u0435\u0441`}</Text>
+            </View>
+          </View>
+          <CircularProgress value={63} />
+        </View>
       </SectionCard>
 
-      <SectionCard title="Быстрый доступ">
-        <ActionTile
-          title="Отчеты и аналитика"
-          description="Графики по категориям, динамика и экспорт PDF."
-          onPress={() => navigation.navigate("Reports")}
-        />
+      <SectionCard title={"\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0435 \u0442\u0440\u0430\u043D\u0437\u0430\u043A\u0446\u0438\u0438"}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={styles.txRow}>
+            {recentTransactions.map((item) => (
+              <View key={item.id} style={[styles.txCard, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+                <View style={[styles.txIcon, { backgroundColor: colors.background }]}>
+                  <MaterialIcons name={item.icon} size={18} color={colors.primaryDark} />
+                </View>
+                <Text style={[styles.txAmount, { color: item.amount.includes("+") ? colors.success : colors.text }]}>{item.amount}</Text>
+                <Text style={[styles.txTitle, { color: colors.text }]}>{item.title}</Text>
+                <Text style={[styles.txCategory, { color: colors.textMuted }]}>{item.category}</Text>
+              </View>
+            ))}
+          </View>
+        </ScrollView>
       </SectionCard>
+
+      <SectionCard title={"\u0412\u0430\u0436\u043D\u044B\u0435 \u0441\u0438\u0433\u043D\u0430\u043B\u044B"}>
+        <AlertCard title={`\u0411\u044E\u0434\u0436\u0435\u0442 \"\u0415\u0434\u0430\" \u043F\u0440\u0435\u0432\u044B\u0448\u0435\u043D \u043D\u0430 2 300 \u20BD`} tone="danger" />
+        <AlertCard title={"Netflix \u043D\u0435 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u043B\u0430\u0441\u044C 29 \u0434\u043D\u0435\u0439 - \u043E\u0442\u043C\u0435\u043D\u0438\u0442\u044C?"} tone="success" />
+        <AlertCard title={"\u0426\u0435\u043B\u044C \u00AB\u041F\u043E\u0434\u0443\u0448\u043A\u0430\u00BB \u0438\u0434\u0435\u0442 \u0441 \u043E\u043F\u0435\u0440\u0435\u0436\u0435\u043D\u0438\u0435\u043C +8%"} tone="success" />
+        <Pressable style={styles.reportButton} onPress={() => navigation.navigate("Reports")}>
+          <Text style={styles.reportButtonText}>{"\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u043F\u043E\u0434\u0440\u043E\u0431\u043D\u044B\u0435 \u043E\u0442\u0447\u0435\u0442\u044B"}</Text>
+        </Pressable>
+      </SectionCard>
+
+      <View style={[styles.footerSpacer, { backgroundColor: isDark ? "transparent" : colors.backgroundAlt }]} />
     </Screen>
   );
 }
 
-function Segment({ width, color, label }: { width: string; color: string; label: string }) {
+function DonutChart({ percentage }: { percentage: number }) {
+  const { colors, isDark } = useAppTheme();
+  const size = 140;
+  const stroke = 18;
+  const radiusValue = (size - stroke) / 2;
+  const circumference = radiusValue * Math.PI * 2;
+  const progress = Math.min(percentage / 100, 1);
+  const dash = circumference * progress;
+
   return (
-    <View style={[styles.segment, { width, backgroundColor: color }]}>
-      <Text style={styles.segmentText}>{label}</Text>
+    <View style={styles.donutWrap}>
+      <Svg width={size} height={size}>
+        <Defs>
+          <SvgGradient id="greenGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <Stop offset="0%" stopColor="#86EFAC" />
+            <Stop offset="100%" stopColor="#22C55E" />
+          </SvgGradient>
+        </Defs>
+        <Circle cx={size / 2} cy={size / 2} r={radiusValue} stroke={isDark ? "#334155" : "#DCFCE7"} strokeWidth={stroke} fill="none" />
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radiusValue}
+          stroke="url(#greenGradient)"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          fill="none"
+          strokeDasharray={`${dash} ${circumference}`}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </Svg>
+      <View style={styles.donutCenter}>
+        <Text style={[styles.donutValue, { color: colors.primaryDark }]}>{percentage}%</Text>
+        <Text style={[styles.donutLabel, { color: colors.textSecondary }]}>{"\u0420\u0430\u0441\u0445\u043E\u0434\u044B"}</Text>
+      </View>
     </View>
   );
 }
 
-function GoalRow({ title, value }: { title: string; value: string }) {
+function CircularProgress({ value }: { value: number }) {
+  const size = 78;
+  const stroke = 9;
+  const radiusValue = (size - stroke) / 2;
+  const circumference = radiusValue * Math.PI * 2;
+  const progress = Math.min(value / 100, 1);
+  const dash = circumference * progress;
+
   return (
-    <View style={styles.goalRow}>
-      <Text style={styles.goalTitle}>{title}</Text>
-      <View style={styles.goalTrack}>
-        <View style={[styles.goalFill, { width: value }]} />
+    <View style={styles.progressWrap}>
+      <Svg width={size} height={size}>
+        <Circle cx={size / 2} cy={size / 2} r={radiusValue} stroke="#DCFCE7" strokeWidth={stroke} fill="none" />
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radiusValue}
+          stroke="#22C55E"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          fill="none"
+          strokeDasharray={`${dash} ${circumference}`}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </Svg>
+      <View style={styles.progressCenter}>
+        <Text style={styles.progressLabel}>{value}%</Text>
       </View>
-      <Text style={styles.goalValue}>{value}</Text>
+    </View>
+  );
+}
+
+function AlertCard({ title, tone }: { title: string; tone: "success" | "danger" }) {
+  const { colors } = useAppTheme();
+  const borderColor = tone === "success" ? colors.success : colors.danger;
+  const icon = tone === "success" ? "check-circle-outline" : "warning-amber";
+
+  return (
+    <View style={[styles.alertCard, { borderColor }]}>
+      <MaterialIcons name={icon} size={20} color={borderColor} />
+      <Text style={[styles.alertText, { color: colors.text }]}>{title}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  balance: {
-    fontSize: 38,
-    fontWeight: "800",
-    color: colors.primaryDark,
+  heroCard: {
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    gap: spacing.sm,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 18,
+    elevation: 3,
   },
-  metrics: {
+  balanceLabel: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+    color: "#ECFDF5",
+  },
+  balanceValue: {
+    fontSize: 36,
+    fontFamily: "Inter_700Bold",
+  },
+  chartRow: {
     flexDirection: "row",
-    gap: 10,
+    gap: spacing.md,
+    alignItems: "center",
   },
-  chart: {
-    flexDirection: "row",
-    borderRadius: 14,
-    overflow: "hidden",
-    height: 42,
-    backgroundColor: "#E2E8F0",
-  },
-  segment: {
+  donutWrap: {
+    width: 140,
+    height: 140,
     justifyContent: "center",
     alignItems: "center",
   },
-  segmentText: {
-    color: "#FFFFFF",
-    fontSize: 11,
-    fontWeight: "700",
+  donutCenter: {
+    position: "absolute",
+    alignItems: "center",
   },
-  goalRow: {
-    gap: 6,
+  donutValue: {
+    fontSize: 24,
+    fontFamily: "Inter_700Bold",
+  },
+  donutLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+  },
+  legendWrap: {
+    flex: 1,
+    gap: spacing.xs,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 2,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  legendText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+  },
+  legendPercent: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+  },
+  categoryDetails: {
+    marginTop: 2,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    padding: spacing.sm,
+    gap: 2,
+  },
+  categoryTitle: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+  },
+  categoryAmount: {
+    fontSize: 24,
+    fontFamily: "Inter_700Bold",
+  },
+  categoryHint: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+  },
+  goalCard: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  goalLeft: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    alignItems: "center",
+    flex: 1,
+  },
+  goalIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  goalTextWrap: {
+    flex: 1,
+    gap: 3,
   },
   goalTitle: {
-    color: colors.text,
-    fontWeight: "700",
+    fontSize: 16,
+    fontFamily: "Inter_600SemiBold",
+  },
+  goalHint: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+  },
+  progressWrap: {
+    width: 78,
+    height: 78,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  progressCenter: {
+    position: "absolute",
+  },
+  progressLabel: {
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+    color: "#16A34A",
+  },
+  txRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    paddingRight: spacing.sm,
+  },
+  txCard: {
+    width: 132,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    padding: spacing.sm,
+    gap: 4,
+  },
+  txIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  txAmount: {
+    marginTop: 2,
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+  },
+  txTitle: {
     fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
   },
-  goalTrack: {
-    height: 10,
-    borderRadius: 999,
-    backgroundColor: "#DCFCE7",
-    overflow: "hidden",
-  },
-  goalFill: {
-    height: 10,
-    borderRadius: 999,
-    backgroundColor: colors.primaryDark,
-  },
-  goalValue: {
-    color: colors.textSecondary,
+  txCategory: {
     fontSize: 12,
-    fontWeight: "600",
+    fontFamily: "Inter_400Regular",
+  },
+  alertCard: {
+    borderWidth: 1.2,
+    borderRadius: radius.md,
+    padding: spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  alertText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 19,
+    fontFamily: "Inter_500Medium",
+  },
+  reportButton: {
+    marginTop: 2,
+    borderRadius: radius.md,
+    backgroundColor: "#22C55E",
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  reportButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+  },
+  footerSpacer: {
+    height: 6,
   },
 });

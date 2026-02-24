@@ -1,7 +1,7 @@
 import { PropsWithChildren } from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { colors } from "@shared/theme/colors";
-import { spacing } from "@shared/theme/spacing";
+import { useAppTheme } from "@shared/theme/ThemeProvider";
+import { radius, spacing } from "@shared/theme/spacing";
 
 type SectionCardProps = PropsWithChildren<{
   title: string;
@@ -9,10 +9,21 @@ type SectionCardProps = PropsWithChildren<{
 }>;
 
 export function SectionCard({ title, subtitle, children }: SectionCardProps) {
+  const { colors } = useAppTheme();
+
   return (
-    <View style={styles.card}>
-      <Text style={styles.title}>{title}</Text>
-      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+    <View
+      style={[
+        styles.card,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          shadowColor: colors.shadow,
+        },
+      ]}
+    >
+      <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
+      {subtitle ? <Text style={[styles.subtitle, { color: colors.textMuted }]}>{subtitle}</Text> : null}
       <View style={styles.body}>{children}</View>
     </View>
   );
@@ -20,26 +31,22 @@ export function SectionCard({ title, subtitle, children }: SectionCardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
+    borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.border,
     padding: spacing.md,
     gap: spacing.sm,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 10 },
-    shadowRadius: 14,
-    elevation: 2,
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 12,
+    elevation: 3,
   },
   title: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: colors.text,
+    fontSize: 20,
+    fontFamily: "Inter_700Bold",
   },
   subtitle: {
-    fontSize: 13,
-    color: colors.textSecondary,
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
   },
   body: {
     gap: spacing.sm,
