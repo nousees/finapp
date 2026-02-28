@@ -1,0 +1,24 @@
+# Compiled files and binaries
+*.exe
+*.exe~
+*.out
+*.test
+*.dll
+*.so
+*.dylib
+
+# Dependency directories (use go mod instead)
+vendor/
+
+# Logs
+*.log
+
+# Environment variables
+.env
+
+# Database files (if any)
+*.db
+
+# Go workspace files
+go.work
+go.work.sum
