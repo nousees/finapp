@@ -37,12 +37,15 @@ CREATE TABLE transactions (
     currency VARCHAR(3) DEFAULT 'RUB',
     type VARCHAR(10) NOT NULL CHECK (type IN ('INCOME', 'EXPENSE', 'TRANSFER')),
     category_id UUID REFERENCES categories(id),
+    ml_category_id UUID REFERENCES categories(id),
+    ml_confidence DECIMAL(5,4),
     description TEXT,
     original_description TEXT,
     date TIMESTAMP WITH TIME ZONE NOT NULL,
     payment_method VARCHAR(50),
     bank_account_id UUID REFERENCES bank_accounts(id),
     is_verified BOOLEAN DEFAULT TRUE,
+    is_recurring BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -72,10 +75,38 @@ CREATE TABLE voice_transcriptions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE subscriptions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(200) NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    currency VARCHAR(3) DEFAULT 'RUB',
+    category_id UUID REFERENCES categories(id),
+    recurrence VARCHAR(20) NOT NULL CHECK (recurrence IN ('WEEKLY', 'MONTHLY', 'YEARLY')),
+    usage_index DECIMAL(5,4),
+    is_active BOOLEAN DEFAULT TRUE,
+    recommendation TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE recommendations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type VARCHAR(50) NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    estimated_savings DECIMAL(10,2),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Тестовый пользователь (пароль можно любой для теста)
 INSERT INTO users (id, email, password_hash) VALUES
     ('11111111-1111-1111-1111-111111111111', 'test@finapp.local', 'test');
 
 CREATE INDEX idx_transactions_user_date ON transactions(user_id, date DESC);
+CREATE INDEX idx_transactions_user_category ON transactions(user_id, category_id);
+CREATE INDEX idx_transactions_is_verified ON transactions(user_id, is_verified);
 CREATE INDEX idx_imports_user ON imports(user_id);
 CREATE INDEX idx_voice_user_status ON voice_transcriptions(user_id, status);
+CREATE INDEX idx_subscriptions_user_active ON subscriptions(user_id, is_active);
