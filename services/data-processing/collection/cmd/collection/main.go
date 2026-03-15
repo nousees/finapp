@@ -52,8 +52,10 @@ func main() {
 
 	api := router.Group("/api/v1")
 	{
+		api.GET("/transactions", transHandler.List)
 		api.POST("/transactions", transHandler.Create)
 		api.POST("/transactions/batch", transHandler.CreateBatch)
+		api.PATCH("/transactions/:id", transHandler.Update)
 		api.POST("/import", importHandler.Import)
 		api.POST("/voice/upload", voiceHandler.Upload)
 	}

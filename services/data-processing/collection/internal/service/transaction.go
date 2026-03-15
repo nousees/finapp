@@ -55,3 +55,19 @@ func (s *TransactionService) Create(ctx context.Context, userID uuid.UUID, in mo
 func (s *TransactionService) CreateBatch(ctx context.Context, userID uuid.UUID, in model.CreateTransactionBatchInput) ([]*model.Transaction, error) {
 	return s.repo.CreateBatch(ctx, userID, in.Transactions, s.parseDate)
 }
+
+func (s *TransactionService) List(ctx context.Context, userID uuid.UUID, filter model.ListTransactionsFilter) ([]*model.Transaction, error) {
+	return s.repo.List(ctx, userID, filter)
+}
+
+func (s *TransactionService) Update(ctx context.Context, userID, transactionID uuid.UUID, in model.UpdateTransactionInput) (*model.Transaction, error) {
+	var txDate *time.Time
+	if in.Date != nil && *in.Date != "" {
+		parsed, err := s.parseDate(*in.Date)
+		if err != nil {
+			return nil, err
+		}
+		txDate = &parsed
+	}
+	return s.repo.Update(ctx, userID, transactionID, in, txDate)
+}

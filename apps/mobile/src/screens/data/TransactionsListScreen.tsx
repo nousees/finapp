@@ -1,18 +1,32 @@
-﻿import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Animated, FlatList, NativeScrollEvent, NativeSyntheticEvent, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Animated,
+  FlatList,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Swipeable } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Screen } from "@shared/ui/Screen";
+import { TransactionsStackParamList } from "@app/navigation/types";
+import { processPendingTransactions } from "@shared/api/processing";
+import { ApiTransaction, listTransactions } from "@shared/api/transactions";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
 import { radius, spacing } from "@shared/theme/spacing";
-import { TransactionsStackParamList } from "@app/navigation/types";
+import { Screen } from "@shared/ui/Screen";
 
 type Props = NativeStackScreenProps<TransactionsStackParamList, "TransactionsList">;
 
-type TransactionItem = {
+type TransactionListItem = {
   id: string;
   title: string;
   category: string;
@@ -20,31 +34,53 @@ type TransactionItem = {
   amount: string;
   kind: "income" | "expense";
   icon: keyof typeof MaterialIcons.glyphMap;
+  raw: ApiTransaction;
 };
 
-const source: TransactionItem[] = [
-  { id: "t1", title: "\u041F\u044F\u0442\u0435\u0440\u043E\u0447\u043A\u0430", category: "\u0415\u0434\u0430", date: "24 \u0444\u0435\u0432", amount: `-2 190 \u20BD`, kind: "expense", icon: "shopping-bag" },
-  { id: "t2", title: "\u042F\u043D\u0434\u0435\u043A\u0441 Go", category: "\u0422\u0440\u0430\u043D\u0441\u043F\u043E\u0440\u0442", date: "24 \u0444\u0435\u0432", amount: `-540 \u20BD`, kind: "expense", icon: "local-taxi" },
-  { id: "t3", title: "\u0417\u0430\u0440\u043F\u043B\u0430\u0442\u0430", category: "\u0414\u043E\u0445\u043E\u0434", date: "22 \u0444\u0435\u0432", amount: `+120 000 \u20BD`, kind: "income", icon: "payments" },
-  { id: "t4", title: "Ozon", category: "\u041F\u043E\u043A\u0443\u043F\u043A\u0438", date: "21 \u0444\u0435\u0432", amount: `-4 100 \u20BD`, kind: "expense", icon: "inventory-2" },
-  { id: "t5", title: "\u0422-\u0411\u0430\u043D\u043A", category: "\u041A\u044D\u0448\u0431\u044D\u043A", date: "20 \u0444\u0435\u0432", amount: `+1 240 \u20BD`, kind: "income", icon: "savings" },
-  { id: "t6", title: "Netflix", category: "\u041F\u043E\u0434\u043F\u0438\u0441\u043A\u0438", date: "19 \u0444\u0435\u0432", amount: `-999 \u20BD`, kind: "expense", icon: "movie" },
-];
-
-const filters = ["\u0414\u0430\u0442\u0430", "\u041A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u044F", "\u0414\u043E\u0445\u043E\u0434/\u0440\u0430\u0441\u0445\u043E\u0434"];
+const filters = ["Дата", "Категория", "Доход/расход"];
 
 export function TransactionsListScreen({ navigation }: Props) {
   const { colors, gradients } = useAppTheme();
   const insets = useSafeAreaInsets();
   const [search, setSearch] = useState("");
+  const [transactions, setTransactions] = useState<ApiTransaction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const lastOffsetRef = useRef(0);
   const fabVisibleRef = useRef(true);
   const fabAnimation = useRef(new Animated.Value(1)).current;
 
+  const loadTransactions = useCallback(async () => {
+    try {
+      setError(null);
+      const items = await listTransactions(search);
+      setTransactions(items);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить транзакции");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [search]);
+
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      void loadTransactions();
+    }, [loadTransactions]),
+  );
+
   const items = useMemo(
-    () => source.filter((item) => `${item.title} ${item.category} ${item.amount}`.toLowerCase().includes(search.trim().toLowerCase())),
-    [search],
+    () =>
+      transactions
+        .filter((item) =>
+          `${item.description || ""} ${item.original_description || ""}`.toLowerCase().includes(search.trim().toLowerCase()),
+        )
+        .map(mapTransactionToItem),
+    [search, transactions],
   );
 
   const setFabVisibility = (visible: boolean) => {
@@ -73,6 +109,24 @@ export function TransactionsListScreen({ navigation }: Props) {
     lastOffsetRef.current = y;
   };
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadTransactions();
+  };
+
+  const handleProcess = async () => {
+    try {
+      setProcessing(true);
+      setError(null);
+      await processPendingTransactions();
+      await loadTransactions();
+    } catch (processError) {
+      setError(processError instanceof Error ? processError.message : "Не удалось запустить категоризацию");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   return (
     <Screen scroll={false}>
       <View style={styles.page}>
@@ -90,40 +144,73 @@ export function TransactionsListScreen({ navigation }: Props) {
           <TextInput
             value={search}
             onChangeText={setSearch}
-            placeholder={"\u041F\u043E\u0438\u0441\u043A \u043F\u043E \u0441\u0443\u043C\u043C\u0435, \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u0438, \u043A\u043E\u043D\u0442\u0440\u0430\u0433\u0435\u043D\u0442\u0443"}
+            placeholder="Поиск по описанию"
             placeholderTextColor={colors.textMuted}
             style={[styles.searchInput, { color: colors.text }]}
           />
+          <Pressable onPress={() => void loadTransactions()}>
+            <MaterialIcons name="sync" size={20} color={colors.primaryDark} />
+          </Pressable>
         </View>
 
-        <FlatList
-          style={styles.list}
-          contentContainerStyle={styles.listContent}
-          data={items}
-          keyExtractor={(item) => item.id}
-          onScroll={handleListScroll}
-          scrollEventThrottle={16}
-          renderItem={({ item }) => (
-            <Swipeable renderRightActions={() => <SwipeActions />} overshootRight={false}>
-              <View style={[styles.rowCard, { backgroundColor: colors.surface, borderColor: colors.border }]}> 
-                <View style={styles.rowLeft}>
-                  <View style={[styles.rowIcon, { backgroundColor: colors.surfaceAlt }]}>
-                    <MaterialIcons name={item.icon} size={20} color={colors.primaryDark} />
+        <Pressable
+          style={[styles.processButton, { borderColor: colors.borderStrong, backgroundColor: colors.surface }]}
+          onPress={handleProcess}
+          disabled={processing}
+        >
+          {processing ? <ActivityIndicator color={colors.primaryDark} /> : <MaterialIcons name="auto-awesome" size={18} color={colors.primaryDark} />}
+          <Text style={[styles.processButtonText, { color: colors.primaryDark }]}>Категоризировать непроверенные</Text>
+        </Pressable>
+
+        {error ? <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text> : null}
+
+        {loading ? (
+          <View style={styles.stateWrap}>
+            <ActivityIndicator color={colors.primaryDark} size="large" />
+          </View>
+        ) : (
+          <FlatList
+            style={styles.list}
+            contentContainerStyle={styles.listContent}
+            data={items}
+            keyExtractor={(item) => item.id}
+            onScroll={handleListScroll}
+            onRefresh={() => void handleRefresh()}
+            refreshing={refreshing}
+            scrollEventThrottle={16}
+            renderItem={({ item }) => (
+              <Swipeable renderRightActions={() => <SwipeActions />} overshootRight={false}>
+                <View style={[styles.rowCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <View style={styles.rowLeft}>
+                    <View style={[styles.rowIcon, { backgroundColor: colors.surfaceAlt }]}>
+                      <MaterialIcons name={item.icon} size={20} color={colors.primaryDark} />
+                    </View>
+                    <View style={styles.rowTextWrap}>
+                      <Text style={[styles.rowTitle, { color: colors.text }]} numberOfLines={1}>
+                        {item.title}
+                      </Text>
+                      <Text style={[styles.rowMeta, { color: colors.textMuted }]}>
+                        {item.category}
+                        {item.raw.is_recurring ? " • Подписка" : ""}
+                        {!item.raw.is_verified ? " • Требует обработки" : ""}
+                      </Text>
+                    </View>
                   </View>
-                  <View>
-                    <Text style={[styles.rowTitle, { color: colors.text }]}>{item.title}</Text>
-                    <Text style={[styles.rowMeta, { color: colors.textMuted }]}>{item.category}</Text>
+                  <View style={styles.rowRight}>
+                    <Text style={[styles.rowAmount, { color: item.kind === "income" ? colors.success : colors.text }]}>{item.amount}</Text>
+                    <Text style={[styles.rowDate, { color: colors.textMuted }]}>{item.date}</Text>
                   </View>
                 </View>
-                <View style={styles.rowRight}>
-                  <Text style={[styles.rowAmount, { color: item.kind === "income" ? colors.success : colors.text }]}>{item.amount}</Text>
-                  <Text style={[styles.rowDate, { color: colors.textMuted }]}>{item.date}</Text>
-                </View>
+              </Swipeable>
+            )}
+            ListEmptyComponent={
+              <View style={styles.stateWrap}>
+                <Text style={[styles.emptyText, { color: colors.textMuted }]}>Транзакции пока не найдены.</Text>
               </View>
-            </Swipeable>
-          )}
-          showsVerticalScrollIndicator={false}
-        />
+            }
+            showsVerticalScrollIndicator={false}
+          />
+        )}
 
         <Animated.View
           style={[
@@ -173,6 +260,53 @@ function SwipeActions() {
   );
 }
 
+function mapTransactionToItem(item: ApiTransaction): TransactionListItem {
+  const title = item.description || item.original_description || "Без описания";
+  return {
+    id: item.id,
+    title,
+    category: inferCategory(item),
+    date: formatDate(item.date),
+    amount: formatAmount(item.amount, item.currency, item.type),
+    kind: item.type === "INCOME" ? "income" : "expense",
+    icon: iconForTransaction(item),
+    raw: item,
+  };
+}
+
+function inferCategory(item: ApiTransaction): string {
+  if (item.type === "INCOME") {
+    return "Доход";
+  }
+  if (item.is_recurring) {
+    return "Подписки";
+  }
+  return item.is_verified ? "Категоризировано" : "Без категории";
+}
+
+function iconForTransaction(item: ApiTransaction): keyof typeof MaterialIcons.glyphMap {
+  if (item.type === "INCOME") {
+    return "payments";
+  }
+  if (item.is_recurring) {
+    return "subscriptions";
+  }
+  return "shopping-bag";
+}
+
+function formatDate(value: string): string {
+  const date = new Date(value);
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "short",
+  }).format(date);
+}
+
+function formatAmount(amount: number, currency: string, type: ApiTransaction["type"]): string {
+  const sign = type === "INCOME" ? "+" : "-";
+  return `${sign}${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(Math.abs(amount))} ${currency}`;
+}
+
 const styles = StyleSheet.create({
   page: {
     flex: 1,
@@ -210,6 +344,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Inter_500Medium",
   },
+  processButton: {
+    marginTop: spacing.sm,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  processButtonText: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+  },
+  errorText: {
+    marginTop: spacing.xs,
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+  },
   list: {
     flex: 1,
     marginTop: spacing.sm,
@@ -231,6 +384,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
+    flex: 1,
+  },
+  rowTextWrap: {
+    flex: 1,
   },
   rowIcon: {
     width: 42,
@@ -251,6 +408,7 @@ const styles = StyleSheet.create({
   rowRight: {
     alignItems: "flex-end",
     gap: 2,
+    marginLeft: spacing.sm,
   },
   rowAmount: {
     fontSize: 16,
@@ -307,5 +465,14 @@ const styles = StyleSheet.create({
     borderRadius: 29,
     alignItems: "center",
     justifyContent: "center",
+  },
+  stateWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyText: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
   },
 });

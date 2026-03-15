@@ -17,6 +17,52 @@ services:
       timeout: 5s
       retries: 5
 
+  collection:
+    build:
+      context: ./services/data-processing/collection
+      dockerfile: Dockerfile
+    container_name: finapp-collection
+    environment:
+      PORT: "8080"
+      DATABASE_DSN: postgres://finapp:finapp@postgres:5432/finapp?sslmode=disable
+      JWT_SECRET: finapp-dev-secret
+      ML_SERVICE_URL: http://host.docker.internal:8000
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  processing:
+    build:
+      context: ./services/data-processing/processing
+      dockerfile: Dockerfile
+    container_name: finapp-processing
+    environment:
+      PORT: "8081"
+      DATABASE_DSN: postgres://finapp:finapp@postgres:5432/finapp?sslmode=disable
+      JWT_SECRET: finapp-dev-secret
+    ports:
+      - "8083:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  subscription-detector:
+    build:
+      context: ./services/data-processing/subscription-detector
+      dockerfile: Dockerfile
+    container_name: finapp-subscription-detector
+    environment:
+      PORT: "8082"
+      DATABASE_DSN: postgres://finapp:finapp@postgres:5432/finapp?sslmode=disable
+      JWT_SECRET: finapp-dev-secret
+    ports:
+      - "8084:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   mobile:
     build:
       context: ./apps/mobile
@@ -36,6 +82,9 @@ services:
       - "19002:19002"
     depends_on:
       - postgres
+      - collection
+      - processing
+      - subscription-detector
 
 volumes:
   finapp_pgdata:
