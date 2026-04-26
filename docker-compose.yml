@@ -10,12 +10,50 @@ services:
       - "5432:5432"
     volumes:
       - finapp_pgdata:/var/lib/postgresql/data
-      - ./infrastructure/init-collection.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./infrastructure/database/init.sql:/docker-entrypoint-initdb.d/01-init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U finapp -d finapp"]
       interval: 5s
       timeout: 5s
       retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: finapp-redis
+    ports:
+      - "6379:6379"
+
+  # API Gateway
+  gateway:
+    build:
+      context: ./services/gateway
+      dockerfile: Dockerfile
+    container_name: finapp-gateway
+    ports:
+      - "8080:8080"
+    depends_on:
+      - auth
+      - collection
+      - processing
+      - subscription-detector
+      - analysis-control
+      - ml-service
+
+  # Go микросервисы (модуль сбора и обработки данных)
+  auth:
+    build:
+      context: ./services/data-processing/auth-service
+      dockerfile: Dockerfile
+    container_name: finapp-auth
+    environment:
+      PORT: "8081"
+      DATABASE_DSN: postgres://finapp:finapp@postgres:5432/finapp?sslmode=disable
+      JWT_SECRET: finapp-dev-secret
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   collection:
     build:
@@ -23,15 +61,17 @@ services:
       dockerfile: Dockerfile
     container_name: finapp-collection
     environment:
-      PORT: "8080"
+      PORT: "8082"
       DATABASE_DSN: postgres://finapp:finapp@postgres:5432/finapp?sslmode=disable
       JWT_SECRET: finapp-dev-secret
       ML_SERVICE_URL: http://host.docker.internal:8000
     ports:
-      - "8080:8080"
+      - "8082:8082"
     depends_on:
       postgres:
         condition: service_healthy
+      auth:
+        condition: service_started
 
   processing:
     build:
@@ -39,14 +79,16 @@ services:
       dockerfile: Dockerfile
     container_name: finapp-processing
     environment:
-      PORT: "8081"
+      PORT: "8083"
       DATABASE_DSN: postgres://finapp:finapp@postgres:5432/finapp?sslmode=disable
       JWT_SECRET: finapp-dev-secret
     ports:
-      - "8083:8081"
+      - "8083:8083"
     depends_on:
       postgres:
         condition: service_healthy
+      auth:
+        condition: service_started
 
   subscription-detector:
     build:
@@ -54,15 +96,56 @@ services:
       dockerfile: Dockerfile
     container_name: finapp-subscription-detector
     environment:
-      PORT: "8082"
+      PORT: "8084"
       DATABASE_DSN: postgres://finapp:finapp@postgres:5432/finapp?sslmode=disable
       JWT_SECRET: finapp-dev-secret
     ports:
-      - "8084:8082"
+      - "8084:8084"
     depends_on:
       postgres:
         condition: service_healthy
+      auth:
+        condition: service_started
 
+  # Java микросервис (модуль анализа и контроля)
+  analysis-control:
+    build:
+      context: ./services/analysis-control
+      dockerfile: Dockerfile
+    container_name: finapp-analysis-control
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/finapp
+      SPRING_DATASOURCE_USERNAME: finapp
+      SPRING_DATASOURCE_PASSWORD: finapp
+      JWT_SECRET: finapp-dev-secret
+      SERVER_PORT: "8085"
+    ports:
+      - "8085:8085"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  # ML сервис (Python FastAPI)
+  ml-service:
+    build:
+      context: ./services/ml-service
+      dockerfile: Dockerfile
+    container_name: finapp-ml-service
+    environment:
+      DATABASE_URL: postgres://finapp:finapp@postgres:5432/finapp
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  # Мобильное приложение
   mobile:
     build:
       context: ./apps/mobile
@@ -75,16 +158,20 @@ services:
     environment:
       EXPO_DEVTOOLS_LISTEN_ADDRESS: 0.0.0.0
       CHOKIDAR_USEPOLLING: "true"
+      API_BASE_URL: http://localhost:8080
     ports:
-      - "8081:8081"
       - "19000:19000"
       - "19001:19001"
       - "19002:19002"
     depends_on:
       - postgres
+      - gateway
+      - auth
       - collection
       - processing
       - subscription-detector
+      - analysis-control
+      - ml-service
 
 volumes:
   finapp_pgdata:

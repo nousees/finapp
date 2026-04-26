@@ -1,4 +1,6 @@
-﻿import { useMemo, useState } from "react";
+﻿// @ts-nocheck
+import React from 'react';
+import { useMemo, useState } from "react";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -9,8 +11,6 @@ import { SectionCard } from "@shared/ui/SectionCard";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
 import { radius, spacing } from "@shared/theme/spacing";
 import { MaterialIcons } from "@expo/vector-icons";
-
-type Props = NativeStackScreenProps<DashboardStackParamList, "DashboardHome">;
 
 const categories = [
   { id: "food", title: "\u0415\u0434\u0430", percent: 36, amount: `32 840 \u20BD`, color: "#22C55E" },

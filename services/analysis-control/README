@@ -1,0 +1,80 @@
+# Backend Java Module
+
+Модуль анализа финансовых данных на Java Spring Boot.
+
+## Ответственность
+- Управление бюджетами
+- Финансовые цели
+- Аналитика и отчеты
+- Уведомления
+- Дашборды
+
+## Локальный запуск
+1. Подними инфраструктуру из корня проекта:
+   ```bash
+   docker-compose up -d
+   ```
+2. Примени миграцию:
+   ```bash
+   docker exec -i finapp-postgres psql -U finapp_user -d finapp < db/migrations/001_initial_schema.up.sql
+   ```
+3. Запусти сервис:
+   ```bash
+   ./mvnw spring-boot:run
+   ```
+4. Swagger:
+   - `http://localhost:8082/swagger-ui/index.html`
+
+По умолчанию backend ожидает issuer `http://localhost:8080/realms/finapp`.
+
+
+Для получения токена с правами укажи scope, например:
+`scope=budgets:read budgets:write goals:read goals:write reports:read reports:write dashboard:read dashboard:write notifications:read notifications:write recommendations:read recommendations:write audit:read notification_templates:read notification_templates:write`
+
+Системные категории, создаваемые миграцией (стартовые данные, не обязательные для прода):
+- `11111111-1111-1111-1111-111111111111` (Продукты, EXPENSE)
+- `22222222-2222-2222-2222-222222222222` (Зарплата, INCOME)
+- `33333333-3333-3333-3333-333333333333` (Накопления, TRANSFER)
+
+Приложение не привязано к этим ID — можно использовать любые пользовательские/системные категории из таблицы `categories`.
+
+
+## Как проверить в Swagger (кроме budgets)
+1. Открой `http://localhost:8082/swagger-ui/index.html` и нажми **Authorize**.
+2. Вставь `Bearer <ACCESS_TOKEN>`.
+3. Проверочные запросы:
+   - `GET /api/v1/general-budgets` → `200`
+   - `POST /api/v1/general-budgets` с body:
+     ```json
+     {
+       "totalLimit": 50000,
+       "period": "MONTHLY",
+       "periodStart": "2026-02-01",
+       "periodEnd": "2026-02-28"
+     }
+     ```
+     → `201`
+   - `GET /api/v1/goals` → `200`
+   - `POST /api/v1/goals` с body:
+     ```json
+     {
+       "name": "Новый ноутбук",
+       "description": "Купить к июню",
+       "targetAmount": 120000,
+       "deadline": "2026-12-31",
+       "goalType": "PURCHASE",
+       "priority": 2,
+       "currency": "RUB"
+     }
+     ```
+     → `201`
+   - `GET /api/v1/reports` → `200`
+   - `POST /api/v1/reports/generate?reportType=MONTHLY&periodStart=2026-02-01&periodEnd=2026-02-28` → `201` (если первый запуск), `409` (если отчёт за период уже создан)
+4. Типовые статусы: `401` (токен просрочен/невалиден), `403` (нет scope), `400` (валидация), `500` (реальная серверная ошибка).
+
+
+### Частые кейсы при ручной проверке в Swagger
+- `POST /api/v1/reports/generate-scheduled` может вернуть `409 REPORT_ALREADY_EXISTS` — это нормально, если отчёт за текущий период уже создан ранее.
+- В полях `reportId`, `goalId`, `budgetId`, `recommendationId`, `widgetId`, `notificationId` нельзя оставлять шаблонные значения вроде `200` или `"<id>"` — нужен реальный UUID из предыдущего `GET`/`POST`.
+- Для `POST /api/v1/notifications/mark-read` передавай либо пустой массив `[]`, либо массив реальных UUID уведомлений.
+- Для `PUT /api/v1/dashboard/widgets/positions` body должен быть словарём вида `{"<real-widget-uuid>": 1}` с настоящими UUID.

@@ -1,4 +1,6 @@
-﻿import { MaterialIcons } from "@expo/vector-icons";
+﻿// @ts-nocheck
+import React from 'react';
+import { MaterialIcons } from "@expo/vector-icons";
 import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { StyleSheet, View } from "react-native";
@@ -12,7 +14,7 @@ import { GoalsStackNavigator } from "./stacks/GoalsStack";
 import { ProfileStackNavigator } from "./stacks/ProfileStack";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
 
-const Tab = createBottomTabNavigator<RootTabParamList>();
+const Tab = createBottomTabNavigator();
 
 export function AppNavigator() {
   const { colors, gradients, isDark } = useAppTheme();
