@@ -1,4 +1,5 @@
 import { apiConfig } from "./config";
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type RequestOptions = Omit<RequestInit, "body" | "headers"> & {
   baseUrl: string;
