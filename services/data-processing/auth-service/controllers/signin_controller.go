@@ -36,6 +36,13 @@ func (sc *SignInController) SignIn(c *gin.Context) {
 		return
 	}
 
+	// Получаем данные пользователя для ответа
+	userData, err := sc.SignInUsecase.GetUserByEmail(user.Email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "failed to get user data", "error": err.Error()})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"status":        "success",
 		"message":       "authorization successfully",
@@ -43,5 +50,10 @@ func (sc *SignInController) SignIn(c *gin.Context) {
 		"refresh_token": refreshToken,
 		"token_type":    "Bearer",
 		"expires_in":    expiresIn,
+		"user": gin.H{
+			"id":    userData.ID,
+			"email": userData.Email,
+			"full_name": userData.FullName,
+		},
 	})
 }

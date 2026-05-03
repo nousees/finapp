@@ -17,6 +17,10 @@ func NewSignInUsecase(users repository.UserRepository, tokens *jwt.Manager) *Sig
 	return &SignInUsecase{Users: users, Tokens: tokens}
 }
 
+func (s *SignInUsecase) GetUserByEmail(email string) (*entities.User, error) {
+	return s.Users.GetUserByEmail(email)
+}
+
 func (s *SignInUsecase) SignIn(sinInput entities.SignInInput) (string, string, int64, error) {
 	user, err := s.Users.GetUserByEmail(sinInput.Email)
 	if err != nil {

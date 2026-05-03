@@ -53,11 +53,23 @@ export const AuthProvider = ({ children }) => {
       const data = await response.json();
 
       if (response.ok) {
-        await AsyncStorage.setItem('access_token', data.access_token);
-        await AsyncStorage.setItem('refresh_token', data.refresh_token);
-        await AsyncStorage.setItem('user_data', JSON.stringify(data.user));
+        // Проверяем, что все данные существуют перед сохранением
+        if (data.access_token) {
+          await AsyncStorage.setItem('access_token', data.access_token);
+        }
+        if (data.refresh_token) {
+          await AsyncStorage.setItem('refresh_token', data.refresh_token);
+        }
+        if (data.user) {
+          await AsyncStorage.setItem('user_data', JSON.stringify(data.user));
+          setUser(data.user);
+        } else {
+          // Если user не пришел, создаем базового пользователя
+          const basicUser = { email, id: 'temp-id' };
+          await AsyncStorage.setItem('user_data', JSON.stringify(basicUser));
+          setUser(basicUser);
+        }
         
-        setUser(data.user);
         setIsAuthenticated(true);
         return { success: true };
       } else {
@@ -84,11 +96,23 @@ export const AuthProvider = ({ children }) => {
       const data = await response.json();
 
       if (response.ok) {
-        await AsyncStorage.setItem('access_token', data.access_token);
-        await AsyncStorage.setItem('refresh_token', data.refresh_token);
-        await AsyncStorage.setItem('user_data', JSON.stringify(data.user));
+        // Проверяем, что все данные существуют перед сохранением
+        if (data.access_token) {
+          await AsyncStorage.setItem('access_token', data.access_token);
+        }
+        if (data.refresh_token) {
+          await AsyncStorage.setItem('refresh_token', data.refresh_token);
+        }
+        if (data.user) {
+          await AsyncStorage.setItem('user_data', JSON.stringify(data.user));
+          setUser(data.user);
+        } else {
+          // Если user не пришел, создаем базового пользователя
+          const basicUser = { email, id: 'temp-id', full_name: fullName };
+          await AsyncStorage.setItem('user_data', JSON.stringify(basicUser));
+          setUser(basicUser);
+        }
         
-        setUser(data.user);
         setIsAuthenticated(true);
         return { success: true };
       } else {

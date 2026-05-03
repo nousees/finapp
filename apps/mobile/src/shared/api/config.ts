@@ -1,9 +1,10 @@
+import { Platform } from "react-native";
+
 const DEFAULT_USER_ID = "11111111-1111-1111-1111-111111111111";
 
 function detectHost(): string {
-  // Для разработки всегда используем localhost
-  // В продакшене можно определить через NativeModules
-  return "127.0.0.1";
+  // Используем переменную окружения или IP адрес по умолчанию
+  return process.env.EXPO_PUBLIC_API_HOST || "192.168.0.3";
 }
 
 const host = detectHost();

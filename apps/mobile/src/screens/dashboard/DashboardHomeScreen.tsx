@@ -9,27 +9,18 @@ import { DashboardStackParamList } from "@app/navigation/types";
 import { Screen } from "@shared/ui/Screen";
 import { SectionCard } from "@shared/ui/SectionCard";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
+import { useUser } from "@shared/contexts/UserContext";
 import { radius, spacing } from "@shared/theme/spacing";
 import { MaterialIcons } from "@expo/vector-icons";
 
-const categories = [
-  { id: "food", title: "\u0415\u0434\u0430", percent: 36, amount: `32 840 \u20BD`, color: "#22C55E" },
-  { id: "transport", title: "\u0422\u0440\u0430\u043D\u0441\u043F\u043E\u0440\u0442", percent: 24, amount: `21 490 \u20BD`, color: "#16A34A" },
-  { id: "home", title: "\u0414\u043E\u043C", percent: 18, amount: `16 180 \u20BD`, color: "#86EFAC" },
-  { id: "other", title: "\u041F\u0440\u043E\u0447\u0435\u0435", percent: 22, amount: `19 520 \u20BD`, color: "#BBF7D0" },
-];
-
-const recentTransactions = [
-  { id: "1", title: "\u0412\u043A\u0443\u0441\u0412\u0438\u043B\u043B", category: "\u0415\u0434\u0430", amount: `-2 490 \u20BD`, icon: "restaurant" as const },
-  { id: "2", title: "\u042F\u043D\u0434\u0435\u043A\u0441 Go", category: "\u0422\u0440\u0430\u043D\u0441\u043F\u043E\u0440\u0442", amount: `-780 \u20BD`, icon: "directions-car" as const },
-  { id: "3", title: "\u041B\u0435\u043D\u0442\u0430", category: "\u0414\u043E\u043C", amount: `-3 240 \u20BD`, icon: "home-work" as const },
-  { id: "4", title: "Netflix", category: "\u041F\u043E\u0434\u043F\u0438\u0441\u043A\u0438", amount: `-999 \u20BD`, icon: "movie" as const },
-  { id: "5", title: "\u0417\u0430\u0440\u043F\u043B\u0430\u0442\u0430", category: "\u0414\u043E\u0445\u043E\u0434", amount: `+120 000 \u20BD`, icon: "payments" as const },
-];
+// Заглушки будут заменены реальными данными с API
+const categories = [];
+const recentTransactions = [];
 
 export function DashboardHomeScreen({ navigation }: Props) {
   const { colors, gradients, isDark } = useAppTheme();
-  const [activeCategory, setActiveCategory] = useState(categories[0]);
+  const { user } = useUser();
+  const [activeCategory, setActiveCategory] = useState(null);
   const isPositiveBalance = true;
   const balanceColor = isPositiveBalance ? colors.success : colors.danger;
 
@@ -38,7 +29,9 @@ export function DashboardHomeScreen({ navigation }: Props) {
   return (
     <Screen>
       <LinearGradient colors={gradients.success} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.heroCard}>
-        <Text style={styles.balanceLabel}>{"\u041E\u0441\u0442\u0430\u043B\u043E\u0441\u044C \u043D\u0430 \u043C\u0435\u0441\u044F\u0446"}</Text>
+        <Text style={styles.balanceLabel}>
+          {user ? `Добро пожаловать, ${user.full_name || user.email}!` : "Добро пожаловать!"}
+        </Text>
         <Text style={[styles.balanceValue, { color: balanceColor }]}>{`47 820 \u20BD`}</Text>
       </LinearGradient>
 
@@ -46,26 +39,38 @@ export function DashboardHomeScreen({ navigation }: Props) {
         title={"\u0421\u0442\u0440\u0443\u043A\u0442\u0443\u0440\u0430 \u0440\u0430\u0441\u0445\u043E\u0434\u043E\u0432"}
         subtitle={"\u041D\u0430\u0436\u043C\u0438\u0442\u0435 \u043D\u0430 \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u044E, \u0447\u0442\u043E\u0431\u044B \u0443\u0432\u0438\u0434\u0435\u0442\u044C \u0434\u0435\u0442\u0430\u043B\u0438"}
       >
-        <View style={styles.chartRow}>
-          <DonutChart percentage={spentTotal} />
-          <View style={styles.legendWrap}>
-            {categories.map((item) => (
-              <Pressable key={item.id} style={styles.legendItem} onPress={() => setActiveCategory(item)}>
-                <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-                <Text style={[styles.legendText, { color: colors.text }]}>{item.title}</Text>
-                <Text style={[styles.legendPercent, { color: colors.textMuted }]}>{item.percent}%</Text>
-              </Pressable>
-            ))}
+        {categories.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+              {"\u041F\u043E\u043A\u0430 \u043D\u0435\u0442 \u0434\u0430\u043D\u043D\u044B\u0445 \u043E \u0440\u0430\u0441\u0445\u043E\u0434\u0430\u0445. \u0414\u043E\u0431\u0430\u0432\u044C\u0442\u0435 \u0442\u0440\u0430\u043D\u0437\u0430\u043A\u0446\u0438\u0438 \u043D\u0430 \u0432\u043A\u043B\u0430\u0434\u043A\u0435 \"\u0422\u0440\u0430\u043D\u0437\u0430\u043A\u0446\u0438\u0438\""}
+            </Text>
           </View>
-        </View>
+        ) : (
+          <>
+            <View style={styles.chartRow}>
+              <DonutChart percentage={spentTotal} />
+              <View style={styles.legendWrap}>
+                {categories.map((item) => (
+                  <Pressable key={item.id} style={styles.legendItem} onPress={() => setActiveCategory(item)}>
+                    <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+                    <Text style={[styles.legendText, { color: colors.text }]}>{item.title}</Text>
+                    <Text style={[styles.legendPercent, { color: colors.textMuted }]}>{item.percent}%</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
 
-        <View style={[styles.categoryDetails, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
-          <Text style={[styles.categoryTitle, { color: colors.text }]}>{activeCategory.title}</Text>
-          <Text style={[styles.categoryAmount, { color: colors.primaryDark }]}>{activeCategory.amount}</Text>
-          <Text style={[styles.categoryHint, { color: colors.textMuted }]}>
-            {"\u0414\u043E\u043B\u044F \u043E\u0442 \u043C\u0435\u0441\u044F\u0447\u043D\u044B\u0445 \u0440\u0430\u0441\u0445\u043E\u0434\u043E\u0432:"} {activeCategory.percent}%
-          </Text>
-        </View>
+            {activeCategory && (
+              <View style={[styles.categoryDetails, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+                <Text style={[styles.categoryTitle, { color: colors.text }]}>{activeCategory.title}</Text>
+                <Text style={[styles.categoryAmount, { color: colors.primaryDark }]}>{activeCategory.amount}</Text>
+                <Text style={[styles.categoryHint, { color: colors.textMuted }]}>
+                  {"\u0414\u043E\u043B\u044F \u043E\u0442 \u043C\u0435\u0441\u044F\u0447\u043D\u044B\u0445 \u0440\u0430\u0441\u0445\u043E\u0434\u043E\u0432:"} {activeCategory.percent}%
+                </Text>
+              </View>
+            )}
+          </>
+        )}
       </SectionCard>
 
       <SectionCard title={"\u0411\u043B\u0438\u0436\u0430\u0439\u0448\u0430\u044F \u0446\u0435\u043B\u044C"}>
@@ -84,20 +89,28 @@ export function DashboardHomeScreen({ navigation }: Props) {
       </SectionCard>
 
       <SectionCard title={"\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0435 \u0442\u0440\u0430\u043D\u0437\u0430\u043A\u0446\u0438\u0438"}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.txRow}>
-            {recentTransactions.map((item) => (
-              <View key={item.id} style={[styles.txCard, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
-                <View style={[styles.txIcon, { backgroundColor: colors.background }]}>
-                  <MaterialIcons name={item.icon} size={18} color={colors.primaryDark} />
-                </View>
-                <Text style={[styles.txAmount, { color: item.amount.includes("+") ? colors.success : colors.text }]}>{item.amount}</Text>
-                <Text style={[styles.txTitle, { color: colors.text }]}>{item.title}</Text>
-                <Text style={[styles.txCategory, { color: colors.textMuted }]}>{item.category}</Text>
-              </View>
-            ))}
+        {recentTransactions.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+              {"\u0422\u0440\u0430\u043D\u0437\u0430\u043A\u0446\u0438\u0439 \u043F\u043E\u043A\u0430 \u043D\u0435\u0442. \u0414\u043E\u0431\u0430\u0432\u044C\u0442\u0435 \u043F\u0435\u0440\u0432\u0443\u044E \u0442\u0440\u0430\u043D\u0437\u0430\u043A\u0446\u0438\u044E \u043D\u0430 \u0432\u043A\u043B\u0430\u0434\u043A\u0435 \"\u0422\u0440\u0430\u043D\u0437\u0430\u043A\u0446\u0438\u0438\""}
+            </Text>
           </View>
-        </ScrollView>
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.txRow}>
+              {recentTransactions.map((item) => (
+                <View key={item.id} style={[styles.txCard, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+                  <View style={[styles.txIcon, { backgroundColor: colors.background }]}>
+                    <MaterialIcons name={item.icon} size={18} color={colors.primaryDark} />
+                  </View>
+                  <Text style={[styles.txAmount, { color: item.amount.includes("+") ? colors.success : colors.text }]}>{item.amount}</Text>
+                  <Text style={[styles.txTitle, { color: colors.text }]}>{item.title}</Text>
+                  <Text style={[styles.txCategory, { color: colors.textMuted }]}>{item.category}</Text>
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+        )}
       </SectionCard>
 
       <SectionCard title={"\u0412\u0430\u0436\u043D\u044B\u0435 \u0441\u0438\u0433\u043D\u0430\u043B\u044B"}>
@@ -387,5 +400,17 @@ const styles = StyleSheet.create({
   },
   footerSpacer: {
     height: 6,
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+  },
+  emptyText: {
+    fontSize: 14,
+    fontFamily: 'Inter_500Medium',
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });

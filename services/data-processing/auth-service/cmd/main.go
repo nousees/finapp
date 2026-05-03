@@ -32,7 +32,7 @@ func main() {
 	signInUsecase := usecases.NewSignInUsecase(users, tokens)
 
 	signInController := controllers.NewSignInController(*signInUsecase)
-	signUpController := controllers.NewSignUpController(*signUpUsecase)
+	signUpController := controllers.NewSignUpController(*signUpUsecase, *signInUsecase)
 	refreshController := controllers.NewRefreshController(tokens)
 
 	router := gin.Default()

@@ -75,7 +75,7 @@ export function TransactionsListScreen({ navigation }: Props) {
 
   const items = useMemo(
     () =>
-      transactions
+      (transactions || [])
         .filter((item) =>
           `${item.description || ""} ${item.original_description || ""}`.toLowerCase().includes(search.trim().toLowerCase()),
         )

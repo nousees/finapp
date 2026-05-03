@@ -11,10 +11,11 @@ import (
 
 type SignUpController struct {
 	SignUpUsecase usecases.SignUpUsecase
+	SignInUsecase usecases.SignInUsecase
 }
 
-func NewSignUpController(sup usecases.SignUpUsecase) *SignUpController {
-	return &SignUpController{sup}
+func NewSignUpController(sup usecases.SignUpUsecase, sin usecases.SignInUsecase) *SignUpController {
+	return &SignUpController{sup, sin}
 }
 
 func (sc *SignUpController) SignUp(c *gin.Context) {
@@ -36,5 +37,36 @@ func (sc *SignUpController) SignUp(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "registration successfully"})
+	// После успешной регистрации сразу логиним пользователя
+	signInInput := entities.SignInInput{
+		Email:    user.Email,
+		Password: user.Password,
+	}
+
+	accessToken, refreshToken, expiresIn, err := sc.SignInUsecase.SignIn(signInInput)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "auto login failed", "error": err.Error()})
+		return
+	}
+
+	// Получаем данные пользователя для ответа
+	userData, err := sc.SignInUsecase.GetUserByEmail(user.Email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "failed to get user data", "error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":        "success",
+		"message":       "registration successfully",
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
+		"token_type":    "Bearer",
+		"expires_in":    expiresIn,
+		"user": gin.H{
+			"id":    userData.ID,
+			"email": userData.Email,
+			"full_name": userData.FullName,
+		},
+	})
 }

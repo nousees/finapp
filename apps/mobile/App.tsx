@@ -10,6 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SimpleLoginScreen } from "./src/screens/auth/SimpleLoginScreen";
 import { AppNavigator } from "./src/app/navigation/AppNavigator";
 import { ThemeProvider, useAppTheme } from "./src/shared/theme/ThemeProvider";
+import { UserProvider } from "./src/shared/contexts/UserContext";
 
 function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
@@ -22,9 +23,21 @@ function AppContent() {
   const checkAuthStatus = async () => {
     try {
       const token = await AsyncStorage.getItem('access_token');
-      setIsAuthenticated(!!token);
+      const userData = await AsyncStorage.getItem('user_data');
+      
+      // Проверяем и токен, и данные пользователя
+      setIsAuthenticated(!!token && !!userData);
     } catch (error) {
       console.error('Error checking auth status:', error);
+      // В случае ошибки очищаем все данные и показываем экран входа
+      try {
+        await AsyncStorage.removeItem('access_token');
+        await AsyncStorage.removeItem('refresh_token');
+        await AsyncStorage.removeItem('user_data');
+      } catch (clearError) {
+        console.error('Error clearing auth data:', clearError);
+      }
+      setIsAuthenticated(false);
     } finally {
       setIsLoading(false);
     }
@@ -58,9 +71,11 @@ function AppContent() {
   }
 
   return (
-    <ThemeProvider>
-      <AppNavigator onLogout={handleLogout} />
-    </ThemeProvider>
+    <UserProvider>
+      <ThemeProvider>
+        <AppNavigator onLogout={handleLogout} />
+      </ThemeProvider>
+    </UserProvider>
   );
 }
 

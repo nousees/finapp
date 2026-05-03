@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiConfig } from '../../shared/api/config';
 
 export const LoginScreen = ({ onLogin }) => {
   const [email, setEmail] = useState('test@finapp.local');
@@ -24,7 +25,7 @@ export const LoginScreen = ({ onLogin }) => {
 
     setIsLoading(true);
     try {
-      const response = await fetch('http://localhost:8080/api/v1/auth/signin', {
+      const response = await fetch(`${apiConfig.authBaseUrl}/sign-in`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

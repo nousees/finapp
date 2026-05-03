@@ -10,10 +10,13 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiConfig } from '../../shared/api/config';
 
 export const SimpleLoginScreen = ({ onLogin }) => {
-  const [email, setEmail] = useState('test@finapp.local');
-  const [password, setPassword] = useState('test');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [isLogin, setIsLogin] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async () => {
@@ -24,7 +27,7 @@ export const SimpleLoginScreen = ({ onLogin }) => {
 
     setIsLoading(true);
     try {
-      const response = await fetch('http://localhost:8080/api/v1/auth/signin', {
+      const response = await fetch(`${apiConfig.authBaseUrl}/sign-in`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -52,12 +55,66 @@ export const SimpleLoginScreen = ({ onLogin }) => {
     }
   };
 
+  const handleRegister = async () => {
+    if (!email || !password || !fullName) {
+      Alert.alert('Ошибка', 'Заполните все поля');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch(`${apiConfig.authBaseUrl}/sign-up`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password, full_name: fullName }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        await AsyncStorage.setItem('access_token', data.access_token);
+        await AsyncStorage.setItem('refresh_token', data.refresh_token);
+        await AsyncStorage.setItem('user_data', JSON.stringify(data.user));
+        
+        Alert.alert('Успех', 'Вы успешно зарегистрировались');
+        onLogin();
+      } else {
+        Alert.alert('Ошибка', data.message || 'Ошибка регистрации');
+      }
+    } catch (error) {
+      Alert.alert('Ошибка', 'Проблема с подключением к серверу');
+      console.error('Register error:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSubmit = () => {
+    if (isLogin) {
+      handleLogin();
+    } else {
+      handleRegister();
+    }
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.title}>FinApp</Text>
-      <Text style={styles.subtitle}>Вход в систему</Text>
+      <Text style={styles.subtitle}>{isLogin ? 'Вход в систему' : 'Регистрация'}</Text>
 
       <View style={styles.form}>
+        {!isLogin && (
+          <TextInput
+            style={styles.input}
+            placeholder="Полное имя"
+            value={fullName}
+            onChangeText={setFullName}
+            autoCapitalize="words"
+          />
+        )}
+
         <TextInput
           style={styles.input}
           placeholder="Email"
@@ -77,18 +134,23 @@ export const SimpleLoginScreen = ({ onLogin }) => {
 
         <TouchableOpacity 
           style={[styles.button, isLoading && styles.buttonDisabled]}
-          onPress={handleLogin}
+          onPress={handleSubmit}
           disabled={isLoading}
         >
           {isLoading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.buttonText}>Войти</Text>
+            <Text style={styles.buttonText}>{isLogin ? 'Войти' : 'Зарегистрироваться'}</Text>
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.linkButton}>
-          <Text style={styles.linkText}>Нет аккаунта? Зарегистрироваться</Text>
+        <TouchableOpacity 
+          style={styles.linkButton}
+          onPress={() => setIsLogin(!isLogin)}
+        >
+          <Text style={styles.linkText}>
+            {isLogin ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
