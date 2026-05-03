@@ -22,14 +22,21 @@ function AppContent() {
 
   const checkAuthStatus = async () => {
     try {
-      // Временно очищаем все данные для принудительного показа экрана входа
-      await AsyncStorage.removeItem('access_token');
-      await AsyncStorage.removeItem('refresh_token');
-      await AsyncStorage.removeItem('user_data');
+      const token = await AsyncStorage.getItem('access_token');
+      const userData = await AsyncStorage.getItem('user_data');
       
-      setIsAuthenticated(false);
+      // Проверяем и токен, и данные пользователя
+      setIsAuthenticated(!!token && !!userData);
     } catch (error) {
       console.error('Error checking auth status:', error);
+      // В случае ошибки очищаем все данные и показываем экран входа
+      try {
+        await AsyncStorage.removeItem('access_token');
+        await AsyncStorage.removeItem('refresh_token');
+        await AsyncStorage.removeItem('user_data');
+      } catch (clearError) {
+        console.error('Error clearing auth data:', clearError);
+      }
       setIsAuthenticated(false);
     } finally {
       setIsLoading(false);

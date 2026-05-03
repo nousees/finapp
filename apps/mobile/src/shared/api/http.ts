@@ -21,9 +21,12 @@ export async function requestJson<T>({
   headers,
   ...init
 }: RequestOptions): Promise<T> {
+  // Получаем токен из AsyncStorage
+  const token = await AsyncStorage.getItem('access_token');
+  
   const requestHeaders: Record<string, string> = {
     Accept: "application/json",
-    "X-User-Id": apiConfig.devUserId,
+    ...(token && { Authorization: `Bearer ${token}` }),
     ...headers,
   };
 
