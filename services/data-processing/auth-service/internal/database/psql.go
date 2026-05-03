@@ -10,15 +10,15 @@ import (
 )
 
 func NewPostgresConnection(config config.Postgres) (*gorm.DB, error) {
-	db, err := gorm.Open(postgres.Open(
-		fmt.Sprintf("host=%s port=%s user=%s dbname=%s sslmode=%s password=%s",
-			config.Host,
-			config.DBPort,
-			config.Username,
-			config.DBName,
-			config.SSLMode,
-			config.Password)),
-		&gorm.Config{})
+	dsn := fmt.Sprintf("host=%s port=%s user=%s dbname=%s sslmode=%s password=%s",
+		config.Host,
+		config.DBPort,
+		config.Username,
+		config.DBName,
+		config.SSLMode,
+		config.Password)
+	
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 
 	if err != nil {
 		return nil, err

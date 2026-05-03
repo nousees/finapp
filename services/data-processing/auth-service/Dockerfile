@@ -6,7 +6,7 @@ COPY go.* ./
 COPY .env ./
 COPY config/config.yaml ./config/
 
-RUN go mod download
+RUN go mod download && go mod tidy
 
 COPY . .
 

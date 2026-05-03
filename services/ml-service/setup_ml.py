@@ -26,7 +26,10 @@ def check_dependencies():
     
     for package in required_packages:
         try:
-            __import__(package.replace("-", "_"))
+            if package == "scikit-learn":
+                __import__("sklearn")
+            else:
+                __import__(package.replace("-", "_"))
             print(f"✅ {package}")
         except ImportError:
             print(f"❌ {package}")
