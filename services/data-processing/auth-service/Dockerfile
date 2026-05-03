@@ -2,14 +2,15 @@ FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
 
-COPY go.* ./
-COPY .env ./
-COPY config/config.yaml ./config/
+# Copy go.mod first and download dependencies
+COPY go.mod ./
+RUN go mod download
 
-RUN go mod download && go mod tidy
-
+# Copy source code
 COPY . .
 
+# Generate go.sum and build
+RUN go mod tidy
 RUN go build -o main ./cmd/main.go
 
 FROM alpine:latest

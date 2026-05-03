@@ -1,33 +1,54 @@
 package database
 
 import (
-	"finapp/services/data-processing/auth-service/config"
-	entities "finapp/services/data-processing/auth-service/internal/entities/user"
+	"context"
+	"database/sql"
 	"fmt"
 
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	"finapp/services/data-processing/auth-service/config"
+	"github.com/jackc/pgx/v5/pgxpool"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-func NewPostgresConnection(config config.Postgres) (*gorm.DB, error) {
-	dsn := fmt.Sprintf("host=%s port=%s user=%s dbname=%s sslmode=%s password=%s",
+type Database struct {
+	Pool *pgxpool.Pool
+}
+
+func NewPostgresConnection(config config.Postgres) (*Database, error) {
+	// Use standard lib/pq compatible DSN
+	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
+		config.Username,
+		config.Password,
 		config.Host,
 		config.DBPort,
-		config.Username,
 		config.DBName,
-		config.SSLMode,
-		config.Password)
-	
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+		config.SSLMode)
 
+	poolConfig, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, err
 	}
 
-	err = db.AutoMigrate(&entities.User{})
+	// Force simple protocol to avoid SASL issues
+	poolConfig.ConnConfig.TLSConfig = nil
+
+	pool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	return db, nil
+	// Test connection
+	if err := pool.Ping(context.Background()); err != nil {
+		return nil, err
+	}
+
+	return &Database{Pool: pool}, nil
+}
+
+func (db *Database) Close() {
+	db.Pool.Close()
+}
+
+func (db *Database) GetSQLDB() *sql.DB {
+	return &sql.DB{}
 }

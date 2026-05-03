@@ -34,7 +34,7 @@ func Load() *Config {
 			Port: getEnv("PORT", "8080"),
 		},
 		Database: Database{
-			DSN: getEnv("DATABASE_DSN", "postgres://finapp:finapp@localhost:5432/finapp?sslmode=disable"),
+			DSN: getEnv("DATABASE_DSN", "postgres://finapp:finapp@127.0.0.1:5433/finapp?sslmode=disable"),
 		},
 		ML: ML{
 			BaseURL: getEnv("ML_SERVICE_URL", "http://localhost:8000"),

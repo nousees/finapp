@@ -5,8 +5,7 @@ import (
 	"finapp/services/data-processing/auth-service/internal/repository"
 	"finapp/services/data-processing/auth-service/pkg/hash"
 	"errors"
-
-	"gorm.io/gorm"
+	"database/sql"
 )
 
 type SignUpUsecase struct {
@@ -20,7 +19,7 @@ func NewSignUpUsecase(users repository.UserRepository) *SignUpUsecase {
 func (s *SignUpUsecase) SignUp(sup entities.SignUpInput) error {
 	if _, err := s.Users.GetUserByEmail(sup.Email); err == nil {
 		return errors.New("user already exists")
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+	} else if !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 

@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -7,7 +9,7 @@ services:
       POSTGRES_PASSWORD: finapp
       POSTGRES_DB: finapp
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - finapp_pgdata:/var/lib/postgresql/data
       - ./infrastructure/database/init.sql:/docker-entrypoint-initdb.d/01-init.sql
@@ -22,6 +24,11 @@ services:
     container_name: finapp-redis
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   # API Gateway
   gateway:
@@ -31,13 +38,24 @@ services:
     container_name: finapp-gateway
     ports:
       - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
-      - auth
-      - collection
-      - processing
-      - subscription-detector
-      - analysis-control
-      - ml-service
+      auth:
+        condition: service_healthy
+      collection:
+        condition: service_healthy
+      processing:
+        condition: service_healthy
+      subscription-detector:
+        condition: service_healthy
+      analysis-control:
+        condition: service_healthy
+      ml-service:
+        condition: service_healthy
 
   # Go микросервисы (модуль сбора и обработки данных)
   auth:
@@ -46,11 +64,24 @@ services:
       dockerfile: Dockerfile
     container_name: finapp-auth
     environment:
-      PORT: "8081"
-      DATABASE_DSN: postgres://finapp:finapp@postgres:5432/finapp?sslmode=disable
+      PORT: "8082"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USERNAME: finapp
+      DB_PASSWORD: finapp
+      DB_NAME: finapp
+      DB_SSLMODE: disable
       JWT_SECRET: finapp-dev-secret
+      JWT_ACCESS_TTL: 15m
+      JWT_REFRESH_TTL: 720h
+      JWT_ISSUER: finapp-auth
     ports:
-      - "8081:8081"
+      - "8082:8082"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8082/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
       postgres:
         condition: service_healthy
@@ -61,17 +92,22 @@ services:
       dockerfile: Dockerfile
     container_name: finapp-collection
     environment:
-      PORT: "8082"
+      PORT: "8080"
       DATABASE_DSN: postgres://finapp:finapp@postgres:5432/finapp?sslmode=disable
       JWT_SECRET: finapp-dev-secret
-      ML_SERVICE_URL: http://host.docker.internal:8000
+      ML_SERVICE_URL: http://ml-service:8000
     ports:
-      - "8082:8082"
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
       postgres:
         condition: service_healthy
       auth:
-        condition: service_started
+        condition: service_healthy
 
   processing:
     build:
@@ -79,16 +115,21 @@ services:
       dockerfile: Dockerfile
     container_name: finapp-processing
     environment:
-      PORT: "8083"
+      PORT: "8081"
       DATABASE_DSN: postgres://finapp:finapp@postgres:5432/finapp?sslmode=disable
       JWT_SECRET: finapp-dev-secret
     ports:
-      - "8083:8083"
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
       postgres:
         condition: service_healthy
       auth:
-        condition: service_started
+        condition: service_healthy
 
   subscription-detector:
     build:
@@ -96,16 +137,21 @@ services:
       dockerfile: Dockerfile
     container_name: finapp-subscription-detector
     environment:
-      PORT: "8084"
+      PORT: "8083"
       DATABASE_DSN: postgres://finapp:finapp@postgres:5432/finapp?sslmode=disable
       JWT_SECRET: finapp-dev-secret
     ports:
-      - "8084:8084"
+      - "8083:8083"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8083/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
       postgres:
         condition: service_healthy
       auth:
-        condition: service_started
+        condition: service_healthy
 
   # Java микросервис (модуль анализа и контроля)
   analysis-control:
@@ -119,14 +165,18 @@ services:
       SPRING_DATASOURCE_USERNAME: finapp
       SPRING_DATASOURCE_PASSWORD: finapp
       JWT_SECRET: finapp-dev-secret
-      SERVER_PORT: "8085"
     ports:
-      - "8085:8085"
+      - "8084:8084"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8084/actuator/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
 
   # ML сервис (Python FastAPI)
   ml-service:
@@ -139,11 +189,16 @@ services:
       REDIS_URL: redis://redis:6379
     ports:
       - "8000:8000"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
 
   # Мобильное приложение
   mobile:

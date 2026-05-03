@@ -2,6 +2,7 @@
 import React from 'react';
 import { useState, useEffect, createContext, useContext } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiConfig } from '../api/config';
 
 const AuthContext = createContext(undefined);
 
@@ -41,7 +42,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     setIsLoading(true);
     try {
-      const response = await fetch('http://localhost:8080/api/v1/auth/signin', {
+      const response = await fetch(`${apiConfig.authBaseUrl}/sign-in`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -72,7 +73,7 @@ export const AuthProvider = ({ children }) => {
   const register = async (email, password, fullName) => {
     setIsLoading(true);
     try {
-      const response = await fetch('http://localhost:8080/api/v1/auth/signup', {
+      const response = await fetch(`${apiConfig.authBaseUrl}/sign-up`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

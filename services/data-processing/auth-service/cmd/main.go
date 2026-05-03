@@ -11,7 +11,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	_ "github.com/lib/pq"
+	"github.com/gin-contrib/cors"
 )
 
 func main() {
@@ -27,7 +27,7 @@ func main() {
 		log.Fatal("Failed to init jwt: ", err)
 	}
 
-	users := repository.NewUsers(db)
+	users := repository.NewUsers(db.Pool)
 	signUpUsecase := usecases.NewSignUpUsecase(users)
 	signInUsecase := usecases.NewSignInUsecase(users, tokens)
 
@@ -36,6 +36,15 @@ func main() {
 	refreshController := controllers.NewRefreshController(tokens)
 
 	router := gin.Default()
+
+	// CORS middleware - разрешаем все источники для разработки и Expo
+	router.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: false,
+	}))
 
 	router.POST("/sign-up", signUpController.SignUp)
 	router.POST("/sign-in", signInController.SignIn)
