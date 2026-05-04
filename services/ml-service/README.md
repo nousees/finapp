@@ -111,3 +111,149 @@ pytest
 - Send `X-Request-ID` or `X-Correlation-ID`; the same ID is returned in the response header and included in structured logs.
 - Treat `needs_review=true` from `/api/v1/enrich` as a signal to ask the user to confirm or edit extracted fields.
 - Persist transactions only in Go services. `ml-service` returns processing results only.
+
+## Model Recipes (Whisper, RuBERT-tiny NER, CatBoost, BERT)
+
+Practical code examples are in `examples/model_recipes.py`:
+
+- `transcribe_audio_whisper(audio_path)` — transcribes MP3/WAV with Whisper.
+- `fine_tune_rubert_tiny_ner(train_df, output_dir)` — fine-tunes token classification model for transaction entities.
+- `train_catboost_categorizer(df, model_path)` — trains CatBoost on `amount + description + merchant`.
+- `fine_tune_bert_classifier(df, output_dir)` and `bert_predict` — fine-tunes and serves BERT category classifier.
+
+### Minimal Whisper usage
+
+```python
+from examples.model_recipes import transcribe_audio_whisper
+
+text = transcribe_audio_whisper("samples/transaction.wav", model_name="small")
+print(text)
+```
+
+### Minimal RuBERT-tiny NER fine-tuning dataset format
+
+`train_df` must contain:
+- `tokens`: list[str]
+- `ner_tags`: list[str] with BIO labels (for example `B-AMOUNT`, `B-MERCHANT`, `O`).
+
+### Minimal CatBoost dataset format
+
+`df` columns:
+- `amount` (numeric)
+- `description` (string)
+- `merchant` (string)
+- `category` (target string)
+
+### Minimal BERT classifier dataset format
+
+`df` columns:
+- `text` (transaction description text)
+- `label` (target category)
+
+## Deployment with Docker / Docker Compose
+
+Build and run model-oriented profile:
+
+```bash
+cd services/ml-service
+docker compose -f docker-compose.models.yml up --build
+```
+
+Services:
+- `whisper-service` on `localhost:8011`
+- `ner-service` on `localhost:8012`
+- `catboost-service` on `localhost:8013`
+- `bert-classifier-service` on `localhost:8014`
+
+Single image build command:
+
+```bash
+docker build -f Dockerfile.models -t finapp-ml-models:latest .
+```
+
+## Test Coverage Notes
+
+Current tests already validate:
+- Whisper-like voice endpoint behavior and format validation (`tests/test_voice.py`)
+- NER entity extraction (`tests/test_ner.py`)
+- Categorization (`tests/test_categorize.py`)
+- End-to-end enrichment integration (`tests/test_enrich.py`)
+
+Run:
+
+```bash
+cd services/ml-service
+pytest
+```
+
+## Performance Improvements (Production Recommendations)
+
+1. Whisper:
+   - Use `small`/`base` model for low-latency paths and batch offline processing for `medium/large`.
+   - Convert to CTranslate2/faster-whisper for CPU inference speed-up.
+   - Pre-resample audio to 16kHz mono once in ingestion pipeline.
+
+2. RuBERT-tiny NER:
+   - Export to ONNX + int8 quantization.
+   - Batch short texts (dynamic padding) to reduce GPU underutilization.
+   - Cache tokenizer outputs for repeated merchant patterns.
+
+3. CatBoost:
+   - Use `model.shrink()`/feature pruning and lower tree depth for low-latency SLA.
+   - Precompute text normalization features in upstream service.
+   - Retrain with class weights to reduce overfitting and ensemble size.
+
+4. BERT classifier:
+   - Distill into smaller student model for online inference.
+   - Use mixed precision (`fp16`/`bf16`) and ONNX Runtime/TensorRT.
+   - Keep max sequence length at 64-128 for transaction texts.
+
+5. Infra/common:
+   - Warm model weights on startup + healthcheck that confirms model ready.
+   - Isolate heavy models into separate autoscaled services.
+   - Use async request queue for burst smoothing (Redis/RabbitMQ + worker pool).
+
+## Важно: подходят ли модели под ваш датасет?
+
+Короткий ответ: **предыдущие примеры были общими**, не полностью адаптированными под текущий датасет FinApp.
+
+Что исправлено:
+- Добавлен скрипт `examples/train_for_finapp.py`, который читает **ваши реальные файлы**:
+  - `final_shuffled_transactions_dataset.csv`
+  - `financial_dataset.json`
+- Скрипт учитывает BOM-поле `\ufefftext`, приводит колонки к единому формату `text/amount/merchant/category` и запускает обучение CatBoost + BERT на ваших данных.
+
+Запуск:
+
+```bash
+cd services/ml-service
+python examples/train_for_finapp.py
+```
+
+После обучения артефакты будут сохранены в `ml_models/`.
+
+### Что по каждой модели в контексте вашего проекта
+
+- **Whisper**: дообучение обычно не требуется, используется готовая модель для ASR; для вашего проекта важнее выбрать размер модели (`base/small`) и настроить предобработку аудио.
+- **RuBERT-tiny NER**: для полноценного дообучения нужен размеченный NER-корпус в BIO-формате (`tokens`, `ner_tags`). Ваш текущий транзакционный датасет подходит для классификации, но **не содержит готовой BIO-разметки**.
+- **CatBoost**: ваш датасет подходит напрямую (есть `amount`, `merchant`, `text`, `category`).
+- **BERT classifier**: ваш датасет подходит напрямую (`text` + `category`).
+
+### Проверка корректности настройки под проект
+
+1. Проверить, что сервис запускается в fallback и real-model режимах.
+2. Для real-model режима указать пути:
+   - `WHISPER_MODEL_PATH`
+   - `NER_MODEL_PATH`
+   - `CATEGORY_MODEL_PATH`
+3. Переобученные модели из `ml_models/` подключить в загрузчиках `app/ml/*_loader.py` (если хотите, в следующем шаге могу сразу внести wiring в код сервиса).
+
+### Если BERT-обучение падает с ошибкой `accelerate>=1.1.0`
+
+Установите зависимости для `Trainer`:
+
+```bash
+pip install "transformers[torch]" "accelerate>=1.1.0"
+```
+
+В `examples/train_for_finapp.py` добавлена проверка зависимостей: при отсутствии `accelerate/torch/transformers` обучение CatBoost продолжится, а BERT-шаг будет пропущен с понятным предупреждением.
