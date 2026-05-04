@@ -42,6 +42,27 @@ def _build_training_args(output_dir: str, **kwargs):
     if "load_best_model_at_end" in normalized and "load_best_model_at_end" not in params:
         normalized.pop("load_best_model_at_end")
     return TrainingArguments(output_dir=output_dir, **normalized)
+
+
+def _build_trainer(model, args, train_dataset, eval_dataset=None, tokenizer=None, data_collator=None):
+    """Transformers version compatible Trainer builder."""
+    from inspect import signature
+    from transformers import Trainer
+
+    params = signature(Trainer.__init__).parameters
+    kwargs = {"model": model, "args": args, "train_dataset": train_dataset}
+    if eval_dataset is not None:
+        kwargs["eval_dataset"] = eval_dataset
+    if data_collator is not None and "data_collator" in params:
+        kwargs["data_collator"] = data_collator
+
+    if tokenizer is not None:
+        if "tokenizer" in params:
+            kwargs["tokenizer"] = tokenizer
+        elif "processing_class" in params:
+            kwargs["processing_class"] = tokenizer
+
+    return Trainer(**kwargs)
 def fine_tune_rubert_tiny_ner(train_df, output_dir: str) -> NerArtifacts:
     """Fine-tune RuBERT-tiny NER using BIO labels in `tokens` and `ner_tags` columns."""
     from datasets import Dataset
@@ -85,7 +106,7 @@ def fine_tune_rubert_tiny_ner(train_df, output_dir: str) -> NerArtifacts:
         logging_steps=20,
         save_steps=100,
     )
-    trainer = Trainer(
+    trainer = _build_trainer(
         model=model,
         args=args,
         train_dataset=tokenized_ds,
@@ -159,7 +180,9 @@ def fine_tune_bert_classifier(df, output_dir: str) -> None:
         save_strategy="epoch",
         load_best_model_at_end=True,
     )
-    trainer = Trainer(model=model, args=args, train_dataset=train_ds, eval_dataset=valid_ds, tokenizer=tokenizer)
+    trainer = _build_trainer(
+        model=model, args=args, train_dataset=train_ds, eval_dataset=valid_ds, tokenizer=tokenizer
+    )
     trainer.train()
     trainer.save_model(output_dir)
     tokenizer.save_pretrained(output_dir)

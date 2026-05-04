@@ -247,3 +247,13 @@ python examples/train_for_finapp.py
    - `NER_MODEL_PATH`
    - `CATEGORY_MODEL_PATH`
 3. Переобученные модели из `ml_models/` подключить в загрузчиках `app/ml/*_loader.py` (если хотите, в следующем шаге могу сразу внести wiring в код сервиса).
+
+### Если BERT-обучение падает с ошибкой `accelerate>=1.1.0`
+
+Установите зависимости для `Trainer`:
+
+```bash
+pip install "transformers[torch]" "accelerate>=1.1.0"
+```
+
+В `examples/train_for_finapp.py` добавлена проверка зависимостей: при отсутствии `accelerate/torch/transformers` обучение CatBoost продолжится, а BERT-шаг будет пропущен с понятным предупреждением.
