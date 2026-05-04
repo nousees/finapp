@@ -1,0 +1,46 @@
+version: "3.9"
+
+services:
+  whisper-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.models
+    environment:
+      ENABLE_REAL_MODELS: "true"
+      TEST_MODE: "false"
+      WHISPER_MODEL_PATH: "/models/whisper-small"
+    ports:
+      - "8011:8010"
+
+  ner-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.models
+    environment:
+      ENABLE_REAL_MODELS: "true"
+      TEST_MODE: "false"
+      NER_MODEL_PATH: "/models/rubert-tiny-ner"
+    ports:
+      - "8012:8010"
+
+  catboost-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.models
+    environment:
+      ENABLE_REAL_MODELS: "true"
+      TEST_MODE: "false"
+      CATEGORY_MODEL_PATH: "/models/catboost-category"
+    ports:
+      - "8013:8010"
+
+  bert-classifier-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.models
+    environment:
+      ENABLE_REAL_MODELS: "true"
+      TEST_MODE: "false"
+      CATEGORY_MODEL_PATH: "/models/rubert-clf"
+    ports:
+      - "8014:8010"
