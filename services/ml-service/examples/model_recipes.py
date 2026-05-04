@@ -26,6 +26,22 @@ class NerArtifacts:
     id2label: dict[int, str]
 
 
+
+
+def _build_training_args(output_dir: str, **kwargs):
+    """Transformers version compatible TrainingArguments builder."""
+    from inspect import signature
+    from transformers import TrainingArguments
+
+    params = signature(TrainingArguments.__init__).parameters
+    normalized = dict(kwargs)
+    if "evaluation_strategy" in normalized and "evaluation_strategy" not in params and "eval_strategy" in params:
+        normalized["eval_strategy"] = normalized.pop("evaluation_strategy")
+    if "save_strategy" in normalized and "save_strategy" not in params:
+        normalized.pop("save_strategy")
+    if "load_best_model_at_end" in normalized and "load_best_model_at_end" not in params:
+        normalized.pop("load_best_model_at_end")
+    return TrainingArguments(output_dir=output_dir, **normalized)
 def fine_tune_rubert_tiny_ner(train_df, output_dir: str) -> NerArtifacts:
     """Fine-tune RuBERT-tiny NER using BIO labels in `tokens` and `ner_tags` columns."""
     from datasets import Dataset
@@ -60,7 +76,7 @@ def fine_tune_rubert_tiny_ner(train_df, output_dir: str) -> NerArtifacts:
         return tokenized
 
     tokenized_ds = ds.map(tokenize_and_align_labels)
-    args = TrainingArguments(
+    args = _build_training_args(
         output_dir=output_dir,
         learning_rate=3e-5,
         num_train_epochs=2,
@@ -133,7 +149,7 @@ def fine_tune_bert_classifier(df, output_dir: str) -> None:
         model_id, num_labels=len(labels), label2id=label2id, id2label=id2label
     )
 
-    args = TrainingArguments(
+    args = _build_training_args(
         output_dir=output_dir,
         learning_rate=2e-5,
         num_train_epochs=3,
