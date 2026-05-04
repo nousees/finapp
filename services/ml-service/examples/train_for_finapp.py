@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import csv
+import importlib.util
 import json
 from pathlib import Path
 from typing import Any
-
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_DATASET = BASE_DIR / "final_shuffled_transactions_dataset.csv"
@@ -34,6 +34,16 @@ def load_transactions(dataset_path: Path = DEFAULT_DATASET) -> list[dict[str, An
     return [r for r in rows if r["text"]]
 
 
+def _has_bert_training_deps() -> tuple[bool, str]:
+    if importlib.util.find_spec("torch") is None:
+        return False, "Missing dependency: torch"
+    if importlib.util.find_spec("accelerate") is None:
+        return False, "Missing dependency: accelerate>=1.1.0"
+    if importlib.util.find_spec("transformers") is None:
+        return False, "Missing dependency: transformers"
+    return True, "ok"
+
+
 def train_catboost_for_finapp(rows: list[dict[str, Any]], model_path: Path) -> None:
     import pandas as pd
     from model_recipes import train_catboost_categorizer
@@ -44,6 +54,12 @@ def train_catboost_for_finapp(rows: list[dict[str, Any]], model_path: Path) -> N
 
 
 def train_bert_for_finapp(rows: list[dict[str, Any]], out_dir: Path) -> None:
+    ok, reason = _has_bert_training_deps()
+    if not ok:
+        print(f"[WARN] Skip BERT training: {reason}")
+        print("[WARN] Install with: pip install \"transformers[torch]\" \"accelerate>=1.1.0\"")
+        return
+
     import pandas as pd
     from model_recipes import fine_tune_bert_classifier
 
