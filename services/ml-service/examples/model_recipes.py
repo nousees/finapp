@@ -163,8 +163,18 @@ def fine_tune_bert_classifier(df, output_dir: str) -> None:
         encoded["labels"] = [label2id[label] for label in batch["label"]]
         return encoded
 
-    train_ds = train_ds.map(tokenize, batched=True)
-    valid_ds = valid_ds.map(tokenize, batched=True)
+    train_ds = train_ds.map(
+        tokenize,
+        batched=True,
+        remove_columns=[c for c in train_ds.column_names if c not in {"text", "label"}],
+    )
+    valid_ds = valid_ds.map(
+        tokenize,
+        batched=True,
+        remove_columns=[c for c in valid_ds.column_names if c not in {"text", "label"}],
+    )
+    train_ds = train_ds.remove_columns([c for c in ["text", "label"] if c in train_ds.column_names])
+    valid_ds = valid_ds.remove_columns([c for c in ["text", "label"] if c in valid_ds.column_names])
 
     model = AutoModelForSequenceClassification.from_pretrained(
         model_id, num_labels=len(labels), label2id=label2id, id2label=id2label
