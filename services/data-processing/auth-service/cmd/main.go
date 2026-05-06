@@ -11,7 +11,6 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/gin-contrib/cors"
 )
 
 func main() {
@@ -38,13 +37,19 @@ func main() {
 	router := gin.Default()
 
 	// CORS middleware - разрешаем все источники для разработки и Expo
-	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: false,
-	}))
+	router.Use(func(c *gin.Context) {
+		c.Header("Access-Control-Allow-Origin", "*")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization")
+		c.Header("Access-Control-Expose-Headers", "Content-Length")
+
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+
+		c.Next()
+	})
 
 	router.POST("/sign-up", signUpController.SignUp)
 	router.POST("/sign-in", signInController.SignIn)
@@ -53,5 +58,7 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "service": "auth"})
 	})
 
-	router.Run(":" + cfg.Server.Port)
+	if err := router.Run(":" + cfg.Server.Port); err != nil {
+		log.Fatal("Failed to start auth service: ", err)
+	}
 }
