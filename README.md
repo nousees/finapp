@@ -84,69 +84,88 @@ finapp/
 ## Архитектура после объединения
 
 ### Порты сервисов
-- **Gateway (Nginx):** 8080 - единая точка входа
-- **Auth (Go):** 8081 - аутентификация и JWT
-- **Collection (Go):** 8082 - сбор данных (транзакции, импорт, голос)
-- **Processing (Go):** 8083 - ML-обработка и категоризация
-- **Subscription Detector (Go):** 8084 - детектор подписок
-- **Analysis Control (Java):** 8085 - бюджеты, цели, отчеты
-- **ML Service (Python):** 8000 - Whisper, NER, CatBoost
-- **PostgreSQL:** 5432 - единая база данных
-- **Redis:** 6379 - кэш и очереди
+- **Gateway (Nginx):** `localhost:8080` - единая точка входа
+- **Auth (Go):** `localhost:8082` → контейнер `auth:8082` - аутентификация и JWT
+- **Collection (Go):** `localhost:8086` → контейнер `collection:8080` - сбор данных (транзакции, импорт, голос)
+- **Processing (Go):** `localhost:8081` → контейнер `processing:8081` - ML-обработка и категоризация
+- **Subscription Detector (Go):** `localhost:8083` → контейнер `subscription-detector:8083` - детектор подписок
+- **Analysis Control (Java):** `localhost:8084` → контейнер `analysis-control:8084` - бюджеты, цели, отчеты
+- **ML Service (Python):** `localhost:8000` → контейнер `ml-service:8000` - Whisper, NER, CatBoost
+- **PostgreSQL:** `localhost:5433` → контейнер `postgres:5432` - единая база данных
+- **Redis:** `localhost:6379` - кэш и очереди
 
 ### API маршрутизация через Gateway
 ```
-/api/v1/auth/*          → auth:8081
-/api/v1/transactions/*  → collection:8082
-/api/v1/imports/*       → collection:8082
-/api/v1/voice/*         → collection:8082
-/api/v1/process/*       → processing:8083
-/api/v1/categorize/*    → processing:8083
-/api/v1/subscriptions/* → subscription-detector:8084
-/api/v1/budgets/*       → analysis-control:8085
-/api/v1/goals/*         → analysis-control:8085
-/api/v1/reports/*       → analysis-control:8085
-/api/v1/notifications/* → analysis-control:8085
+/api/v1/auth/*          → auth:8082
+/api/v1/transactions/*  → collection:8080
+/api/v1/imports/*       → collection:8080
+/api/v1/voice/*         → collection:8080
+/api/v1/process/*       → processing:8081
+/api/v1/categorize/*    → processing:8081
+/api/v1/subscriptions/* → subscription-detector:8083
+/api/v1/budgets/*       → analysis-control:8084
+/api/v1/goals/*         → analysis-control:8084
+/api/v1/reports/*       → analysis-control:8084
+/api/v1/notifications/* → analysis-control:8084
+/api/v1/insights/*      → analysis-control:8084
 /api/v1/ml/*            → ml-service:8000
 ```
 
 ## 🚀 Быстрый старт (локально)
 
-### 1. Запуск всех сервисов
-```bash
-# Запустить все микросервисы
-docker compose up --build
+### 1. Подготовка окружения
+Убедитесь, что установлены Docker Desktop / Docker Engine с Compose v2, Node.js 20+ и npm.
 
-# Или в фоновом режиме
-docker compose up -d --build
+Если база уже запускалась со старой схемой и нужно проверить проект с чистого состояния, удалите старые контейнеры и volume:
+
+```bash
+docker compose down -v --remove-orphans
 ```
 
-### 2. Проверка системы
+### 2. Запуск всех сервисов
 ```bash
-# Установить зависимости для тестов
+# Собрать и запустить полный стек в фоновом режиме
+docker compose up -d --build
+
+# Посмотреть статус контейнеров
+docker compose ps
+
+# Смотреть логи всех сервисов, если какой-то контейнер не стал healthy
+docker compose logs -f --tail=200
+```
+
+### 3. Проверка системы
+```bash
+# Проверить gateway
+curl http://localhost:8080/health
+
+# Проверить Java analysis-control напрямую
+curl http://localhost:8084/api/test/health
+
+# Установить зависимости для интеграционных тестов
 cd tests && npm install
 
-# Проверить здоровье всех сервисов
+# Проверить здоровье всех сервисов через gateway
 node ../test-system.js
 
 # Запустить интеграционные тесты
 npm test
 ```
 
-### 3. Доступ к сервисам
+### 4. Доступ к сервисам
 - **API Gateway:** http://localhost:8080
 - **Health Check:** http://localhost:8080/health
-- **База данных:** localhost:5432 (finapp/finapp)
-- **Redis:** localhost:6379
+- **База данных:** `localhost:5433` (`finapp`/`finapp`, внутри Docker-сети `postgres:5432`)
+- **Redis:** `localhost:6379`
 
-### 4. Порты сервисов
-- **Gateway (Nginx):** 8080 - единая точка входа
-- **Auth (Go):** 8081 - аутентификация и JWT
-- **Collection (Go):** 8082 - сбор данных (транзакции, импорт, голос)
-- **Processing (Go):** 8083 - ML-обработка и категоризация
-- **Subscription (Go):** 8084 - детектор подписок
-- **Analysis (Java):** 8085 - бюджеты, цели, отчеты
-- **ML Service (Python):** 8000 - Whisper, NER, CatBoost
+### 5. Остановка проекта
+```bash
+# Остановить контейнеры, сохранив данные PostgreSQL volume
+docker compose down
+
+# Полностью очистить локальные данные PostgreSQL и пересоздать схему при следующем запуске
+docker compose down -v --remove-orphans
+```
 
 ## 📱 Мобильное приложение
 

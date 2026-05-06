@@ -97,7 +97,7 @@ services:
       JWT_SECRET: finapp-dev-secret
       ML_SERVICE_URL: http://ml-service:8000
     ports:
-      - "8080:8080"
+      - "8086:8080"
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
       interval: 10s
@@ -165,10 +165,11 @@ services:
       SPRING_DATASOURCE_USERNAME: finapp
       SPRING_DATASOURCE_PASSWORD: finapp
       JWT_SECRET: finapp-dev-secret
+      SERVER_PORT: "8084"
     ports:
       - "8084:8084"
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8084/actuator/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8084/api/test/health"]
       interval: 15s
       timeout: 10s
       retries: 5
