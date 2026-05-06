@@ -7,6 +7,8 @@ import java.util.UUID;
 public record GoalInsight(
     UUID goalId,
     String name,
+    String status,
+    Integer priority,
     LocalDate deadline,
     BigDecimal targetAmount,
     BigDecimal currentAmount,
@@ -15,6 +17,7 @@ public record GoalInsight(
     String riskLevel,
     long daysRemaining,
     BigDecimal requiredMonthlyContribution,
+    BigDecimal monthlyAutoSaveEquivalent,
     String message
 ) {
 }

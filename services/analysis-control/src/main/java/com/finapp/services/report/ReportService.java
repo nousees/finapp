@@ -91,7 +91,7 @@ public class ReportService {
                 reportData = generateCategoryAnalysis(userId, periodStart, periodEnd);
                 break;
             case "GOAL_PROGRESS":
-                reportData = generateGoalProgress(userId);
+                reportData = generateGoalProgress(userId, periodStart, periodEnd);
                 break;
             default:
                 throw new ValidationException(
@@ -121,19 +121,19 @@ public class ReportService {
     }
 
     private Object generateMonthlySummary(UUID userId,
-                                                      LocalDate periodStart,
-                                                      LocalDate periodEnd) {
+                                          LocalDate periodStart,
+                                          LocalDate periodEnd) {
         return financialAnalysisFacade.analyzeUser(userId, periodStart, periodEnd);
     }
 
     private Object generateCategoryAnalysis(UUID userId,
-                                                        LocalDate periodStart,
-                                                        LocalDate periodEnd) {
+                                            LocalDate periodStart,
+                                            LocalDate periodEnd) {
         return financialAnalysisFacade.analyzeUser(userId, periodStart, periodEnd).categories();
     }
 
-    private Object generateGoalProgress(UUID userId) {
-        return financialAnalysisFacade.analyzeCurrentMonth(userId).goals();
+    private Object generateGoalProgress(UUID userId, LocalDate periodStart, LocalDate periodEnd) {
+        return financialAnalysisFacade.analyzeUser(userId, periodStart, periodEnd).goals();
     }
 
     @Transactional

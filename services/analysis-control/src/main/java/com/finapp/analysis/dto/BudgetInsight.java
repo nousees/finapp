@@ -7,6 +7,8 @@ import java.util.UUID;
 public record BudgetInsight(
     UUID budgetId,
     UUID categoryId,
+    String categoryName,
+    LocalDate periodStart,
     LocalDate periodEnd,
     BigDecimal amountLimit,
     BigDecimal spentAmount,

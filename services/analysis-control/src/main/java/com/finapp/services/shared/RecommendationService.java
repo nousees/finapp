@@ -12,8 +12,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
-import java.util.*;
 
 @Slf4j
 @Service
@@ -92,7 +96,10 @@ public class RecommendationService {
                 ),
                 BigDecimal.ZERO,
                 1,
-                false
+                false,
+                null,
+                null,
+                "FinancialAnalysisFacade"
             ));
         }
 
@@ -136,6 +143,18 @@ public class RecommendationService {
                 continue;
             }
 
+            Map<String, Object> notificationData = new HashMap<>();
+            notificationData.put("recommendationType", candidate.type());
+            notificationData.put("priority", candidate.priority());
+            notificationData.put("estimatedSavings", candidate.estimatedSavings());
+            notificationData.put("sourceModel", candidate.sourceModel());
+            if (candidate.entityType() != null) {
+                notificationData.put("sourceEntityType", candidate.entityType());
+            }
+            if (candidate.entityId() != null) {
+                notificationData.put("sourceEntityId", candidate.entityId());
+            }
+
             notificationService.createNotification(
                 userId,
                 "RECOMMENDATION",
@@ -144,11 +163,7 @@ public class RecommendationService {
                 "JAVA",
                 "recommendation",
                 savedRecommendation.getId(),
-                Map.of(
-                    "recommendationType", candidate.type(),
-                    "priority", candidate.priority(),
-                    "estimatedSavings", candidate.estimatedSavings()
-                )
+                notificationData
             );
         }
     }

@@ -1,8 +1,10 @@
 package com.finapp.analysis.model;
 
+import com.finapp.analysis.dto.AnomalyInsight;
 import com.finapp.analysis.dto.BudgetInsight;
 import com.finapp.analysis.dto.FinancialInsight;
 import com.finapp.analysis.dto.GoalInsight;
+import com.finapp.analysis.dto.MerchantInsight;
 import com.finapp.analysis.dto.RecommendationCandidate;
 import com.finapp.analysis.dto.SpendingSummary;
 import org.springframework.stereotype.Component;
@@ -19,9 +21,11 @@ public class RecommendationEngineModel {
         recommendations.addAll(generateBudgetRecommendations(insight.budgets()));
         recommendations.addAll(generateGoalRecommendations(insight.goals()));
         recommendations.addAll(generateCashflowRecommendations(insight.summary()));
+        recommendations.addAll(generateAnomalyRecommendations(insight.anomalies()));
+        recommendations.addAll(generateMerchantRecommendations(insight.merchants(), insight.summary()));
         return recommendations.stream()
             .sorted((left, right) -> Integer.compare(right.priority(), left.priority()))
-            .limit(6)
+            .limit(8)
             .toList();
     }
 
@@ -30,16 +34,21 @@ public class RecommendationEngineModel {
             .filter(budget -> "HIGH".equals(budget.riskLevel()) || "MEDIUM".equals(budget.riskLevel()))
             .map(budget -> new RecommendationCandidate(
                 "BUDGET_OPTIMIZATION",
-                "Оптимизировать бюджет",
+                "Оптимизировать бюджет «" + budget.categoryName() + "»",
                 budget.message(),
                 List.of(
                     "Проверьте крупные расходы в этой категории",
                     "Снизьте средний дневной расход до конца периода",
                     "Перенесите необязательные покупки на следующий период"
                 ),
-                budget.forecastedOverspend().compareTo(BigDecimal.ZERO) > 0 ? budget.forecastedOverspend() : budget.spentAmount().multiply(BigDecimal.valueOf("0.10")),
+                budget.forecastedOverspend().compareTo(BigDecimal.ZERO) > 0
+                    ? budget.forecastedOverspend()
+                    : AnalysisMath.money(budget.spentAmount().multiply(BigDecimal.valueOf("0.10"))),
                 "HIGH".equals(budget.riskLevel()) ? 3 : 2,
-                "HIGH".equals(budget.riskLevel())
+                "HIGH".equals(budget.riskLevel()),
+                "budget",
+                budget.budgetId(),
+                "BudgetInsightModel"
             ))
             .toList();
     }
@@ -58,7 +67,10 @@ public class RecommendationEngineModel {
                 ),
                 goal.requiredMonthlyContribution(),
                 "HIGH".equals(goal.riskLevel()) ? 3 : 2,
-                "HIGH".equals(goal.riskLevel())
+                "HIGH".equals(goal.riskLevel()),
+                "goal",
+                goal.goalId(),
+                "GoalInsightModel"
             ))
             .toList();
     }
@@ -77,7 +89,10 @@ public class RecommendationEngineModel {
                 ),
                 summary.netSavings().abs(),
                 3,
-                true
+                true,
+                null,
+                null,
+                "TransactionAnalyticsModel"
             ));
         }
         if (summary.recurringExpenseTotal().compareTo(BigDecimal.ZERO) > 0) {
@@ -90,11 +105,61 @@ public class RecommendationEngineModel {
                     "Отмените неиспользуемые подписки",
                     "Проверьте дублирующие сервисы"
                 ),
-                summary.recurringExpenseTotal().multiply(BigDecimal.valueOf("0.15")),
+                AnalysisMath.money(summary.recurringExpenseTotal().multiply(BigDecimal.valueOf("0.15"))),
                 1,
-                false
+                false,
+                null,
+                null,
+                "TransactionAnalyticsModel"
             ));
         }
         return recommendations;
+    }
+
+    private List<RecommendationCandidate> generateAnomalyRecommendations(List<AnomalyInsight> anomalies) {
+        return anomalies.stream()
+            .filter(anomaly -> "HIGH".equals(anomaly.severity()))
+            .map(anomaly -> new RecommendationCandidate(
+                "ANOMALY_REVIEW",
+                anomaly.title(),
+                anomaly.description(),
+                List.of(
+                    "Проверьте детали операции или категории",
+                    "Подтвердите корректность транзакции",
+                    "При необходимости скорректируйте бюджет"
+                ),
+                anomaly.amount().subtract(anomaly.baselineAmount()).max(BigDecimal.ZERO),
+                3,
+                true,
+                anomaly.transactionId() != null ? "transaction" : "category",
+                anomaly.transactionId() != null ? anomaly.transactionId() : anomaly.categoryId(),
+                "TransactionAnalyticsModel"
+            ))
+            .toList();
+    }
+
+    private List<RecommendationCandidate> generateMerchantRecommendations(List<MerchantInsight> merchants, SpendingSummary summary) {
+        if (summary.totalExpenses().compareTo(BigDecimal.ZERO) == 0) {
+            return List.of();
+        }
+        return merchants.stream()
+            .filter(merchant -> merchant.percentage().compareTo(BigDecimal.valueOf(25)) >= 0 && merchant.transactionCount() >= 2)
+            .map(merchant -> new RecommendationCandidate(
+                "MERCHANT_SPENDING_REVIEW",
+                "Проверить расходы у «" + merchant.merchantName() + "»",
+                "На этого получателя приходится " + merchant.percentage() + "% расходов за период.",
+                List.of(
+                    "Оцените, все ли покупки были обязательными",
+                    "Сравните цены с альтернативными поставщиками",
+                    "Установите лимит на следующую неделю"
+                ),
+                AnalysisMath.money(merchant.amount().multiply(BigDecimal.valueOf("0.10"))),
+                2,
+                false,
+                null,
+                null,
+                "TransactionAnalyticsModel"
+            ))
+            .toList();
     }
 }

@@ -21,24 +21,27 @@ public class GoalInsightModel {
 
     public List<GoalInsight> analyzeGoals(UUID userId, LocalDate analysisDate) {
         return goalService.getActiveGoals(userId).stream()
-            .map(goal -> toInsight(userId, goal, analysisDate))
+            .map(goal -> toInsight(goal, analysisDate))
             .sorted((left, right) -> Integer.compare(riskOrder(right.riskLevel()), riskOrder(left.riskLevel())))
             .toList();
     }
 
-    private GoalInsight toInsight(UUID userId, Goal goal, LocalDate analysisDate) {
+    private GoalInsight toInsight(Goal goal, LocalDate analysisDate) {
         BigDecimal target = AnalysisMath.nullToZero(goal.getTargetAmount());
         BigDecimal current = AnalysisMath.nullToZero(goal.getCurrentAmount());
         BigDecimal remaining = target.subtract(current).max(BigDecimal.ZERO);
-        BigDecimal progress = goalService.getGoalProgress(userId, goal.getId());
+        BigDecimal progress = AnalysisMath.percent(current, target);
         long daysRemaining = Math.max(0, ChronoUnit.DAYS.between(analysisDate, goal.getDeadline()));
         BigDecimal monthsRemaining = BigDecimal.valueOf(Math.max(1, Math.ceil(daysRemaining / 30.0)));
         BigDecimal requiredMonthly = remaining.divide(monthsRemaining, 2, RoundingMode.HALF_UP);
-        String riskLevel = resolveRisk(progress, daysRemaining, requiredMonthly, goal.getAutoSaveAmount());
+        BigDecimal monthlyAutoSaveEquivalent = monthlyAutoSaveEquivalent(goal.getAutoSaveAmount(), goal.getAutoSaveFrequency());
+        String riskLevel = resolveRisk(progress, daysRemaining, requiredMonthly, monthlyAutoSaveEquivalent);
 
         return new GoalInsight(
             goal.getId(),
             goal.getName(),
+            goal.getStatus(),
+            goal.getPriority(),
             goal.getDeadline(),
             AnalysisMath.money(target),
             AnalysisMath.money(current),
@@ -47,31 +50,44 @@ public class GoalInsightModel {
             riskLevel,
             daysRemaining,
             AnalysisMath.money(requiredMonthly),
-            buildMessage(riskLevel, requiredMonthly, goal.getAutoSaveAmount())
+            AnalysisMath.money(monthlyAutoSaveEquivalent),
+            buildMessage(riskLevel, requiredMonthly, monthlyAutoSaveEquivalent)
         );
     }
 
-    private String resolveRisk(BigDecimal progress, long daysRemaining, BigDecimal requiredMonthly, BigDecimal autoSaveAmount) {
+    private BigDecimal monthlyAutoSaveEquivalent(BigDecimal autoSaveAmount, String autoSaveFrequency) {
+        BigDecimal amount = AnalysisMath.nullToZero(autoSaveAmount);
+        if (autoSaveFrequency == null || amount.compareTo(BigDecimal.ZERO) == 0) {
+            return BigDecimal.ZERO;
+        }
+        return switch (autoSaveFrequency.toUpperCase()) {
+            case "DAILY" -> amount.multiply(BigDecimal.valueOf(30));
+            case "WEEKLY" -> amount.multiply(BigDecimal.valueOf(4));
+            case "YEARLY" -> amount.divide(BigDecimal.valueOf(12), 2, RoundingMode.HALF_UP);
+            default -> amount;
+        };
+    }
+
+    private String resolveRisk(BigDecimal progress, long daysRemaining, BigDecimal requiredMonthly, BigDecimal monthlyAutoSaveEquivalent) {
         if (progress.compareTo(BigDecimal.valueOf(100)) >= 0) {
             return "LOW";
         }
         if (daysRemaining <= 0) {
             return "HIGH";
         }
-        if (autoSaveAmount == null || autoSaveAmount.compareTo(requiredMonthly) < 0) {
+        if (monthlyAutoSaveEquivalent.compareTo(requiredMonthly) < 0) {
             return daysRemaining <= 45 ? "HIGH" : "MEDIUM";
         }
         return "LOW";
     }
 
-    private String buildMessage(String riskLevel, BigDecimal requiredMonthly, BigDecimal autoSaveAmount) {
+    private String buildMessage(String riskLevel, BigDecimal requiredMonthly, BigDecimal monthlyAutoSaveEquivalent) {
         if ("HIGH".equals(riskLevel)) {
             return "Цель в зоне риска: нужен ежемесячный взнос около " + AnalysisMath.money(requiredMonthly) + ".";
         }
         if ("MEDIUM".equals(riskLevel)) {
-            BigDecimal currentAutoSave = AnalysisMath.nullToZero(autoSaveAmount);
-            BigDecimal increase = requiredMonthly.subtract(currentAutoSave).max(BigDecimal.ZERO);
-            return "Для уверенного достижения цели увеличьте автосбережение примерно на " + AnalysisMath.money(increase) + ".";
+            BigDecimal increase = requiredMonthly.subtract(monthlyAutoSaveEquivalent).max(BigDecimal.ZERO);
+            return "Для уверенного достижения цели увеличьте ежемесячное автосбережение примерно на " + AnalysisMath.money(increase) + ".";
         }
         return "Цель движется в хорошем темпе.";
     }
