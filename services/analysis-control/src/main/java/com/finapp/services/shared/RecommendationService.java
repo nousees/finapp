@@ -1,9 +1,9 @@
 package com.finapp.services.shared;
 
+import com.finapp.analysis.dto.RecommendationCandidate;
+import com.finapp.analysis.model.FinancialAnalysisFacade;
 import com.finapp.models.shared.Recommendation;
 import com.finapp.repositories.shared.RecommendationRepository;
-import com.finapp.services.budget.BudgetService;
-import com.finapp.services.goal.GoalService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -12,32 +12,35 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.stream.Collectors;
-import java.time.LocalDate;
-import java.util.*;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class RecommendationService {
-    
+
     private final RecommendationRepository recommendationRepository;
-    private final BudgetService budgetService;
-    private final GoalService goalService;
     private final ObjectMapper objectMapper;
-    
+    private final FinancialAnalysisFacade financialAnalysisFacade;
+    private final NotificationService notificationService;
+
     public List<Recommendation> getUserRecommendations(UUID userId) {
         return recommendationRepository.findByUserId(userId);
     }
-    
+
     public List<Recommendation> getUnappliedRecommendations(UUID userId) {
         return recommendationRepository.findByUserIdAndIsAppliedFalse(userId);
     }
-    
+
     public List<Recommendation> getRecommendationsByPriority(UUID userId, Integer priority) {
         return recommendationRepository.findByUserIdAndPriority(userId, priority);
     }
-    
+
     @Transactional
     public Recommendation createRecommendation(UUID userId, String type, String title,
                                               String description, List<String> actionItems,
@@ -47,7 +50,7 @@ public class RecommendationService {
         recommendation.setType(type);
         recommendation.setTitle(title);
         recommendation.setDescription(description);
-        
+
         if (actionItems != null) {
             try {
                 recommendation.setActionItems(objectMapper.writeValueAsString(actionItems));
@@ -55,19 +58,19 @@ public class RecommendationService {
                 throw new RuntimeException("Error converting actionItems to JSON", e);
             }
         }
-        
+
         recommendation.setEstimatedSavings(estimatedSavings);
         recommendation.setPriority(priority != null ? priority : 1);
-        
+
         return recommendationRepository.save(recommendation);
     }
-    
+
     @Transactional
     public void markAsApplied(UUID userId, UUID recommendationId) {
         Recommendation recommendation = recommendationRepository.findById(recommendationId)
             .filter(r -> r.getUserId().equals(userId))
             .orElseThrow(() -> new RuntimeException("Recommendation not found"));
-        
+
         if (!recommendation.getIsApplied()) {
             recommendation.setIsApplied(true);
             recommendation.setAppliedAt(new Date().toInstant().atOffset(java.time.ZoneOffset.UTC));
@@ -75,124 +78,110 @@ public class RecommendationService {
             log.info("Recommendation {} marked as applied", recommendationId);
         }
     }
-    
+
     @Transactional
     public List<Recommendation> generateRecommendations(UUID userId) {
-        log.info("Generating recommendations for user: {}", userId);
-        
-        List<Recommendation> recommendations = new ArrayList<>();
-        
-        recommendations.addAll(generateBudgetRecommendations(userId));
-        
-        recommendations.addAll(generateGoalRecommendations(userId));
+        log.info("Generating financial insight recommendations for user: {}", userId);
 
-        recommendations.addAll(generateGeneralSavingsRecommendations(userId));
-        
-        return recommendationRepository.saveAll(recommendations);
-    }
-    
-    private List<Recommendation> generateBudgetRecommendations(UUID userId) {
-        List<Recommendation> recommendations = new ArrayList<>();
-        
-        try {
-            
-            Recommendation rec = new Recommendation();
-            rec.setUserId(userId);
-            rec.setType("BUDGET_OPTIMIZATION");
-            rec.setTitle("Grocery budget optimization");
-            rec.setDescription("You regularly exceed grocery budget by 20%. " +
-                             "Consider reviewing expenses in this category.");
-            rec.setPriority(2);
-            rec.setEstimatedSavings(new BigDecimal("3000"));
-            
-            List<String> actions = Arrays.asList(
-                "Analyze supermarket receipts",
-                "Plan weekly shopping",
-                "Buy products on sale"
-            );
-            rec.setActionItems(objectMapper.writeValueAsString(actions));
-            
-            recommendations.add(rec);
-            
-        } catch (Exception e) {
-            log.error("Error generating budget recommendations", e);
+        List<RecommendationCandidate> candidates = financialAnalysisFacade.analyzeCurrentMonth(userId).recommendations();
+        if (candidates.isEmpty()) {
+            candidates = List.of(new RecommendationCandidate(
+                "FINANCIAL_HEALTH",
+                "Финансы в стабильном состоянии",
+                "Критических рисков за текущий месяц не найдено. Продолжайте контролировать бюджеты и цели.",
+                List.of(
+                    "Проверьте бюджеты в конце недели",
+                    "Обновите цели, если изменился доход",
+                    "Подтвердите транзакции с низкой уверенностью ML"
+                ),
+                BigDecimal.ZERO,
+                1,
+                false,
+                null,
+                null,
+                "FinancialAnalysisFacade"
+            ));
         }
-        
-        return recommendations;
+
+        List<Recommendation> recommendations = candidates.stream()
+            .map(candidate -> toRecommendation(userId, candidate))
+            .collect(Collectors.toList());
+
+        List<Recommendation> savedRecommendations = recommendationRepository.saveAll(recommendations);
+        createRecommendationNotifications(userId, candidates, savedRecommendations);
+        return savedRecommendations;
     }
-    
-    private List<Recommendation> generateGoalRecommendations(UUID userId) {
-        List<Recommendation> recommendations = new ArrayList<>();
-        
+
+
+    private Recommendation toRecommendation(UUID userId, RecommendationCandidate candidate) {
+        Recommendation recommendation = new Recommendation();
+        recommendation.setUserId(userId);
+        recommendation.setType(candidate.type());
+        recommendation.setTitle(candidate.title());
+        recommendation.setDescription(candidate.description());
+        recommendation.setEstimatedSavings(candidate.estimatedSavings());
+        recommendation.setPriority(candidate.priority());
+
         try {
-            Recommendation rec = new Recommendation();
-            rec.setUserId(userId);
-            rec.setType("GOAL_ACCELERATION");
-            rec.setTitle("Accelerate goal achievement");
-            rec.setDescription("You can reach your financial goals 30% faster " +
-                             "if you increase monthly contributions.");
-            rec.setPriority(3);
-            rec.setEstimatedSavings(new BigDecimal("15000"));
-            
-            List<String> actions = Arrays.asList(
-                "Increase goal auto-save by 10%",
-                "Find additional income source",
-                "Reduce unnecessary expenses"
-            );
-            rec.setActionItems(objectMapper.writeValueAsString(actions));
-            
-            recommendations.add(rec);
-            
-        } catch (Exception e) {
-            log.error("Error generating goal recommendations", e);
+            recommendation.setActionItems(objectMapper.writeValueAsString(candidate.actionItems()));
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException("Error converting actionItems to JSON", e);
         }
-        
-        return recommendations;
+
+        return recommendation;
     }
-    
-    private List<Recommendation> generateGeneralSavingsRecommendations(UUID userId) {
-        List<Recommendation> recommendations = new ArrayList<>();
-        
-        try {
-            Recommendation rec = new Recommendation();
-            rec.setUserId(userId);
-            rec.setType("SAVING_TIP");
-            rec.setTitle("Save on subscriptions");
-            rec.setDescription("You can save up to 2000 rub. per month " +
-                             "by canceling unused subscriptions.");
-            rec.setPriority(1);
-            rec.setEstimatedSavings(new BigDecimal("2000"));
-            
-            List<String> actions = Arrays.asList(
-                "Review active subscriptions",
-                "Cancel unused services",
-                "Use family plans"
+
+
+    private void createRecommendationNotifications(
+            UUID userId,
+            List<RecommendationCandidate> candidates,
+            List<Recommendation> savedRecommendations) {
+        for (int i = 0; i < candidates.size() && i < savedRecommendations.size(); i++) {
+            RecommendationCandidate candidate = candidates.get(i);
+            Recommendation savedRecommendation = savedRecommendations.get(i);
+            if (!candidate.shouldNotify()) {
+                continue;
+            }
+
+            Map<String, Object> notificationData = new HashMap<>();
+            notificationData.put("recommendationType", candidate.type());
+            notificationData.put("priority", candidate.priority());
+            notificationData.put("estimatedSavings", candidate.estimatedSavings());
+            notificationData.put("sourceModel", candidate.sourceModel());
+            if (candidate.entityType() != null) {
+                notificationData.put("sourceEntityType", candidate.entityType());
+            }
+            if (candidate.entityId() != null) {
+                notificationData.put("sourceEntityId", candidate.entityId());
+            }
+
+            notificationService.createNotification(
+                userId,
+                "RECOMMENDATION",
+                candidate.title(),
+                candidate.description(),
+                "JAVA",
+                "recommendation",
+                savedRecommendation.getId(),
+                notificationData
             );
-            rec.setActionItems(objectMapper.writeValueAsString(actions));
-            
-            recommendations.add(rec);
-            
-        } catch (Exception e) {
-            log.error("Error generating general recommendations", e);
         }
-        
-        return recommendations;
     }
-    
+
     public BigDecimal getTotalPotentialSavings(UUID userId) {
         Double savings = recommendationRepository.getTotalPotentialSavings(userId);
         return savings != null ? BigDecimal.valueOf(savings) : BigDecimal.ZERO;
     }
-    
+
     public List<Recommendation> getTopSavingsRecommendations(UUID userId, int limit) {
         List<Recommendation> recommendations = recommendationRepository
             .findTopRecommendationsBySavings(userId);
-        
+
         return recommendations.stream()
             .limit(limit)
             .collect(Collectors.toList());
     }
-    
+
     @Transactional
     public void cleanupOldRecommendations(UUID userId, int daysToKeep) {
         log.info("Cleaning up old recommendations for user: {}", userId);

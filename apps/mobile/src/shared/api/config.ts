@@ -14,5 +14,6 @@ export const apiConfig = {
   processingBaseUrl: process.env.EXPO_PUBLIC_PROCESSING_API_URL?.trim() || `http://${host}:8081`,
   subscriptionsBaseUrl: process.env.EXPO_PUBLIC_SUBSCRIPTIONS_API_URL?.trim() || `http://${host}:8083`,
   authBaseUrl: process.env.EXPO_PUBLIC_AUTH_API_URL?.trim() || `http://${host}:8082`,
+  analysisBaseUrl: process.env.EXPO_PUBLIC_ANALYSIS_API_URL?.trim() || `http://${host}:8080`,
   devUserId: process.env.EXPO_PUBLIC_DEV_USER_ID?.trim() || DEFAULT_USER_ID,
 };
