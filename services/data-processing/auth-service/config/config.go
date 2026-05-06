@@ -1,88 +1,78 @@
 package config
 
 import (
-	"log"
 	"os"
 	"time"
-
-	"github.com/joho/godotenv"
-	"github.com/spf13/viper"
 )
 
 type (
 	Config struct {
-		DB     Postgres `mapstructure:"postgres"`
-		Server Server   `mapstructure:"server"`
-		JWT    JWT      `mapstructure:"jwt"`
+		DB     Postgres
+		Server Server
+		JWT    JWT
 	}
 
 	Server struct {
-		Port string `mapstructure:"port"`
+		Port string
 	}
 
 	Postgres struct {
-		Host           string `mapstructure:"db_host"`
-		DBPort         string `mapstructure:"db_port"`
-		DBExternalPort string `mapstructure:"db_external_port"`
-		Username       string `mapstructure:"db_username"`
-		DBName         string `mapstructure:"db_name"`
-		SSLMode        string `mapstructure:"db_sslmode"`
-		Password       string `mapstructure:"db_password"`
+		Host           string
+		DBPort         string
+		DBExternalPort string
+		Username       string
+		DBName         string
+		SSLMode        string
+		Password       string
 	}
 
 	JWT struct {
-		Secret     string        `mapstructure:"secret"`
-		AccessTTL  time.Duration `mapstructure:"access_ttl"`
-		RefreshTTL time.Duration `mapstructure:"refresh_ttl"`
-		Issuer     string        `mapstructure:"issuer"`
+		Secret     string
+		AccessTTL  time.Duration
+		RefreshTTL time.Duration
+		Issuer     string
 	}
 )
 
 func LoadConfig() Config {
-	cfg := Config{}
+	return Config{
+		DB: Postgres{
+			Host:           env("DB_HOST", "postgres"),
+			DBPort:         env("DB_PORT", "5432"),
+			DBExternalPort: env("DB_EXTERNAL_PORT", "5433"),
+			Username:       env("DB_USERNAME", "finapp"),
+			DBName:         env("DB_NAME", "finapp"),
+			SSLMode:        env("DB_SSLMODE", "disable"),
+			Password:       env("DB_PASSWORD", "finapp"),
+		},
+		Server: Server{
+			Port: env("PORT", "8082"),
+		},
+		JWT: JWT{
+			Secret:     env("JWT_SECRET", "finapp-dev-secret"),
+			AccessTTL:  durationEnv("JWT_ACCESS_TTL", 15*time.Minute),
+			RefreshTTL: durationEnv("JWT_REFRESH_TTL", 30*24*time.Hour),
+			Issuer:     env("JWT_ISSUER", "finapp-auth"),
+		},
+	}
+}
 
-	err := godotenv.Load("./.env")
+func env(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
+}
+
+func durationEnv(key string, fallback time.Duration) time.Duration {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+
+	duration, err := time.ParseDuration(value)
 	if err != nil {
-		log.Printf("Warning: Could not load .env file: %v", err)
+		return fallback
 	}
-
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath("config/")
-
-	err = viper.ReadInConfig()
-	if err != nil {
-		log.Fatalf("Error reading config file, %s", err)
-	}
-
-	for _, key := range viper.AllKeys() {
-		anyValue := viper.Get(key)
-		str, ok := anyValue.(string)
-		if !ok {
-			continue
-		}
-
-		replacedStr := os.ExpandEnv(str)
-		viper.Set(key, replacedStr)
-	}
-
-	if err := viper.Unmarshal(&cfg); err != nil {
-		log.Fatalf("Unable to decode into structure, %v", err)
-	}
-
-	if cfg.JWT.AccessTTL == 0 {
-		if d, err := time.ParseDuration(viper.GetString("jwt.access_ttl")); err == nil {
-			cfg.JWT.AccessTTL = d
-		}
-	}
-	if cfg.JWT.RefreshTTL == 0 {
-		if d, err := time.ParseDuration(viper.GetString("jwt.refresh_ttl")); err == nil {
-			cfg.JWT.RefreshTTL = d
-		}
-	}
-	if cfg.JWT.Issuer == "" {
-		cfg.JWT.Issuer = viper.GetString("jwt.issuer")
-	}
-
-	return cfg
+	return duration
 }

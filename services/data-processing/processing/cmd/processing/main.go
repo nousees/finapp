@@ -38,9 +38,9 @@ func main() {
 	handler := api.NewHandler(svc)
 
 	router := gin.Default()
-	router.Use(middleware.JWTAuth(cfg.JWT.Secret))
 
 	apiGroup := router.Group("/api/v1")
+	apiGroup.Use(middleware.JWTAuth(cfg.JWT.Secret))
 	{
 		apiGroup.POST("/process/:id", handler.ProcessOne)
 		apiGroup.POST("/categorize-batch", handler.ProcessBatch)

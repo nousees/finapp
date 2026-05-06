@@ -48,9 +48,9 @@ func main() {
 	voiceHandler := handler.NewVoiceHandler(voiceSvc)
 
 	router := gin.Default()
-	router.Use(middleware.JWTAuth(cfg.JWT.Secret))
 
 	api := router.Group("/api/v1")
+	api.Use(middleware.JWTAuth(cfg.JWT.Secret))
 	{
 		api.GET("/transactions", transHandler.List)
 		api.POST("/transactions", transHandler.Create)
