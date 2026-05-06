@@ -28,7 +28,7 @@ public class FinancialInsightController {
     private final FinancialAnalysisFacade financialAnalysisFacade;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('SCOPE_reports:read')")
+    @PreAuthorize("hasAuthority('SCOPE_reports:read') or hasAuthority('SCOPE_recommendations:read')")
     @Operation(summary = "Get financial insights for a period")
     public ResponseEntity<ApiResponse<?>> getInsights(
             @AuthenticationPrincipal Jwt jwt,
