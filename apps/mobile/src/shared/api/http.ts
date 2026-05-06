@@ -8,6 +8,14 @@ type RequestOptions = Omit<RequestInit, "body" | "headers"> & {
   headers?: Record<string, string>;
 };
 
+export async function setAccessToken(token: string): Promise<void> {
+  await AsyncStorage.setItem('access_token', token);
+}
+
+export async function clearAccessToken(): Promise<void> {
+  await AsyncStorage.removeItem('access_token');
+}
+
 export class ApiError extends Error {
   constructor(message: string, public readonly status: number) {
     super(message);
