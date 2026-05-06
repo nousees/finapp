@@ -82,10 +82,39 @@ public class SecurityConfig {
         converter.setJwtGrantedAuthoritiesConverter(jwt -> {
             Collection<GrantedAuthority> authorities = new ArrayList<>(grantedAuthoritiesConverter.convert(jwt));
             authorities.addAll(extractRoles(jwt));
+            authorities.addAll(defaultApplicationScopes(authorities));
             return authorities;
         });
 
         return converter;
+    }
+
+    private Collection<GrantedAuthority> defaultApplicationScopes(Collection<GrantedAuthority> authorities) {
+        boolean hasScope = authorities.stream()
+            .map(GrantedAuthority::getAuthority)
+            .anyMatch(authority -> authority.startsWith("SCOPE_"));
+        if (hasScope) {
+            return List.of();
+        }
+
+        return List.of(
+            "budgets:read",
+            "budgets:write",
+            "goals:read",
+            "goals:write",
+            "reports:read",
+            "reports:write",
+            "dashboard:read",
+            "dashboard:write",
+            "recommendations:read",
+            "recommendations:write",
+            "notifications:read",
+            "notifications:write"
+        ).stream()
+            .map(scope -> "SCOPE_" + scope)
+            .map(SimpleGrantedAuthority::new)
+            .map(GrantedAuthority.class::cast)
+            .toList();
     }
 
     private Collection<GrantedAuthority> extractRoles(Jwt jwt) {
