@@ -1,42 +1,80 @@
 // @ts-nocheck
-import React from 'react';
+import React from "react";
 import "react-native-gesture-handler";
 import "react-native-reanimated";
-import { StatusBar } from "expo-status-bar";
-import { StyleSheet, View, Text } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SimpleLoginScreen } from "./src/screens/auth/SimpleLoginScreen";
 import { AppNavigator } from "./src/app/navigation/AppNavigator";
-import { ThemeProvider, useAppTheme } from "./src/shared/theme/ThemeProvider";
+import { ThemeProvider } from "./src/shared/theme/ThemeProvider";
 import { UserProvider } from "./src/shared/contexts/UserContext";
+import { apiConfig } from "./src/shared/api/config";
+
+const AUTH_KEYS = ["access_token", "refresh_token", "user_data"];
 
 function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(true);
 
   React.useEffect(() => {
-    checkAuthStatus();
+    void checkAuthStatus();
   }, []);
+
+  const clearAuthData = async () => {
+    await Promise.all(AUTH_KEYS.map((key) => AsyncStorage.removeItem(key)));
+  };
+
+  const refreshSession = async (refreshToken: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`${apiConfig.authBaseUrl}/api/v1/auth/refresh`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok || !payload?.access_token) {
+        return false;
+      }
+
+      await AsyncStorage.setItem("access_token", String(payload.access_token));
+      if (payload.refresh_token) {
+        await AsyncStorage.setItem("refresh_token", String(payload.refresh_token));
+      }
+      return true;
+    } catch (error) {
+      console.error("Session refresh failed:", error);
+      return false;
+    }
+  };
 
   const checkAuthStatus = async () => {
     try {
-      const token = await AsyncStorage.getItem('access_token');
-      const userData = await AsyncStorage.getItem('user_data');
-      
-      // Проверяем и токен, и данные пользователя
-      setIsAuthenticated(!!token && !!userData);
-    } catch (error) {
-      console.error('Error checking auth status:', error);
-      // В случае ошибки очищаем все данные и показываем экран входа
-      try {
-        await AsyncStorage.removeItem('access_token');
-        await AsyncStorage.removeItem('refresh_token');
-        await AsyncStorage.removeItem('user_data');
-      } catch (clearError) {
-        console.error('Error clearing auth data:', clearError);
+      const [token, refreshToken, userData] = await Promise.all([
+        AsyncStorage.getItem("access_token"),
+        AsyncStorage.getItem("refresh_token"),
+        AsyncStorage.getItem("user_data"),
+      ]);
+
+      if (!token || !refreshToken || !userData) {
+        await clearAuthData();
+        setIsAuthenticated(false);
+        return;
       }
+
+      const refreshed = await refreshSession(refreshToken);
+      if (!refreshed) {
+        await clearAuthData();
+      }
+      setIsAuthenticated(refreshed);
+    } catch (error) {
+      console.error("Error checking auth status:", error);
+      await clearAuthData();
       setIsAuthenticated(false);
     } finally {
       setIsLoading(false);
@@ -49,12 +87,10 @@ function AppContent() {
 
   const handleLogout = async () => {
     try {
-      await AsyncStorage.removeItem('access_token');
-      await AsyncStorage.removeItem('refresh_token');
-      await AsyncStorage.removeItem('user_data');
+      await clearAuthData();
       setIsAuthenticated(false);
     } catch (error) {
-      console.error('Error during logout:', error);
+      console.error("Error during logout:", error);
     }
   };
 
@@ -95,7 +131,7 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

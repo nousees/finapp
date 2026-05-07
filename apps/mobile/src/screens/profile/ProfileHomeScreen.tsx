@@ -1,115 +1,228 @@
-import { ReactNode, useState } from "react";
-import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialIcons } from "@expo/vector-icons";
+import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { useEffect, useMemo, useState } from "react";
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { ProfileStackParamList } from "@app/navigation/types";
-import { Screen } from "@shared/ui/Screen";
-import { SectionCard } from "@shared/ui/SectionCard";
+import { useUser } from "@shared/contexts/UserContext";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
 import { radius, spacing } from "@shared/theme/spacing";
+import { Screen } from "@shared/ui/Screen";
+import { SectionCard } from "@shared/ui/SectionCard";
 
 type Props = NativeStackScreenProps<ProfileStackParamList, "ProfileHome">;
 
-const banks = [
-  { id: "1", name: "Сбер", last4: "8841" },
-  { id: "2", name: "Т-Банк", last4: "1033" },
-  { id: "3", name: "Альфа-Банк", last4: "5520" },
-];
+type EditableProfile = {
+  displayName: string;
+  phone: string;
+  city: string;
+  notes: string;
+};
+
+const PROFILE_STORAGE_KEY = "profile_details";
+const emptyProfile: EditableProfile = {
+  displayName: "",
+  phone: "",
+  city: "",
+  notes: "",
+};
 
 export function ProfileHomeScreen({ navigation }: Props) {
-  const { colors, gradients, mode, toggleMode } = useAppTheme();
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [currency, setCurrency] = useState<"RUB" | "USD">("RUB");
+  const { colors } = useAppTheme();
+  const { user } = useUser();
+  const [profile, setProfile] = useState<EditableProfile>(emptyProfile);
+  const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    void loadProfile();
+  }, []);
+
+  const hasProfile = useMemo(
+    () => Object.values(profile).some((value) => value.trim().length > 0),
+    [profile],
+  );
+
+  const initials = useMemo(() => {
+    const source = profile.displayName.trim() || user?.full_name || user?.email || "";
+    return source.trim().slice(0, 2).toUpperCase() || "?";
+  }, [profile.displayName, user?.email, user?.full_name]);
+
+  const loadProfile = async () => {
+    try {
+      const savedProfile = await AsyncStorage.getItem(PROFILE_STORAGE_KEY);
+      if (savedProfile) {
+        setProfile({ ...emptyProfile, ...JSON.parse(savedProfile) });
+      }
+    } catch (error) {
+      console.error("Profile load error:", error);
+    }
+  };
+
+  const updateField = (field: keyof EditableProfile, value: string) => {
+    setProfile((current) => ({ ...current, [field]: value }));
+  };
+
+  const saveProfile = async () => {
+    setSaving(true);
+    try {
+      const normalizedProfile = {
+        displayName: profile.displayName.trim(),
+        phone: profile.phone.trim(),
+        city: profile.city.trim(),
+        notes: profile.notes.trim(),
+      };
+      await AsyncStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(normalizedProfile));
+      setProfile(normalizedProfile);
+      setIsEditing(false);
+    } catch (error) {
+      console.error("Profile save error:", error);
+      Alert.alert("Ошибка", "Не удалось сохранить профиль");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <Screen>
-      <SectionCard title="Профиль">
-        <View style={styles.profileRow}>
-          <LinearGradient colors={["#86EFAC", "#22C55E"]} style={styles.avatar}>
-            <Text style={styles.avatarText}>DF</Text>
-          </LinearGradient>
-          <View style={styles.nameWrap}>
-            <Text style={[styles.name, { color: colors.text }]}>Danil FinUser</Text>
-            <Text style={[styles.subName, { color: colors.textMuted }]}>Прокачиваю финансовую дисциплину 218 дней</Text>
-          </View>
-        </View>
-
-        <View style={styles.badgeRow}>
-          <View style={[styles.premiumBadge, { backgroundColor: colors.gold }]}>
-            <Text style={styles.premiumText}>Premium</Text>
-          </View>
-          <Pressable onPress={() => navigation.navigate("Settings")}>
-            <Text style={[styles.settingsLink, { color: colors.primaryDark }]}>Настройки</Text>
-          </Pressable>
-        </View>
-      </SectionCard>
-
-      <SectionCard title="Подключенные банки">
-        {banks.map((bank) => (
-          <View key={bank.id} style={[styles.bankCard, { borderColor: colors.border, backgroundColor: colors.surfaceAlt }]}>
-            <View style={styles.bankLeft}>
-              <View style={[styles.bankIcon, { backgroundColor: colors.surface }]}>
-                <MaterialIcons name="account-balance" size={20} color={colors.primaryDark} />
-              </View>
-              <Text style={[styles.bankName, { color: colors.text }]}>{bank.name}</Text>
-            </View>
-            <Text style={[styles.bankMask, { color: colors.textMuted }]}>•••• {bank.last4}</Text>
-          </View>
-        ))}
-      </SectionCard>
-
-      <SectionCard title="Предпочтения">
-        <SettingRow
-          label="Темная тема"
-          valueComponent={<Switch value={mode === "dark"} onValueChange={toggleMode} thumbColor={colors.white} trackColor={{ false: "#CBD5E1", true: "#22C55E" }} />}
-        />
-        <SettingRow
-          label="Уведомления"
-          valueComponent={
-            <Switch
-              value={notificationsEnabled}
-              onValueChange={setNotificationsEnabled}
-              thumbColor={colors.white}
-              trackColor={{ false: "#CBD5E1", true: "#22C55E" }}
+      <SectionCard
+        title="Профиль"
+        subtitle={hasProfile ? "Ваши данные без демо-заглушек" : "Заполните профиль, чтобы здесь появились ваши данные"}
+      >
+        {isEditing ? (
+          <>
+            <ProfileHeader initials={initials} label="Аккаунт" value={user?.email || "Email не найден"} />
+            <ProfileInput
+              label="Имя в профиле"
+              placeholder="Например, Даниил"
+              value={profile.displayName}
+              onChangeText={(value) => updateField("displayName", value)}
             />
-          }
-        />
-        <View style={styles.currencyRow}>
-          <Text style={[styles.settingLabel, { color: colors.text }]}>Валюта</Text>
-          <View style={styles.currencyActions}>
-            <Pressable
-              style={[styles.currencyButton, currency === "RUB" ? styles.currencyButtonActive : undefined]}
-              onPress={() => setCurrency("RUB")}
-            >
-              <Text style={[styles.currencyText, currency === "RUB" ? styles.currencyTextActive : undefined]}>RUB</Text>
+            <ProfileInput
+              label="Телефон"
+              placeholder="+7..."
+              value={profile.phone}
+              onChangeText={(value) => updateField("phone", value)}
+              keyboardType="phone-pad"
+            />
+            <ProfileInput
+              label="Город"
+              placeholder="Ваш город"
+              value={profile.city}
+              onChangeText={(value) => updateField("city", value)}
+            />
+            <ProfileInput
+              label="Заметка"
+              placeholder="Любая информация для себя"
+              value={profile.notes}
+              onChangeText={(value) => updateField("notes", value)}
+              multiline
+            />
+            <View style={styles.buttonRow}>
+              <Pressable style={[styles.secondaryButton, { borderColor: colors.borderStrong }]} onPress={() => setIsEditing(false)}>
+                <Text style={[styles.secondaryButtonText, { color: colors.primaryDark }]}>Отмена</Text>
+              </Pressable>
+              <Pressable style={[styles.saveButton, { backgroundColor: colors.primaryDark }]} onPress={saveProfile} disabled={saving}>
+                <Text style={styles.saveButtonText}>{saving ? "Сохранение..." : "Сохранить"}</Text>
+              </Pressable>
+            </View>
+          </>
+        ) : hasProfile ? (
+          <>
+            <ProfileHeader
+              initials={initials}
+              label={profile.displayName || "Профиль"}
+              value={user?.email || "Email не найден"}
+            />
+            <ProfileField icon="phone" label="Телефон" value={profile.phone} />
+            <ProfileField icon="location-city" label="Город" value={profile.city} />
+            <ProfileField icon="notes" label="Заметка" value={profile.notes} />
+            <Pressable style={[styles.saveButton, { backgroundColor: colors.primaryDark }]} onPress={() => setIsEditing(true)}>
+              <Text style={styles.saveButtonText}>Редактировать профиль</Text>
             </Pressable>
-            <Pressable
-              style={[styles.currencyButton, currency === "USD" ? styles.currencyButtonActive : undefined]}
-              onPress={() => setCurrency("USD")}
-            >
-              <Text style={[styles.currencyText, currency === "USD" ? styles.currencyTextActive : undefined]}>USD</Text>
+          </>
+        ) : (
+          <View style={styles.emptyState}>
+            <ProfileHeader initials="?" label="Профиль пока пустой" value={user?.email || "Email не найден"} />
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+              Здесь больше нет фейковых банков и премиум-данных. Добавьте только то, что хотите видеть в профиле.
+            </Text>
+            <Pressable style={[styles.saveButton, { backgroundColor: colors.primaryDark }]} onPress={() => setIsEditing(true)}>
+              <Text style={styles.saveButtonText}>Заполнить профиль</Text>
             </Pressable>
           </View>
-        </View>
+        )}
       </SectionCard>
 
-      <Pressable>
-        <LinearGradient colors={gradients.success} style={styles.premiumButton}>
-          <MaterialIcons name="workspace-premium" size={20} color="#FFFFFF" />
-          <Text style={styles.premiumButtonText}>Перейти на Premium</Text>
-        </LinearGradient>
-      </Pressable>
+      <SectionCard title="Настройки">
+        <Pressable style={styles.settingsRow} onPress={() => navigation.navigate("Settings")}>
+          <View style={styles.settingsLeft}>
+            <MaterialIcons name="settings" size={20} color={colors.primaryDark} />
+            <Text style={[styles.settingsText, { color: colors.text }]}>Открыть настройки приложения</Text>
+          </View>
+          <MaterialIcons name="chevron-right" size={22} color={colors.textMuted} />
+        </Pressable>
+      </SectionCard>
     </Screen>
   );
 }
 
-function SettingRow({ label, valueComponent }: { label: string; valueComponent: ReactNode }) {
+function ProfileHeader({ initials, label, value }: { initials: string; label: string; value: string }) {
   const { colors } = useAppTheme();
   return (
-    <View style={styles.settingRow}>
-      <Text style={[styles.settingLabel, { color: colors.text }]}>{label}</Text>
-      {valueComponent}
+    <View style={styles.profileRow}>
+      <View style={[styles.avatar, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+        <Text style={[styles.avatarText, { color: colors.textMuted }]}>{initials}</Text>
+      </View>
+      <View style={styles.nameWrap}>
+        <Text style={[styles.accountLabel, { color: colors.textMuted }]}>{label}</Text>
+        <Text style={[styles.accountText, { color: colors.text }]}>{value}</Text>
+      </View>
+    </View>
+  );
+}
+
+function ProfileField({ icon, label, value }: { icon: keyof typeof MaterialIcons.glyphMap; label: string; value: string }) {
+  const { colors } = useAppTheme();
+  if (!value) {
+    return null;
+  }
+
+  return (
+    <View style={[styles.fieldRow, { borderColor: colors.border, backgroundColor: colors.surfaceAlt }]}>
+      <MaterialIcons name={icon} size={18} color={colors.primaryDark} />
+      <View style={styles.fieldTextWrap}>
+        <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{label}</Text>
+        <Text style={[styles.fieldValue, { color: colors.text }]}>{value}</Text>
+      </View>
+    </View>
+  );
+}
+
+function ProfileInput({
+  label,
+  ...props
+}: {
+  label: string;
+  placeholder: string;
+  value: string;
+  onChangeText: (value: string) => void;
+  keyboardType?: "default" | "phone-pad";
+  multiline?: boolean;
+}) {
+  const { colors } = useAppTheme();
+  return (
+    <View style={styles.inputGroup}>
+      <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>{label}</Text>
+      <TextInput
+        {...props}
+        style={[
+          styles.input,
+          props.multiline ? styles.multilineInput : undefined,
+          { color: colors.text, borderColor: colors.border, backgroundColor: colors.surfaceAlt },
+        ]}
+        placeholderTextColor={colors.textMuted}
+      />
     </View>
   );
 }
@@ -124,11 +237,11 @@ const styles = StyleSheet.create({
     width: 58,
     height: 58,
     borderRadius: 20,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
   avatarText: {
-    color: "#FFFFFF",
     fontSize: 18,
     fontFamily: "Inter_700Bold",
   },
@@ -136,111 +249,104 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
-  name: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-  },
-  subName: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-    lineHeight: 17,
-  },
-  badgeRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  premiumBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: radius.full,
-  },
-  premiumText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontFamily: "Inter_700Bold",
-  },
-  settingsLink: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-  },
-  bankCard: {
-    borderRadius: radius.md,
-    borderWidth: 1,
-    padding: spacing.sm,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  bankLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  bankIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  bankName: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-  },
-  bankMask: {
+  accountLabel: {
     fontSize: 12,
     fontFamily: "Inter_500Medium",
   },
-  settingRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  settingLabel: {
-    fontSize: 14,
+  accountText: {
+    fontSize: 15,
     fontFamily: "Inter_600SemiBold",
   },
-  currencyRow: {
+  emptyState: {
+    gap: spacing.md,
+  },
+  emptyText: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontFamily: "Inter_500Medium",
+  },
+  fieldRow: {
+    borderRadius: radius.md,
+    borderWidth: 1,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    gap: spacing.sm,
+    padding: spacing.sm,
   },
-  currencyActions: {
+  fieldTextWrap: {
+    flex: 1,
+    gap: 2,
+  },
+  fieldLabel: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+  },
+  fieldValue: {
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+  },
+  inputGroup: {
+    gap: 6,
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+  },
+  input: {
+    minHeight: 46,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    fontSize: 15,
+    fontFamily: "Inter_500Medium",
+  },
+  multilineInput: {
+    minHeight: 90,
+    paddingTop: 12,
+    textAlignVertical: "top",
+  },
+  buttonRow: {
     flexDirection: "row",
-    gap: 8,
+    gap: spacing.sm,
   },
-  currencyButton: {
-    height: 34,
-    minWidth: 58,
-    borderRadius: 12,
-    backgroundColor: "#E2E8F0",
+  secondaryButton: {
+    flex: 1,
+    minHeight: 50,
+    borderRadius: radius.lg,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 12,
   },
-  currencyButtonActive: {
-    backgroundColor: "#22C55E",
+  secondaryButtonText: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
   },
-  currencyText: {
-    color: "#334155",
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-  },
-  currencyTextActive: {
-    color: "#FFFFFF",
-  },
-  premiumButton: {
-    height: 56,
+  saveButton: {
+    flex: 1,
+    minHeight: 50,
     borderRadius: radius.lg,
     alignItems: "center",
     justifyContent: "center",
-    flexDirection: "row",
-    gap: 8,
+    paddingHorizontal: spacing.md,
   },
-  premiumButtonText: {
+  saveButtonText: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: "Inter_700Bold",
+  },
+  settingsRow: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  settingsLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  settingsText: {
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
   },
 });

@@ -34,6 +34,10 @@ func main() {
 	}
 
 	repo := repository.New(pool)
+	if err := repo.EnsureCompatibility(ctx); err != nil {
+		log.Fatalf("database compatibility: %v", err)
+	}
+
 	svc := service.New(repo)
 	handler := api.NewHandler(svc)
 

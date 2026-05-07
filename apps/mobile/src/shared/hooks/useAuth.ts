@@ -42,7 +42,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${apiConfig.authBaseUrl}/sign-in`, {
+      const response = await fetch(`${apiConfig.authBaseUrl}/api/v1/auth/signin`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -85,7 +85,7 @@ export const AuthProvider = ({ children }) => {
   const register = async (email, password, fullName) => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${apiConfig.authBaseUrl}/sign-up`, {
+      const response = await fetch(`${apiConfig.authBaseUrl}/api/v1/auth/signup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

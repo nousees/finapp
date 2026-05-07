@@ -4,8 +4,8 @@ const BASE_URL = 'http://localhost:8080';
 
 // Тестовые данные
 const testUser = {
-  email: 'test@finapp.local',
-  password: 'test123',
+  email: `test-${Date.now()}@finapp.local`,
+  password: 'test12345',
   full_name: 'Test User'
 };
 
@@ -70,6 +70,8 @@ describe('FinApp API Integration Tests', () => {
     test('POST /api/v1/auth/refresh - Token Refresh', async () => {
       const response = await axios.post(`${BASE_URL}/api/v1/auth/refresh`, {
         refresh_token: 'dummy_refresh_token'
+      }, {
+        validateStatus: () => true
       });
       
       // Может вернуть ошибку, но проверяем что эндпоинт отвечает
@@ -113,9 +115,9 @@ describe('FinApp API Integration Tests', () => {
   });
 
   describe('Category Management', () => {
-    test('GET /api/v1/categories - Get Categories List', async () => {
+    test('GET /api/v1/transactions - Categories route removed from gateway contract', async () => {
       try {
-        const response = await axios.get(`${BASE_URL}/api/v1/categories`, {
+        const response = await axios.get(`${BASE_URL}/api/v1/transactions`, {
           headers: { Authorization: `Bearer ${authToken}` }
         });
         
@@ -130,11 +132,11 @@ describe('FinApp API Integration Tests', () => {
 
   describe('Budget Management', () => {
     const testBudget = {
-      category_id: '11111111-1111-1111-1111-111111111111',
-      amount_limit: 5000.00,
+      categoryId: '11111111-1111-1111-1111-111111111111',
+      amountLimit: 5000.00,
       period: 'MONTHLY',
-      period_start: new Date().toISOString().split('T')[0],
-      period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      periodStart: new Date().toISOString().split('T')[0],
+      periodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     };
 
     test('GET /api/v1/budgets - Get Budgets List', async () => {
@@ -170,9 +172,9 @@ describe('FinApp API Integration Tests', () => {
     const testGoal = {
       name: 'Новый телефон',
       description: 'Скопить на новый iPhone',
-      target_amount: 50000.00,
+      targetAmount: 50000.00,
       deadline: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      goal_type: 'PURCHASE'
+      goalType: 'PURCHASE'
     };
 
     test('GET /api/v1/goals - Get Goals List', async () => {
@@ -205,17 +207,17 @@ describe('FinApp API Integration Tests', () => {
   });
 
   describe('ML Services', () => {
-    test('POST /api/v1/ml/transcribe - Audio Transcription', async () => {
+    test('POST /api/v1/ner/extract - Entity Extraction', async () => {
       try {
-        const response = await axios.post(`${BASE_URL}/api/v1/ml/transcribe`, {
-          audio_url: 'test_audio.mp3'
+        const response = await axios.post(`${BASE_URL}/api/v1/ner/extract`, {
+          text: 'потратил 350 рублей на кофе'
         }, {
           headers: { Authorization: `Bearer ${authToken}` }
         });
         
-        expect([200, 404]).toContain(response.status);
+        expect(response.status).toBe(200);
         if (response.status === 200) {
-          expect(response.data).toHaveProperty('text');
+          expect(response.data).toHaveProperty('amount');
           expect(response.data).toHaveProperty('confidence');
         }
         console.log('✅ ML transcription endpoint responding');
@@ -225,19 +227,19 @@ describe('FinApp API Integration Tests', () => {
       }
     });
 
-    test('POST /api/v1/ml/categorize - Transaction Categorization', async () => {
+    test('POST /api/v1/categorize - Transaction Categorization', async () => {
       try {
-        const response = await axios.post(`${BASE_URL}/api/v1/ml/categorize`, {
+        const response = await axios.post(`${BASE_URL}/api/v1/categorize`, {
           description: 'Купил кофе в старбакс',
           amount: 350.00,
-          type: 'EXPENSE'
+          operation_type: 'expense'
         }, {
           headers: { Authorization: `Bearer ${authToken}` }
         });
         
-        expect([200, 404]).toContain(response.status);
+        expect(response.status).toBe(200);
         if (response.status === 200) {
-          expect(response.data).toHaveProperty('category_id');
+          expect(response.data).toHaveProperty('category_code');
           expect(response.data).toHaveProperty('confidence');
         }
         console.log('✅ ML categorization endpoint responding');
@@ -287,7 +289,7 @@ describe('FinApp API Integration Tests', () => {
       { name: 'Processing Service', path: '/api/v1/process' },
       { name: 'Subscription Service', path: '/api/v1/subscriptions' },
       { name: 'Analysis Service', path: '/api/v1/budgets' },
-      { name: 'ML Service', path: '/api/v1/ml/transcribe' }
+      { name: 'ML Service', path: '/api/v1/categorize' }
     ];
 
     test.each(services)('Check $name availability', async ({ path }) => {

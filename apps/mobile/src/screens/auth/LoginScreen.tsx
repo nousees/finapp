@@ -25,7 +25,7 @@ export const LoginScreen = ({ onLogin }) => {
 
     setIsLoading(true);
     try {
-      const response = await fetch(`${apiConfig.authBaseUrl}/sign-in`, {
+      const response = await fetch(`${apiConfig.authBaseUrl}/api/v1/auth/signin`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

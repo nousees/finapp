@@ -150,21 +150,17 @@ class ApiClient {
   }
 
   // Категории
-  async getCategories(): Promise<ApiResponse<any[]>> {
-    return this.request('/api/v1/categories');
-  }
-
   // Бюджеты
   async getBudgets(): Promise<ApiResponse<any[]>> {
     return this.request('/api/v1/budgets');
   }
 
   async createBudget(budget: {
-    category_id?: string;
-    amount_limit: number;
+    categoryId?: string;
+    amountLimit: number;
     period: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'YEARLY';
-    period_start: string;
-    period_end: string;
+    periodStart: string;
+    periodEnd: string;
   }): Promise<ApiResponse<any>> {
     return this.request('/api/v1/budgets', {
       method: 'POST',
@@ -180,9 +176,9 @@ class ApiClient {
   async createGoal(goal: {
     name: string;
     description?: string;
-    target_amount: number;
+    targetAmount: number;
     deadline: string;
-    goal_type: 'SAVING' | 'DEBT_REPAYMENT' | 'INVESTMENT' | 'PURCHASE';
+    goalType: 'SAVING' | 'DEBT_REPAYMENT' | 'INVESTMENT' | 'PURCHASE';
   }): Promise<ApiResponse<any>> {
     return this.request('/api/v1/goals', {
       method: 'POST',

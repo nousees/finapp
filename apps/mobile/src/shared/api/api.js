@@ -125,10 +125,6 @@ class ApiClient {
   }
 
   // Категории
-  async getCategories() {
-    return this.request('/api/v1/categories');
-  }
-
   // Бюджеты
   async getBudgets() {
     return this.request('/api/v1/budgets');

@@ -63,7 +63,7 @@ async function runSystemCheck() {
     { name: 'Processing Service', path: '/api/v1/process' },
     { name: 'Subscription Service', path: '/api/v1/subscriptions' },
     { name: 'Analysis Service', path: '/api/v1/budgets' },
-    { name: 'ML Service', path: '/api/v1/ml/transcribe', method: 'POST', data: { audio_url: 'test.mp3' } }
+    { name: 'ML Service', path: '/api/v1/categorize', method: 'POST', data: { description: 'кофе', amount: 350, operation_type: 'expense' } }
   ];
   
   log.info('Checking microservices...\n');

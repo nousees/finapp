@@ -6,6 +6,7 @@ type RequestOptions = Omit<RequestInit, "body" | "headers"> & {
   path: string;
   body?: BodyInit | object;
   headers?: Record<string, string>;
+  skipAuthRefresh?: boolean;
 };
 
 export async function setAccessToken(token: string): Promise<void> {
@@ -14,6 +15,8 @@ export async function setAccessToken(token: string): Promise<void> {
 
 export async function clearAccessToken(): Promise<void> {
   await AsyncStorage.removeItem('access_token');
+  await AsyncStorage.removeItem('refresh_token');
+  await AsyncStorage.removeItem('user_data');
 }
 
 export class ApiError extends Error {
@@ -27,6 +30,7 @@ export async function requestJson<T>({
   path,
   body,
   headers,
+  skipAuthRefresh,
   ...init
 }: RequestOptions): Promise<T> {
   // Получаем токен из AsyncStorage
@@ -52,6 +56,20 @@ export async function requestJson<T>({
     body: requestBody,
   });
 
+  if (response.status === 401 && !skipAuthRefresh) {
+    const refreshedToken = await refreshAccessToken();
+    if (refreshedToken) {
+      return requestJson<T>({
+        baseUrl,
+        path,
+        body,
+        headers,
+        skipAuthRefresh: true,
+        ...init,
+      });
+    }
+  }
+
   const text = await response.text();
   const payload = text ? tryParseJson(text) : null;
 
@@ -64,6 +82,43 @@ export async function requestJson<T>({
   }
 
   return payload as T;
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = await AsyncStorage.getItem("refresh_token");
+  if (!refreshToken) {
+    await clearAccessToken();
+    return null;
+  }
+
+  try {
+    const response = await fetch(`${apiConfig.authBaseUrl}/api/v1/auth/refresh`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    const text = await response.text();
+    const payload = text ? tryParseJson(text) : null;
+
+    if (!response.ok || typeof payload !== "object" || !payload || !("access_token" in payload)) {
+      await clearAccessToken();
+      return null;
+    }
+
+    const accessToken = String((payload as { access_token: string }).access_token);
+    await AsyncStorage.setItem("access_token", accessToken);
+    if ("refresh_token" in payload && (payload as { refresh_token?: string }).refresh_token) {
+      await AsyncStorage.setItem("refresh_token", String((payload as { refresh_token: string }).refresh_token));
+    }
+    return accessToken;
+  } catch (error) {
+    console.error("Token refresh failed:", error);
+    await clearAccessToken();
+    return null;
+  }
 }
 
 function tryParseJson(value: string): unknown {

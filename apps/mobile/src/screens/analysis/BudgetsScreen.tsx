@@ -12,6 +12,14 @@ import { SectionCard } from "@shared/ui/SectionCard";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
 import { radius, spacing } from "@shared/theme/spacing";
 
+const SYSTEM_EXPENSE_CATEGORIES = [
+  { id: "11111111-1111-1111-1111-111111111111", name: "Продукты" },
+  { id: "44444444-4444-4444-4444-444444444444", name: "Кафе и рестораны" },
+  { id: "55555555-5555-5555-5555-555555555555", name: "Транспорт" },
+  { id: "66666666-6666-6666-6666-666666666666", name: "Развлечения" },
+  { id: "77777777-7777-7777-7777-777777777777", name: "Здоровье" },
+];
+
 export function BudgetsScreen() {
   const { colors, gradients } = useAppTheme();
   const [budgets, setBudgets] = useState([]);
@@ -46,16 +54,17 @@ export function BudgetsScreen() {
     }, [loadData]),
   );
 
-  const availableCategories = useMemo(
-    () =>
-      (insights?.categories || [])
-        .filter((item) => item.categoryId)
-        .map((item) => ({
-          id: item.categoryId,
-          name: item.categoryName || "Без категории",
-        })),
-    [insights],
-  );
+  const availableCategories = useMemo(() => {
+    const insightCategories = (insights?.categories || [])
+      .filter((item) => item.categoryId)
+      .map((item) => ({
+        id: item.categoryId,
+        name: item.categoryName || "Без категории",
+      }));
+
+    const merged = [...insightCategories, ...SYSTEM_EXPENSE_CATEGORIES];
+    return Array.from(new Map(merged.map((item) => [item.id, item])).values());
+  }, [insights]);
 
   const budgetCards = useMemo(() => {
     const insightMap = new Map((insights?.budgets || []).map((item) => [item.budgetId, item]));

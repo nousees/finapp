@@ -44,7 +44,7 @@ export const SimpleLoginScreen = ({ onLogin }) => {
 
     setIsLoading(true);
     try {
-      const response = await fetch(`${apiConfig.authBaseUrl}/sign-in`, {
+      const response = await fetch(`${apiConfig.authBaseUrl}/api/v1/auth/signin`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -58,6 +58,8 @@ export const SimpleLoginScreen = ({ onLogin }) => {
         await AsyncStorage.setItem('access_token', data.access_token);
         await AsyncStorage.setItem('refresh_token', data.refresh_token);
         await AsyncStorage.setItem('user_data', JSON.stringify(data.user));
+        onLogin();
+        return;
 
         Alert.alert('Успех', 'Вы вошли в систему');
         onLogin();
@@ -94,8 +96,10 @@ export const SimpleLoginScreen = ({ onLogin }) => {
     }
 
     setIsLoading(true);
+    const registerUrl = `${apiConfig.authBaseUrl}/api/v1/auth/signup`;
     try {
-      const response = await fetch(`${apiConfig.authBaseUrl}/sign-up`, {
+      console.log("[auth] registerUrl", registerUrl);
+      const response = await fetch(registerUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -113,6 +117,8 @@ export const SimpleLoginScreen = ({ onLogin }) => {
         await AsyncStorage.setItem('access_token', data.access_token);
         await AsyncStorage.setItem('refresh_token', data.refresh_token);
         await AsyncStorage.setItem('user_data', JSON.stringify(data.user));
+        onLogin();
+        return;
 
         Alert.alert('Успех', 'Вы успешно зарегистрировались');
         onLogin();
@@ -121,7 +127,7 @@ export const SimpleLoginScreen = ({ onLogin }) => {
       }
     } catch (error) {
       Alert.alert('Ошибка', 'Проблема с подключением к серверу');
-      console.error('Register error:', error);
+      console.error('Register error:', registerUrl, error);
     } finally {
       setIsLoading(false);
     }

@@ -18,6 +18,20 @@ func New(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
+func (r *Repository) EnsureCompatibility(ctx context.Context) error {
+	if _, err := r.pool.Exec(ctx, `
+		ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS recommendation TEXT
+	`); err != nil {
+		return err
+	}
+	if _, err := r.pool.Exec(ctx, `
+		ALTER TABLE subscriptions ALTER COLUMN next_billing_date DROP NOT NULL
+	`); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r *Repository) ListExpenseTransactions(ctx context.Context, userID uuid.UUID, since time.Time) ([]*model.Transaction, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, user_id, amount, currency, category_id, description, original_description, date

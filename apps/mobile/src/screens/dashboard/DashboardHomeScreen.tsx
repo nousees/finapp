@@ -36,8 +36,8 @@ export function DashboardHomeScreen({ navigation }: Props) {
         listRecommendations().catch(() => []),
       ]);
       setInsights(insightsData);
-      setTransactions(txData.slice(0, 5));
-      setRecommendations(recsData.slice(0, 3));
+      setTransactions(asArray(txData).slice(0, 5));
+      setRecommendations(asArray(recsData).slice(0, 3));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить дашборд");
     } finally {
@@ -317,6 +317,10 @@ function AlertCard({ title, tone }: { title: string; tone: "success" | "danger" 
 function formatCurrency(value: number | string | null | undefined): string {
   const numeric = Number(value || 0);
   return `${numeric.toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ₽`;
+}
+
+function asArray<T>(value: T[] | null | undefined): T[] {
+  return Array.isArray(value) ? value : [];
 }
 
 const chartPalette = ["#22C55E", "#16A34A", "#14B8A6", "#0EA5E9"];
