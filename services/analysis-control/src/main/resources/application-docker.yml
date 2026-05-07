@@ -1,0 +1,24 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://postgres:5432/finapp}
+    username: ${SPRING_DATASOURCE_USERNAME:finapp}
+    password: ${SPRING_DATASOURCE_PASSWORD:finapp}
+  
+  jpa:
+    show-sql: ${JPA_SHOW_SQL:false}
+  
+  data:
+    redis:
+      host: redis
+      port: 6379
+      timeout: 2000ms
+
+app:
+  security:
+    cors:
+      allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:19000,http://localhost:8080,http://localhost:8081,http://localhost:8084}
+
+logging:
+  level:
+    com.finapp: DEBUG
+    org.springframework.security: DEBUG

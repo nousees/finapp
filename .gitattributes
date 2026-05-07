@@ -1,0 +1,4 @@
+services/ml-service/ml_models/bert_finapp/**/*.safetensors filter=lfs diff=lfs merge=lfs -text
+services/ml-service/ml_models/bert_finapp/**/optimizer.pt filter=lfs diff=lfs merge=lfs -text
+services/ml-service/ml_models/bert_finapp/**/scheduler.pt filter=lfs diff=lfs merge=lfs -text
+services/ml-service/ml_models/rubert_tiny_ner_finapp/**/* filter=lfs diff=lfs merge=lfs -text

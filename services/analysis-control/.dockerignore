@@ -1,0 +1,9 @@
+target/
+.mvn/wrapper/maven-wrapper.jar
+*.log
+
+# Legacy JWT classes were removed from the application, but they may remain
+# as untracked files in old working copies. Do not let stale local files into
+# the Docker build context because they fail compilation without jjwt deps.
+src/main/java/com/finapp/security/JwtAuthenticationFilter.java
+src/main/java/com/finapp/security/JwtTokenProvider.java

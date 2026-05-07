@@ -1,0 +1,502 @@
+1. Пользователи и аутентификация (Go модуль)
+-- Таблица пользователей
+CREATE TABLE users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    full_name VARCHAR(255),
+    phone VARCHAR(20),
+    avatar_url TEXT,
+    timezone VARCHAR(50) DEFAULT 'Europe/Moscow',
+    currency_preference VARCHAR(3) DEFAULT 'RUB',
+    date_format VARCHAR(20) DEFAULT 'DD.MM.YYYY',
+    financial_start_day INTEGER DEFAULT 1, -- 1-е число месяца для бюджетов
+    is_premium BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Сессии и токены
+CREATE TABLE user_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    device_type VARCHAR(50),
+    device_token TEXT,
+    refresh_token TEXT NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+2. Транзакции и категории (Go модуль)
+-- Категории транзакций
+CREATE TABLE categories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(100) NOT NULL,
+    type VARCHAR(10) NOT NULL CHECK (type IN ('INCOME', 'EXPENSE', 'TRANSFER')),
+    color VARCHAR(7), -- HEX цвет #RRGGBB
+    icon VARCHAR(50),
+    parent_category_id UUID REFERENCES categories(id),
+    is_system BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE bank_accounts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    bank_name VARCHAR(100) NOT NULL,
+    account_number VARCHAR(100),
+    account_type VARCHAR(50),
+    balance DECIMAL(15,2),
+    currency VARCHAR(3) DEFAULT 'RUB',
+    last_synced_at TIMESTAMP WITH TIME ZONE,
+    is_active BOOLEAN DEFAULT TRUE,
+    external_account_id VARCHAR(255), -- ID из банковской системы
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Финансовые привычки (детектор привычек)
+CREATE TABLE habits (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    habit_type VARCHAR(50) NOT NULL, -- 'MORNING_COFFEE', 'SPONTANEOUS_SHOPPING', 'LUNCH_OUTSIDE' и т.д.
+    category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
+    average_amount DECIMAL(10,2),
+    frequency VARCHAR(20) DEFAULT NULL,
+    pattern JSONB, -- паттерн поведения (дни недели, время суток)
+    confidence_score DECIMAL(5,4),
+    impact_score DECIMAL(5,4), -- влияние на бюджет (0-1)
+    last_detected DATE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Транзакции
+CREATE TABLE transactions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    amount DECIMAL(15,2) NOT NULL,
+    currency VARCHAR(3) DEFAULT 'RUB',
+    type VARCHAR(10) NOT NULL CHECK (type IN ('INCOME', 'EXPENSE', 'TRANSFER')),
+    category_id UUID REFERENCES categories(id),
+    description TEXT,
+    original_description TEXT, -- оригинальное описание из банка
+    date TIMESTAMP WITH TIME ZONE NOT NULL,
+    location TEXT, -- место совершения операции
+    payment_method VARCHAR(50), -- карта, наличные и т.д.
+    bank_account_id UUID REFERENCES bank_accounts(id), -- идентификатор счета в банке
+    is_recurring BOOLEAN DEFAULT FALSE, -- регулярная транзакция
+    recurrence_pattern JSONB, -- паттерн повторения
+    ml_category_id UUID REFERENCES categories(id) ON DELETE SET NULL, -- категория от ML
+    ml_confidence DECIMAL(5,4), -- уверенность ML модели
+    is_habit_related BOOLEAN DEFAULT FALSE,
+    habit_pattern_id UUID REFERENCES habits(id) ON DELETE SET NULL, -- ссылка на habits.id
+    tags JSONB, -- пользовательские теги
+    is_essential BOOLEAN DEFAULT FALSE, -- обязательный расход
+    is_verified BOOLEAN DEFAULT TRUE, -- подтверждена пользователем
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Импорты файлов
+CREATE TABLE imports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    file_name VARCHAR(255) NOT NULL,
+    file_type VARCHAR(10) CHECK (file_type IN ('CSV', 'EXCEL', 'JSON')),
+    status VARCHAR(20) CHECK (status IN ('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED')),
+    total_records INTEGER,
+    processed_records INTEGER DEFAULT 0,
+    errors JSONB, -- список ошибок при обработке
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+3. Подписки и привычки (Go модуль)
+-- Подписки и регулярные платежи
+CREATE TABLE subscriptions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(200) NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    currency VARCHAR(3) DEFAULT 'RUB',
+    category_id UUID REFERENCES categories(id),
+    recurrence VARCHAR(20) NOT NULL CHECK (recurrence IN ('DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY')),
+    next_billing_date DATE NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    ml_detected BOOLEAN DEFAULT FALSE, -- обнаружено ML
+    usage_index DECIMAL(5,4), -- индекс использования (0-1)
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+4. Бюджеты (Java модуль)
+-- Бюджеты по категориям
+CREATE TABLE budgets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    category_id UUID REFERENCES categories(id),
+    amount_limit DECIMAL(15,2) NOT NULL,
+    spent_amount DECIMAL(15,2) DEFAULT 0,
+    period VARCHAR(20) NOT NULL CHECK (period IN ('DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY')),
+    period_start DATE NOT NULL,
+    period_end DATE NOT NULL,
+    currency VARCHAR(3) DEFAULT 'RUB',
+    alert_thresholds JSONB, -- пороги уведомлений [50, 80, 90, 100]
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Общие бюджеты (без категории)
+CREATE TABLE general_budgets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    total_limit DECIMAL(15,2) NOT NULL,
+    spent_amount DECIMAL(15,2) DEFAULT 0,
+    period VARCHAR(20) NOT NULL CHECK (period IN ('WEEKLY', 'MONTHLY', 'YEARLY')),
+    period_start DATE NOT NULL,
+    period_end DATE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+5. Цели и планирование (Java модуль)
+-- Финансовые цели
+CREATE TABLE goals (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(200) NOT NULL,
+    description TEXT,
+    target_amount DECIMAL(15,2) NOT NULL,
+    current_amount DECIMAL(15,2) DEFAULT 0,
+    currency VARCHAR(3) DEFAULT 'RUB',
+    deadline DATE NOT NULL,
+    goal_type VARCHAR(20) NOT NULL CHECK (goal_type IN ('SAVING', 'DEBT_REPAYMENT', 'INVESTMENT', 'PURCHASE')),
+    priority INTEGER DEFAULT 1, -- 1-5 приоритет
+    status VARCHAR(20) DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'COMPLETED', 'CANCELLED')),
+    auto_save_amount DECIMAL(10,2), -- сумма автопополнения
+    auto_save_frequency VARCHAR(20), -- частота автопополнения
+    icon VARCHAR(50),
+    color VARCHAR(7),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Транзакции для целей (пополнения)
+CREATE TABLE goal_transactions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    goal_id UUID NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+    transaction_id UUID REFERENCES transactions(id),
+    amount DECIMAL(10,2) NOT NULL,
+    date DATE NOT NULL,
+    is_auto_save BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+6. Уведомления (оба модуля)
+-- Уведомления (общая таблица)
+CREATE TABLE notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type VARCHAR(50) NOT NULL, -- 'BUDGET_ALERT', 'GOAL_PROGRESS', 'SUBSCRIPTION_REMINDER', 'HABIT_DETECTED', 'LARGE_TRANSACTION', 'SYSTEM'
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    source_module VARCHAR(20) NOT NULL CHECK (source_module IN ('GO', 'JAVA', 'ML', 'SYSTEM')),
+    entity_type VARCHAR(50), -- 'transaction', 'budget', 'goal', 'subscription'
+    entity_id UUID, -- ID связанной сущности
+    data JSONB, -- дополнительные данные
+    is_read BOOLEAN DEFAULT FALSE,
+    is_archived BOOLEAN DEFAULT FALSE,
+    scheduled_for TIMESTAMP WITH TIME ZONE, -- для отложенных уведомлений
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Шаблоны уведомлений
+CREATE TABLE notification_templates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    type VARCHAR(50) UNIQUE NOT NULL,
+    title_template TEXT NOT NULL,
+    message_template TEXT NOT NULL,
+    conditions JSONB, -- условия срабатывания
+    priority INTEGER DEFAULT 1
+);
+
+7. Аналитика и отчеты (Java модуль)
+-- Предсохраненные отчеты
+CREATE TABLE reports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    report_type VARCHAR(50) NOT NULL, -- 'MONTHLY_SUMMARY', 'CATEGORY_ANALYSIS', 'GOAL_PROGRESS'
+    period_start DATE NOT NULL,
+    period_end DATE NOT NULL,
+    data JSONB NOT NULL, -- структурированные данные отчета
+    pdf_url TEXT, -- ссылка на PDF
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Дашборд-виджеты (конфигурация пользователя)
+CREATE TABLE dashboard_widgets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    widget_type VARCHAR(50) NOT NULL, -- 'SPENDING_CHART', 'BUDGET_STATUS', 'GOAL_PROGRESS', 'RECENT_TRANSACTIONS'
+    position INTEGER NOT NULL,
+    config JSONB, -- конфигурация виджета
+    is_visible BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+8. Голосовой ввод и ML (общие)
+-- Голосовые транскрипции
+CREATE TABLE voice_transcriptions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    audio_file_url TEXT,
+    transcribed_text TEXT NOT NULL,
+    entities JSONB, -- извлеченные сущности (сумма, категория, место)
+    ml_category_id UUID REFERENCES categories(id),
+    confidence DECIMAL(5,4),
+    status VARCHAR(20) DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'PROCESSED', 'FAILED')),
+    transaction_id UUID REFERENCES transactions(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Рекомендации от ML
+CREATE TABLE recommendations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type VARCHAR(50) NOT NULL, -- 'BUDGET_OPTIMIZATION', 'SUBSCRIPTION_CANCELLATION', 'SAVING_TIP', 'HABIT_CHANGE'
+    title VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    action_items JSONB, -- конкретные действия
+    estimated_savings DECIMAL(10,2),
+    priority INTEGER DEFAULT 1,
+    is_applied BOOLEAN DEFAULT FALSE,
+    applied_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+9. Аудит и логирование (общие)
+-- Лог операций
+CREATE TABLE audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    action VARCHAR(100) NOT NULL,
+    entity_type VARCHAR(50),
+    entity_id UUID,
+    module VARCHAR(20) NOT NULL CHECK (module IN ('GO', 'JAVA', 'MOBILE')),
+    ip_address INET,
+    user_agent TEXT,
+    details JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+Резервное копирование:
+-- История резервных копий
+CREATE TABLE backups (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    backup_type VARCHAR(20) CHECK (backup_type IN ('AUTO', 'MANUAL')),
+    file_url TEXT NOT NULL,
+    file_size BIGINT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Контрагенты (часто используемые)
+CREATE TABLE counterparties (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name VARCHAR(200) NOT NULL,
+    category_id UUID REFERENCES categories(id),
+    transaction_count INTEGER DEFAULT 0,
+    total_amount DECIMAL(15,2) DEFAULT 0,
+    last_transaction_date DATE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+Оффлайн-режим (синхронизация):
+-- Очередь синхронизации для оффлайн-режима
+CREATE TABLE sync_queue (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    operation VARCHAR(20) CHECK (operation IN ('CREATE', 'UPDATE', 'DELETE')),
+    entity_type VARCHAR(50) NOT NULL,
+    entity_id UUID,
+    entity_data JSONB NOT NULL,
+    status VARCHAR(20) DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'SYNCED', 'FAILED')),
+    retry_count INTEGER DEFAULT 0,
+    last_attempt TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+Двухфакторная аутентификация (2FA):
+-- 2FA коды
+CREATE TABLE two_factor_codes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code VARCHAR(6) NOT NULL,
+    method VARCHAR(10) CHECK (method IN ('EMAIL', 'SMS', 'APP')),
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    is_used BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+Ограничения
+-- Constraints для целей
+ALTER TABLE goals ADD CONSTRAINT ck_goals_auto_save_frequency 
+CHECK (auto_save_frequency IS NULL OR auto_save_frequency IN ('DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY'));
+
+-- Constraints для привычек
+ALTER TABLE habits ADD CONSTRAINT ck_habits_frequency 
+CHECK (frequency IS NULL OR frequency IN ('DAILY', 'WEEKLY', 'MONTHLY'));
+
+-- Constraints для транзакций и привычек (диапазоны 0-1)
+ALTER TABLE transactions ADD CONSTRAINT ck_ml_confidence_range 
+CHECK (ml_confidence IS NULL OR (ml_confidence >= 0 AND ml_confidence <= 1));
+
+ALTER TABLE habits ADD CONSTRAINT ck_habits_confidence_score 
+CHECK (confidence_score IS NULL OR (confidence_score >= 0 AND confidence_score <= 1));
+
+ALTER TABLE habits ADD CONSTRAINT ck_habits_impact_score 
+CHECK (impact_score IS NULL OR (impact_score >= 0 AND impact_score <= 1));
+
+-- Constraints для подписок
+ALTER TABLE subscriptions ADD CONSTRAINT ck_subscriptions_usage_index 
+CHECK (usage_index IS NULL OR (usage_index >= 0 AND usage_index <= 1));
+
+-- Constraints для голосового ввода
+ALTER TABLE voice_transcriptions ADD CONSTRAINT ck_voice_confidence 
+CHECK (confidence IS NULL OR (confidence >= 0 AND confidence <= 1));
+
+Связи и индексы
+-- Основные индексы для производительности
+CREATE INDEX idx_transactions_user_date ON transactions(user_id, date DESC);
+CREATE INDEX idx_transactions_user_category ON transactions(user_id, category_id);
+CREATE INDEX idx_budgets_user_period ON budgets(user_id, period_start, period_end);
+CREATE INDEX idx_goals_user_status ON goals(user_id, status, deadline);
+CREATE INDEX idx_notifications_user_read ON notifications(user_id, is_read, created_at DESC);
+CREATE INDEX idx_subscriptions_user_active ON subscriptions(user_id, is_active, next_billing_date);
+CREATE INDEX idx_voice_user_status ON voice_transcriptions(user_id, status);
+-- Для поиска неподтвержденных транзакций (ML категоризация)
+CREATE INDEX idx_transactions_is_verified ON transactions(is_verified);
+-- Для поиска регулярных транзакций
+CREATE INDEX idx_transactions_is_recurring ON transactions(is_recurring);
+-- Для детектора привычек (по дате и категории)
+CREATE INDEX idx_transactions_date_category ON transactions(date, category_id);
+-- Для уведомлений по времени отправки
+CREATE INDEX idx_notifications_scheduled_for ON notifications(scheduled_for) 
+WHERE scheduled_for IS NOT NULL;
+-- Для быстрого получения активных целей
+CREATE INDEX idx_goals_status_deadline ON goals(status, deadline);
+-- Для поиска подписок, по которым скоро списание
+CREATE INDEX idx_subscriptions_next_billing ON subscriptions(next_billing_date) 
+WHERE is_active = true;
+-- Для быстрого поиска транзакций по типу
+CREATE INDEX idx_transactions_type ON transactions(type);
+-- Для поиска по банковскому счету
+CREATE INDEX idx_transactions_bank_account ON transactions(bank_account_id);
+-- Для детектора привычек (по дате и привычке)
+CREATE INDEX idx_transactions_habit_date ON transactions(date, habit_pattern_id) 
+WHERE habit_pattern_id IS NOT NULL;
+-- Для уведомлений по типу и статусу
+CREATE INDEX idx_notifications_type_status ON notifications(type, is_read);
+-- Для быстрого получения активных подписок
+CREATE INDEX idx_subscriptions_user_status ON subscriptions(user_id, is_active, next_billing_date);
+-- Для отчетов по периоду
+CREATE INDEX idx_reports_period ON reports(period_start, period_end);
+-- Для голосовых транскрипций по статусу
+CREATE INDEX idx_voice_status_created ON voice_transcriptions(status, created_at);
+CREATE UNIQUE INDEX idx_budgets_user_category_period 
+ON budgets(user_id, category_id, period_start, period_end) 
+WHERE is_active = true;
+CREATE UNIQUE INDEX idx_goals_user_name_active 
+ON goals(user_id, name) 
+WHERE status = 'ACTIVE';
+CREATE UNIQUE INDEX idx_subscriptions_user_name_active 
+ON subscriptions(user_id, name) 
+WHERE is_active = true;
+
+-- Индекс для быстрого поиска привычек по типу
+CREATE INDEX idx_habits_user_type ON habits(user_id, habit_type);
+-- Индекс для голосовых транскрипций по transaction_id
+CREATE INDEX idx_voice_transaction ON voice_transcriptions(transaction_id) 
+WHERE transaction_id IS NOT NULL;
+
+
+Функция для триггера
+-- Функция для триггера
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+ALTER TABLE notification_templates ADD COLUMN created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE notification_templates ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+
+ALTER TABLE general_budgets ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE reports ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE dashboard_widgets ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+
+-- Триггеры для таблиц с updated_at
+CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_transactions_updated_at BEFORE UPDATE ON transactions 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_subscriptions_updated_at BEFORE UPDATE ON subscriptions 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_habits_updated_at BEFORE UPDATE ON habits 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_budgets_updated_at BEFORE UPDATE ON budgets 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_goals_updated_at BEFORE UPDATE ON goals 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_notification_templates_updated_at BEFORE UPDATE ON notification_templates 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_general_budgets_updated_at BEFORE UPDATE ON general_budgets 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_reports_updated_at BEFORE UPDATE ON reports 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_dashboard_widgets_updated_at BEFORE UPDATE ON dashboard_widgets 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_voice_transcriptions_updated_at BEFORE UPDATE ON voice_transcriptions 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_recommendations_updated_at BEFORE UPDATE ON recommendations 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_backups_updated_at BEFORE UPDATE ON backups 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_sync_queue_updated_at BEFORE UPDATE ON sync_queue 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_two_factor_codes_updated_at BEFORE UPDATE ON two_factor_codes 
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+
+Распределение ответственности между модулями
+Модуль сбора (Go) - ОТВЕТСТВЕН ЗА:
+✅ users                     # Регистрация, аутентификация
+✅ user_sessions            # Сессии и токены
+✅ categories               # Создание/управление категориями (через ML)
+✅ transactions             # Операции с транзакциями
+✅ imports                  # Импорт CSV/Excel файлов
+✅ subscriptions            # Управление подписками
+✅ habits                   # Детектор привычек
+✅ voice_transcriptions     # Голосовой ввод
+✅ bank_accounts           # Интеграция с банками (Open Banking)
+✅ counterparties          # Частые контрагенты
+✅ two_factor_codes        # 2FA коды (часть аутентификации)
+✅ sync_queue              # Очередь синхронизации (оффлайн-режим)
+✅ backups                 # Резервное копирование
+
+Модуль анализа (Java) - ОТВЕТСТВЕН ЗА:
+✅ budgets                 # Бюджеты по категориям
+✅ general_budgets        # Общие бюджеты
+✅ goals                  # Финансовые цели
+✅ goal_transactions      # Транзакции для целей
+✅ reports                # Отчеты и аналитика
+✅ dashboard_widgets      # Виджеты дашборда
+
+ОБЩИЕ таблицы (оба модуля пишут):
+🔄 notifications          # Уведомления (с source_module)
+🔄 notification_templates # Шаблоны уведомлений
+🔄 recommendations       # Рекомендации ML
+🔄 audit_logs            # Аудит операций

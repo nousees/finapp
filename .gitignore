@@ -1,0 +1,63 @@
+# Compiled files and binaries
+*.exe
+*.exe~
+*.out
+*.test
+*.dll
+*.so
+*.dylib
+
+# Dependency directories (use go mod instead)
+vendor/
+
+# Logs
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# Environment variables
+.env
+
+# Database files (if any)
+*.db
+
+# Игнорируем ML модели, чтобы новые изменения не пушить
+services/ml-service/ml_models/
+services/ml-service/ml_models/bert_finapp/
+services/ml-service/ml_models/rubert_tiny_ner_finapp/
+
+# Go workspace files
+go.work
+go.work.sum
+
+# Python
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# ML models
+*.pt
+*.pth
+*.bin
+*.safetensors
+
+# Transformers checkpoints
+checkpoint-*/
+
+# Training artifacts
+optimizer.pt
+scheduler.pt
+trainer_state.json
+rng_state.pth
+
+# Virtual env
+venv/
+.env/
+
+# Data
+data/
+datasets/

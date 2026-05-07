@@ -1,0 +1,17 @@
+postgres:
+  db_host: "${DB_HOST}"
+  db_port: "${DB_PORT}"
+  db_external_port: "${DB_EXTERNAL_PORT}"
+  db_username: "${DB_USERNAME}"
+  db_name: "${DB_NAME}"
+  db_sslmode: "${DB_SSLMODE}"
+  db_password: "${DB_PASSWORD}"
+
+server:
+  port: "${PORT}"
+
+jwt:
+  secret: "${JWT_SECRET}"
+  access_ttl: "${JWT_ACCESS_TTL}"
+  refresh_ttl: "${JWT_REFRESH_TTL}"
+  issuer: "${JWT_ISSUER}"
