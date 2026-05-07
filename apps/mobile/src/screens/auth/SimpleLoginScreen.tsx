@@ -19,6 +19,23 @@ export const SimpleLoginScreen = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
 
+  const getErrorMessage = (data, fallback) => {
+    if (data?.error) {
+      if (data.error.includes('Email') && data.error.includes('email')) {
+        return 'Введите корректный email, например name@example.com';
+      }
+      if (data.error.includes('Password') && data.error.includes('min')) {
+        return 'Пароль должен содержать минимум 8 символов';
+      }
+      if (data.error.includes('FullName') && data.error.includes('min')) {
+        return 'Имя должно содержать минимум 2 символа';
+      }
+      return data.error;
+    }
+
+    return data?.message || fallback;
+  };
+
   const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Ошибка', 'Заполните все поля');
@@ -41,11 +58,11 @@ export const SimpleLoginScreen = ({ onLogin }) => {
         await AsyncStorage.setItem('access_token', data.access_token);
         await AsyncStorage.setItem('refresh_token', data.refresh_token);
         await AsyncStorage.setItem('user_data', JSON.stringify(data.user));
-        
+
         Alert.alert('Успех', 'Вы вошли в систему');
         onLogin();
       } else {
-        Alert.alert('Ошибка', data.message || 'Неверные данные для входа');
+        Alert.alert('Ошибка', getErrorMessage(data, 'Неверные данные для входа'));
       }
     } catch (error) {
       Alert.alert('Ошибка', 'Проблема с подключением к серверу');
@@ -61,6 +78,21 @@ export const SimpleLoginScreen = ({ onLogin }) => {
       return;
     }
 
+    if (!email.includes('@')) {
+      Alert.alert('Ошибка', 'Введите email в формате name@example.com');
+      return;
+    }
+
+    if (password.length < 8) {
+      Alert.alert('Ошибка', 'Пароль должен содержать минимум 8 символов');
+      return;
+    }
+
+    if (fullName.trim().length < 2) {
+      Alert.alert('Ошибка', 'Имя должно содержать минимум 2 символа');
+      return;
+    }
+
     setIsLoading(true);
     try {
       const response = await fetch(`${apiConfig.authBaseUrl}/sign-up`, {
@@ -68,7 +100,11 @@ export const SimpleLoginScreen = ({ onLogin }) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password, full_name: fullName }),
+        body: JSON.stringify({
+          email: email.trim(),
+          password,
+          full_name: fullName.trim(),
+        }),
       });
 
       const data = await response.json();
@@ -77,11 +113,11 @@ export const SimpleLoginScreen = ({ onLogin }) => {
         await AsyncStorage.setItem('access_token', data.access_token);
         await AsyncStorage.setItem('refresh_token', data.refresh_token);
         await AsyncStorage.setItem('user_data', JSON.stringify(data.user));
-        
+
         Alert.alert('Успех', 'Вы успешно зарегистрировались');
         onLogin();
       } else {
-        Alert.alert('Ошибка', data.message || 'Ошибка регистрации');
+        Alert.alert('Ошибка', getErrorMessage(data, 'Ошибка регистрации'));
       }
     } catch (error) {
       Alert.alert('Ошибка', 'Проблема с подключением к серверу');
@@ -126,13 +162,13 @@ export const SimpleLoginScreen = ({ onLogin }) => {
 
         <TextInput
           style={styles.input}
-          placeholder="Пароль"
+          placeholder="Пароль (минимум 8 символов)"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
         />
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.button, isLoading && styles.buttonDisabled]}
           onPress={handleSubmit}
           disabled={isLoading}
@@ -144,7 +180,7 @@ export const SimpleLoginScreen = ({ onLogin }) => {
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.linkButton}
           onPress={() => setIsLogin(!isLogin)}
         >

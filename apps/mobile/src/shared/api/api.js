@@ -1,6 +1,8 @@
 // Простой API клиент для React Native без TypeScript проблем
 
-const API_BASE_URL = 'http://localhost:8080';
+import { apiConfig } from './config';
+
+const API_BASE_URL = apiConfig.collectionBaseUrl;
 
 class ApiClient {
   constructor(baseURL = API_BASE_URL) {

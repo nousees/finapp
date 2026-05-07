@@ -148,6 +148,101 @@ export type Recommendation = {
   updatedAt?: string;
 };
 
+export type Budget = {
+  id: string;
+  userId: string;
+  categoryId?: string | null;
+  amountLimit: number;
+  spentAmount: number;
+  period: string;
+  periodStart: string;
+  periodEnd: string;
+  currency?: string;
+  alertThresholds?: number[];
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type Goal = {
+  id: string;
+  userId: string;
+  name: string;
+  description?: string | null;
+  targetAmount: number;
+  currentAmount: number;
+  currency?: string;
+  deadline: string;
+  goalType: string;
+  priority?: number | null;
+  status?: string | null;
+  autoSaveAmount?: number | null;
+  autoSaveFrequency?: string | null;
+  icon?: string | null;
+  color?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type NotificationItem = {
+  id: string;
+  userId: string;
+  type: string;
+  title: string;
+  message: string;
+  sourceModule: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  data?: string | null;
+  isRead?: boolean;
+  isArchived?: boolean;
+  scheduledFor?: string | null;
+  createdAt?: string;
+};
+
+export type Report = {
+  id: string;
+  reportType: string;
+  periodStart: string;
+  periodEnd: string;
+  generatedAt?: string;
+  status?: string;
+  fileUrl?: string | null;
+};
+
+type PagedResult<T> = {
+  content?: T[];
+  totalElements?: number;
+  totalPages?: number;
+  size?: number;
+  number?: number;
+};
+
+export type CreateBudgetRequest = {
+  categoryId: string;
+  amountLimit: number;
+  period: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
+  periodStart: string;
+  periodEnd: string;
+  currency?: string;
+  alertThresholds?: number[];
+  isActive?: boolean;
+};
+
+export type CreateGoalRequest = {
+  name: string;
+  description?: string;
+  targetAmount: number;
+  deadline: string;
+  goalType: "SAVING" | "DEBT_REPAYMENT" | "INVESTMENT" | "PURCHASE";
+  priority?: number;
+  autoSaveAmount?: number;
+  autoSaveFrequency?: "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
+  icon?: string;
+  color?: string;
+  currency?: string;
+};
+
 export async function getFinancialInsights(params?: {
   periodStart?: string;
   periodEnd?: string;
@@ -179,6 +274,107 @@ export async function generateRecommendations(): Promise<Recommendation[]> {
     baseUrl: apiConfig.analysisBaseUrl,
     path: "/api/v1/recommendations/generate",
     method: "POST",
+  });
+  return response.data;
+}
+
+export async function applyRecommendation(recommendationId: string): Promise<void> {
+  await requestJson<ApiEnvelope<null>>({
+    baseUrl: apiConfig.analysisBaseUrl,
+    path: `/api/v1/recommendations/${recommendationId}/apply`,
+    method: "POST",
+  });
+}
+
+export async function listBudgets(): Promise<Budget[]> {
+  const response = await requestJson<ApiEnvelope<Budget[]>>({
+    baseUrl: apiConfig.analysisBaseUrl,
+    path: "/api/v1/budgets/current",
+    method: "GET",
+  });
+  return response.data;
+}
+
+export async function createBudget(data: CreateBudgetRequest): Promise<Budget> {
+  const response = await requestJson<ApiEnvelope<Budget>>({
+    baseUrl: apiConfig.analysisBaseUrl,
+    path: "/api/v1/budgets",
+    method: "POST",
+    body: data,
+  });
+  return response.data;
+}
+
+export async function listGoals(): Promise<Goal[]> {
+  const response = await requestJson<ApiEnvelope<Goal[]>>({
+    baseUrl: apiConfig.analysisBaseUrl,
+    path: "/api/v1/goals",
+    method: "GET",
+  });
+  return response.data;
+}
+
+export async function createGoal(data: CreateGoalRequest): Promise<Goal> {
+  const response = await requestJson<ApiEnvelope<Goal>>({
+    baseUrl: apiConfig.analysisBaseUrl,
+    path: "/api/v1/goals",
+    method: "POST",
+    body: data,
+  });
+  return response.data;
+}
+
+export async function addFundsToGoal(goalId: string, amount: number): Promise<Goal> {
+  const response = await requestJson<ApiEnvelope<Goal>>({
+    baseUrl: apiConfig.analysisBaseUrl,
+    path: `/api/v1/goals/${goalId}/add?amount=${encodeURIComponent(String(amount))}`,
+    method: "POST",
+  });
+  return response.data;
+}
+
+export async function listNotifications(params?: { page?: number; size?: number }): Promise<NotificationItem[]> {
+  const query = new URLSearchParams();
+  if (typeof params?.page === "number") query.set("page", String(params.page));
+  if (typeof params?.size === "number") query.set("size", String(params.size));
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+
+  const response = await requestJson<ApiEnvelope<PagedResult<NotificationItem> | NotificationItem[]>>({
+    baseUrl: apiConfig.analysisBaseUrl,
+    path: `/api/v1/notifications${suffix}`,
+    method: "GET",
+  });
+
+  const data = response.data as PagedResult<NotificationItem> | NotificationItem[];
+  if (Array.isArray(data)) {
+    return data;
+  }
+  return data.content || [];
+}
+
+export async function getUnreadNotificationCount(): Promise<number> {
+  const response = await requestJson<ApiEnvelope<{ count: number }>>({
+    baseUrl: apiConfig.analysisBaseUrl,
+    path: "/api/v1/notifications/unread/count",
+    method: "GET",
+  });
+  return response.data.count;
+}
+
+export async function markNotificationsRead(notificationIds?: string[]): Promise<void> {
+  await requestJson<ApiEnvelope<null>>({
+    baseUrl: apiConfig.analysisBaseUrl,
+    path: "/api/v1/notifications/mark-read",
+    method: "POST",
+    body: notificationIds && notificationIds.length > 0 ? notificationIds : [],
+  });
+}
+
+export async function listReports(): Promise<Report[]> {
+  const response = await requestJson<ApiEnvelope<Report[]>>({
+    baseUrl: apiConfig.analysisBaseUrl,
+    path: "/api/v1/reports",
+    method: "GET",
   });
   return response.data;
 }

@@ -1,8 +1,9 @@
 // @ts-nocheck
 // Простой API клиент без сложных типов для React Native
 import React from 'react';
+import { apiConfig } from './config';
 
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = apiConfig.collectionBaseUrl;
 
 class SimpleApiClient {
   constructor(baseURL = API_BASE_URL) {

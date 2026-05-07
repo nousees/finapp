@@ -29,6 +29,8 @@ type VoiceTranscription struct {
 
 // MLTranscribeResponse — ответ ML-сервиса POST /transcribe
 type MLTranscribeResponse struct {
-	Text     string                 `json:"text"`
-	Entities map[string]interface{} `json:"entities,omitempty"`
+	Text       string                 `json:"text"`
+	Language   string                 `json:"language,omitempty"`
+	Confidence float64                `json:"confidence,omitempty"`
+	Entities   map[string]interface{} `json:"entities,omitempty"`
 }

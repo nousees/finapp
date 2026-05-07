@@ -1,30 +1,106 @@
-﻿// @ts-nocheck
-import React from 'react';
-import { useMemo, useState } from "react";
+// @ts-nocheck
+import React from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from "react-native-svg";
+import { MaterialIcons } from "@expo/vector-icons";
 import { DashboardStackParamList } from "@app/navigation/types";
+import { getFinancialInsights, listRecommendations } from "@shared/api/analysis";
+import { listTransactions } from "@shared/api/transactions";
+import { useUser } from "@shared/contexts/UserContext";
+import { useAppTheme } from "@shared/theme/ThemeProvider";
+import { radius, spacing } from "@shared/theme/spacing";
 import { Screen } from "@shared/ui/Screen";
 import { SectionCard } from "@shared/ui/SectionCard";
-import { useAppTheme } from "@shared/theme/ThemeProvider";
-import { useUser } from "@shared/contexts/UserContext";
-import { radius, spacing } from "@shared/theme/spacing";
-import { MaterialIcons } from "@expo/vector-icons";
 
-// Заглушки будут заменены реальными данными с API
-const categories = [];
-const recentTransactions = [];
+type Props = NativeStackScreenProps<DashboardStackParamList, "DashboardHome">;
 
 export function DashboardHomeScreen({ navigation }: Props) {
   const { colors, gradients, isDark } = useAppTheme();
   const { user } = useUser();
-  const [activeCategory, setActiveCategory] = useState(null);
-  const isPositiveBalance = true;
-  const balanceColor = isPositiveBalance ? colors.success : colors.danger;
+  const [insights, setInsights] = useState(null);
+  const [transactions, setTransactions] = useState([]);
+  const [recommendations, setRecommendations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const spentTotal = useMemo(() => categories.reduce((sum, item) => sum + item.percent, 0), []);
+  const loadData = useCallback(async () => {
+    try {
+      setError(null);
+      const [insightsData, txData, recsData] = await Promise.all([
+        getFinancialInsights(),
+        listTransactions(),
+        listRecommendations().catch(() => []),
+      ]);
+      setInsights(insightsData);
+      setTransactions(txData.slice(0, 5));
+      setRecommendations(recsData.slice(0, 3));
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить дашборд");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      void loadData();
+    }, [loadData]),
+  );
+
+  const categories = useMemo(
+    () =>
+      (insights?.categories || [])
+        .filter((item) => Number(item.amount) > 0)
+        .slice(0, 4)
+        .map((item, index) => ({
+          id: item.categoryId || `category-${index}`,
+          title: item.categoryName || "Без категории",
+          percent: Math.round(Number(item.percentage || 0)),
+          amount: formatCurrency(item.amount),
+          color: chartPalette[index % chartPalette.length],
+        })),
+    [insights],
+  );
+
+  const topGoal = useMemo(() => {
+    const goals = [...(insights?.goals || [])];
+    goals.sort((a, b) => Number(b.progressPercent || 0) - Number(a.progressPercent || 0));
+    return goals[0] || null;
+  }, [insights]);
+
+  const alerts = useMemo(() => {
+    const anomalyAlerts = (insights?.anomalies || []).slice(0, 2).map((item) => ({
+      id: `anomaly-${item.title}`,
+      title: item.title,
+      tone: item.severity === "HIGH" ? "danger" : "success",
+    }));
+    const recommendationAlerts = (recommendations || []).slice(0, 2).map((item) => ({
+      id: item.id,
+      title: item.title,
+      tone: Number(item.priority || 0) >= 4 ? "danger" : "success",
+    }));
+    return [...anomalyAlerts, ...recommendationAlerts].slice(0, 4);
+  }, [insights, recommendations]);
+
+  const txCards = useMemo(
+    () =>
+      (transactions || []).map((item) => ({
+        id: item.id,
+        amount: `${item.type === "INCOME" ? "+" : "-"}${formatCurrency(item.amount)}`,
+        title: item.description || item.original_description || "Транзакция",
+        category: item.is_verified ? "Обработано" : "Ожидает обработки",
+        icon: item.type === "INCOME" ? "south-west" : "north-east",
+      })),
+    [transactions],
+  );
+
+  const spendingPercent = categories.reduce((sum, item) => sum + item.percent, 0);
+  const summary = insights?.summary;
 
   return (
     <Screen>
@@ -32,98 +108,125 @@ export function DashboardHomeScreen({ navigation }: Props) {
         <Text style={styles.balanceLabel}>
           {user ? `Добро пожаловать, ${user.full_name || user.email}!` : "Добро пожаловать!"}
         </Text>
-        <Text style={[styles.balanceValue, { color: balanceColor }]}>{`47 820 \u20BD`}</Text>
+        <Text style={[styles.balanceValue, { color: colors.white }]}>
+          {summary ? formatCurrency(summary.netSavings) : "0 ₽"}
+        </Text>
+        <Text style={styles.heroMeta}>
+          {summary
+            ? `Доходы ${formatCurrency(summary.totalIncome)} • Расходы ${formatCurrency(summary.totalExpenses)}`
+            : "Добавьте транзакции, чтобы увидеть финансовую картину"}
+        </Text>
       </LinearGradient>
 
-      <SectionCard
-        title={"\u0421\u0442\u0440\u0443\u043A\u0442\u0443\u0440\u0430 \u0440\u0430\u0441\u0445\u043E\u0434\u043E\u0432"}
-        subtitle={"\u041D\u0430\u0436\u043C\u0438\u0442\u0435 \u043D\u0430 \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u044E, \u0447\u0442\u043E\u0431\u044B \u0443\u0432\u0438\u0434\u0435\u0442\u044C \u0434\u0435\u0442\u0430\u043B\u0438"}
-      >
-        {categories.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-              {"\u041F\u043E\u043A\u0430 \u043D\u0435\u0442 \u0434\u0430\u043D\u043D\u044B\u0445 \u043E \u0440\u0430\u0441\u0445\u043E\u0434\u0430\u0445. \u0414\u043E\u0431\u0430\u0432\u044C\u0442\u0435 \u0442\u0440\u0430\u043D\u0437\u0430\u043A\u0446\u0438\u0438 \u043D\u0430 \u0432\u043A\u043B\u0430\u0434\u043A\u0435 \"\u0422\u0440\u0430\u043D\u0437\u0430\u043A\u0446\u0438\u0438\""}
-            </Text>
-          </View>
-        ) : (
-          <>
-            <View style={styles.chartRow}>
-              <DonutChart percentage={spentTotal} />
-              <View style={styles.legendWrap}>
-                {categories.map((item) => (
-                  <Pressable key={item.id} style={styles.legendItem} onPress={() => setActiveCategory(item)}>
-                    <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-                    <Text style={[styles.legendText, { color: colors.text }]}>{item.title}</Text>
-                    <Text style={[styles.legendPercent, { color: colors.textMuted }]}>{item.percent}%</Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-
-            {activeCategory && (
-              <View style={[styles.categoryDetails, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
-                <Text style={[styles.categoryTitle, { color: colors.text }]}>{activeCategory.title}</Text>
-                <Text style={[styles.categoryAmount, { color: colors.primaryDark }]}>{activeCategory.amount}</Text>
-                <Text style={[styles.categoryHint, { color: colors.textMuted }]}>
-                  {"\u0414\u043E\u043B\u044F \u043E\u0442 \u043C\u0435\u0441\u044F\u0447\u043D\u044B\u0445 \u0440\u0430\u0441\u0445\u043E\u0434\u043E\u0432:"} {activeCategory.percent}%
-                </Text>
-              </View>
-            )}
-          </>
-        )}
-      </SectionCard>
-
-      <SectionCard title={"\u0411\u043B\u0438\u0436\u0430\u0439\u0448\u0430\u044F \u0446\u0435\u043B\u044C"}>
-        <View style={styles.goalCard}>
-          <View style={styles.goalLeft}>
-            <View style={[styles.goalIcon, { backgroundColor: colors.surfaceAlt }]}> 
-              <MaterialIcons name="flight-takeoff" size={22} color={colors.primaryDark} />
-            </View>
-            <View style={styles.goalTextWrap}>
-              <Text style={[styles.goalTitle, { color: colors.text }]}>{"\u041F\u0443\u0442\u0435\u0448\u0435\u0441\u0442\u0432\u0438\u0435 \u0432 \u0422\u043E\u043A\u0438\u043E"}</Text>
-              <Text style={[styles.goalHint, { color: colors.textMuted }]}>{`\u041D\u0443\u0436\u043D\u043E \u043E\u0442\u043A\u043B\u0430\u0434\u044B\u0432\u0430\u0442\u044C 18 400 \u20BD/\u043C\u0435\u0441`}</Text>
-            </View>
-          </View>
-          <CircularProgress value={63} />
+      {loading ? (
+        <View style={styles.stateWrap}>
+          <ActivityIndicator color={colors.primaryDark} size="large" />
         </View>
-      </SectionCard>
+      ) : null}
 
-      <SectionCard title={"\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0435 \u0442\u0440\u0430\u043D\u0437\u0430\u043A\u0446\u0438\u0438"}>
-        {recentTransactions.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-              {"\u0422\u0440\u0430\u043D\u0437\u0430\u043A\u0446\u0438\u0439 \u043F\u043E\u043A\u0430 \u043D\u0435\u0442. \u0414\u043E\u0431\u0430\u0432\u044C\u0442\u0435 \u043F\u0435\u0440\u0432\u0443\u044E \u0442\u0440\u0430\u043D\u0437\u0430\u043A\u0446\u0438\u044E \u043D\u0430 \u0432\u043A\u043B\u0430\u0434\u043A\u0435 \"\u0422\u0440\u0430\u043D\u0437\u0430\u043A\u0446\u0438\u0438\""}
-            </Text>
-          </View>
-        ) : (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.txRow}>
-              {recentTransactions.map((item) => (
-                <View key={item.id} style={[styles.txCard, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
-                  <View style={[styles.txIcon, { backgroundColor: colors.background }]}>
-                    <MaterialIcons name={item.icon} size={18} color={colors.primaryDark} />
+      {error ? (
+        <SectionCard title="Ошибка загрузки">
+          <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
+          <Pressable style={[styles.retryButton, { borderColor: colors.borderStrong }]} onPress={() => void loadData()}>
+            <Text style={[styles.retryText, { color: colors.primaryDark }]}>Обновить</Text>
+          </Pressable>
+        </SectionCard>
+      ) : null}
+
+      {!loading && !error ? (
+        <>
+          <SectionCard title="Структура расходов" subtitle="Категории за выбранный период">
+            {categories.length === 0 ? (
+              <EmptyState text="Пока нет данных о расходах. Добавьте и обработайте транзакции." />
+            ) : (
+              <>
+                <View style={styles.chartRow}>
+                  <DonutChart percentage={Math.min(spendingPercent, 100)} />
+                  <View style={styles.legendWrap}>
+                    {categories.map((item) => (
+                      <View key={item.id} style={styles.legendItem}>
+                        <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+                        <Text style={[styles.legendText, { color: colors.text }]}>{item.title}</Text>
+                        <Text style={[styles.legendPercent, { color: colors.textMuted }]}>{item.percent}%</Text>
+                      </View>
+                    ))}
                   </View>
-                  <Text style={[styles.txAmount, { color: item.amount.includes("+") ? colors.success : colors.text }]}>{item.amount}</Text>
-                  <Text style={[styles.txTitle, { color: colors.text }]}>{item.title}</Text>
-                  <Text style={[styles.txCategory, { color: colors.textMuted }]}>{item.category}</Text>
                 </View>
-              ))}
-            </View>
-          </ScrollView>
-        )}
-      </SectionCard>
+              </>
+            )}
+          </SectionCard>
 
-      <SectionCard title={"\u0412\u0430\u0436\u043D\u044B\u0435 \u0441\u0438\u0433\u043D\u0430\u043B\u044B"}>
-        <AlertCard title={`\u0411\u044E\u0434\u0436\u0435\u0442 \"\u0415\u0434\u0430\" \u043F\u0440\u0435\u0432\u044B\u0448\u0435\u043D \u043D\u0430 2 300 \u20BD`} tone="danger" />
-        <AlertCard title={"Netflix \u043D\u0435 \u0438\u0441\u043F\u043E\u043B\u044C\u0437\u043E\u0432\u0430\u043B\u0430\u0441\u044C 29 \u0434\u043D\u0435\u0439 - \u043E\u0442\u043C\u0435\u043D\u0438\u0442\u044C?"} tone="success" />
-        <AlertCard title={"\u0426\u0435\u043B\u044C \u00AB\u041F\u043E\u0434\u0443\u0448\u043A\u0430\u00BB \u0438\u0434\u0435\u0442 \u0441 \u043E\u043F\u0435\u0440\u0435\u0436\u0435\u043D\u0438\u0435\u043C +8%"} tone="success" />
-        <Pressable style={styles.reportButton} onPress={() => navigation.navigate("Reports")}>
-          <Text style={styles.reportButtonText}>{"\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u043F\u043E\u0434\u0440\u043E\u0431\u043D\u044B\u0435 \u043E\u0442\u0447\u0435\u0442\u044B"}</Text>
-        </Pressable>
-      </SectionCard>
+          <SectionCard title="Ближайшая цель">
+            {topGoal ? (
+              <View style={styles.goalCard}>
+                <View style={styles.goalLeft}>
+                  <View style={[styles.goalIcon, { backgroundColor: colors.surfaceAlt }]}>
+                    <MaterialIcons name="emoji-events" size={22} color={colors.primaryDark} />
+                  </View>
+                  <View style={styles.goalTextWrap}>
+                    <Text style={[styles.goalTitle, { color: colors.text }]}>{topGoal.name}</Text>
+                    <Text style={[styles.goalHint, { color: colors.textMuted }]}>
+                      {`${formatCurrency(topGoal.currentAmount)} из ${formatCurrency(topGoal.targetAmount)}`}
+                    </Text>
+                    <Text style={[styles.goalHint, { color: colors.primaryDark }]}>
+                      {topGoal.message || `Осталось ${formatCurrency(topGoal.remainingAmount)}`}
+                    </Text>
+                  </View>
+                </View>
+                <CircularProgress value={Number(topGoal.progressPercent || 0)} />
+              </View>
+            ) : (
+              <EmptyState text="Пока нет целей. Создайте первую цель во вкладке «Цели»." />
+            )}
+          </SectionCard>
+
+          <SectionCard title="Последние транзакции">
+            {txCards.length === 0 ? (
+              <EmptyState text="Транзакции пока не найдены." />
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <View style={styles.txRow}>
+                  {txCards.map((item) => (
+                    <View key={item.id} style={[styles.txCard, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+                      <View style={[styles.txIcon, { backgroundColor: colors.background }]}>
+                        <MaterialIcons name={item.icon} size={18} color={colors.primaryDark} />
+                      </View>
+                      <Text style={[styles.txAmount, { color: item.amount.includes("+") ? colors.success : colors.text }]}>{item.amount}</Text>
+                      <Text style={[styles.txTitle, { color: colors.text }]} numberOfLines={1}>
+                        {item.title}
+                      </Text>
+                      <Text style={[styles.txCategory, { color: colors.textMuted }]}>{item.category}</Text>
+                    </View>
+                  ))}
+                </View>
+              </ScrollView>
+            )}
+          </SectionCard>
+
+          <SectionCard title="Важные сигналы">
+            {alerts.length === 0 ? (
+              <EmptyState text="Пока нет предупреждений и рекомендаций." />
+            ) : (
+              alerts.map((item) => <AlertCard key={item.id} title={item.title} tone={item.tone} />)
+            )}
+            <Pressable style={styles.reportButton} onPress={() => navigation.navigate("Reports")}>
+              <Text style={styles.reportButtonText}>Открыть подробные отчеты</Text>
+            </Pressable>
+          </SectionCard>
+        </>
+      ) : null}
 
       <View style={[styles.footerSpacer, { backgroundColor: isDark ? "transparent" : colors.backgroundAlt }]} />
     </Screen>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  const { colors } = useAppTheme();
+  return (
+    <View style={styles.emptyState}>
+      <Text style={[styles.emptyText, { color: colors.textMuted }]}>{text}</Text>
+    </View>
   );
 }
 
@@ -160,18 +263,19 @@ function DonutChart({ percentage }: { percentage: number }) {
       </Svg>
       <View style={styles.donutCenter}>
         <Text style={[styles.donutValue, { color: colors.primaryDark }]}>{percentage}%</Text>
-        <Text style={[styles.donutLabel, { color: colors.textSecondary }]}>{"\u0420\u0430\u0441\u0445\u043E\u0434\u044B"}</Text>
+        <Text style={[styles.donutLabel, { color: colors.textSecondary }]}>Расходы</Text>
       </View>
     </View>
   );
 }
 
 function CircularProgress({ value }: { value: number }) {
+  const normalized = Math.max(0, Math.min(Math.round(value), 100));
   const size = 78;
   const stroke = 9;
   const radiusValue = (size - stroke) / 2;
   const circumference = radiusValue * Math.PI * 2;
-  const progress = Math.min(value / 100, 1);
+  const progress = Math.min(normalized / 100, 1);
   const dash = circumference * progress;
 
   return (
@@ -191,7 +295,7 @@ function CircularProgress({ value }: { value: number }) {
         />
       </Svg>
       <View style={styles.progressCenter}>
-        <Text style={styles.progressLabel}>{value}%</Text>
+        <Text style={styles.progressLabel}>{normalized}%</Text>
       </View>
     </View>
   );
@@ -209,6 +313,13 @@ function AlertCard({ title, tone }: { title: string; tone: "success" | "danger" 
     </View>
   );
 }
+
+function formatCurrency(value: number | string | null | undefined): string {
+  const numeric = Number(value || 0);
+  return `${numeric.toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ₽`;
+}
+
+const chartPalette = ["#22C55E", "#16A34A", "#14B8A6", "#0EA5E9"];
 
 const styles = StyleSheet.create({
   heroCard: {
@@ -229,6 +340,31 @@ const styles = StyleSheet.create({
   balanceValue: {
     fontSize: 36,
     fontFamily: "Inter_700Bold",
+  },
+  heroMeta: {
+    fontSize: 13,
+    color: "#ECFDF5",
+    fontFamily: "Inter_500Medium",
+  },
+  stateWrap: {
+    paddingVertical: spacing.xl,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  errorText: {
+    fontSize: 14,
+    fontFamily: "Inter_500Medium",
+  },
+  retryButton: {
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderRadius: radius.full,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  retryText: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
   },
   chartRow: {
     flexDirection: "row",
@@ -277,53 +413,35 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: "Inter_600SemiBold",
   },
-  categoryDetails: {
-    marginTop: 2,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    padding: spacing.sm,
-    gap: 2,
-  },
-  categoryTitle: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-  },
-  categoryAmount: {
-    fontSize: 24,
-    fontFamily: "Inter_700Bold",
-  },
-  categoryHint: {
-    fontSize: 12,
-    fontFamily: "Inter_400Regular",
-  },
   goalCard: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.md,
   },
   goalLeft: {
     flexDirection: "row",
-    gap: spacing.sm,
     alignItems: "center",
+    gap: spacing.sm,
     flex: 1,
   },
   goalIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
-    alignItems: "center",
+    width: 48,
+    height: 48,
+    borderRadius: 16,
     justifyContent: "center",
+    alignItems: "center",
   },
   goalTextWrap: {
     flex: 1,
-    gap: 3,
+    gap: 4,
   },
   goalTitle: {
     fontSize: 16,
-    fontFamily: "Inter_600SemiBold",
+    fontFamily: "Inter_700Bold",
   },
   goalHint: {
-    fontSize: 14,
+    fontSize: 12,
     fontFamily: "Inter_500Medium",
   },
   progressWrap: {
@@ -336,9 +454,9 @@ const styles = StyleSheet.create({
     position: "absolute",
   },
   progressLabel: {
+    color: "#16A34A",
     fontSize: 14,
     fontFamily: "Inter_700Bold",
-    color: "#16A34A",
   },
   txRow: {
     flexDirection: "row",
@@ -346,71 +464,64 @@ const styles = StyleSheet.create({
     paddingRight: spacing.sm,
   },
   txCard: {
-    width: 132,
-    borderRadius: radius.md,
+    width: 164,
+    borderRadius: radius.lg,
     borderWidth: 1,
     padding: spacing.sm,
-    gap: 4,
+    gap: 8,
   },
   txIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 12,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
   },
   txAmount: {
-    marginTop: 2,
-    fontSize: 16,
+    fontSize: 18,
     fontFamily: "Inter_700Bold",
   },
   txTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: "Inter_600SemiBold",
   },
   txCategory: {
     fontSize: 12,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "Inter_500Medium",
   },
   alertCard: {
-    borderWidth: 1.2,
-    borderRadius: radius.md,
+    borderWidth: 1,
+    borderRadius: radius.lg,
     padding: spacing.sm,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
   },
   alertText: {
     flex: 1,
-    fontSize: 14,
-    lineHeight: 19,
+    fontSize: 13,
+    lineHeight: 18,
     fontFamily: "Inter_500Medium",
   },
   reportButton: {
-    marginTop: 2,
-    borderRadius: radius.md,
-    backgroundColor: "#22C55E",
-    paddingVertical: 14,
-    alignItems: "center",
+    marginTop: spacing.xs,
+    alignSelf: "flex-start",
   },
   reportButtonText: {
-    color: "#FFFFFF",
-    fontSize: 15,
+    color: "#16A34A",
+    fontSize: 14,
     fontFamily: "Inter_700Bold",
   },
-  footerSpacer: {
-    height: 6,
-  },
   emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.md,
   },
   emptyText: {
     fontSize: 14,
-    fontFamily: 'Inter_500Medium',
-    textAlign: 'center',
     lineHeight: 20,
+    fontFamily: "Inter_500Medium",
+  },
+  footerSpacer: {
+    height: 6,
+    borderRadius: radius.full,
   },
 });

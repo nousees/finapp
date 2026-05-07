@@ -31,6 +31,7 @@ func (s *SignUpUsecase) SignUp(sup entities.SignUpInput) error {
 	user := &entities.User{
 		Email:        sup.Email,
 		PasswordHash: hashPass,
+		FullName:     sup.FullName,
 	}
 
 	return s.Users.Create(user)

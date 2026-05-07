@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 
 	"finapp/services/data-processing/collection/internal/model"
@@ -15,52 +16,70 @@ import (
 )
 
 type VoiceService struct {
-	repo     *repository.VoiceRepo
+	repo      *repository.VoiceRepo
 	mlBaseURL string
-	client   *http.Client
+	client    *http.Client
 }
 
 func NewVoiceService(repo *repository.VoiceRepo, mlBaseURL string) *VoiceService {
 	return &VoiceService{
-		repo:       repo,
-		mlBaseURL:  mlBaseURL,
-		client:     &http.Client{},
+		repo:      repo,
+		mlBaseURL: mlBaseURL,
+		client:    &http.Client{},
 	}
 }
 
-// Upload принимает аудио, отправляет в ML /transcribe, сохраняет voice_transcriptions.
+// Upload accepts audio, sends it to the ML voice endpoint and persists the transcription.
 func (s *VoiceService) Upload(ctx context.Context, userID uuid.UUID, audioBody io.Reader, contentType string, audioURL *string) (*model.VoiceTranscription, error) {
-	// Отправка в ML
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.mlBaseURL+"/transcribe", audioBody)
+	var payload bytes.Buffer
+	writer := multipart.NewWriter(&payload)
+	part, err := writer.CreateFormFile("file", "voice-upload")
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Content-Type", contentType)
+	if _, err := io.Copy(part, audioBody); err != nil {
+		return nil, err
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.mlBaseURL+"/api/v1/voice/transcribe", &payload)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	if contentType != "" {
+		req.Header.Set("X-Original-Content-Type", contentType)
+	}
+
 	resp, err := s.client.Do(req)
 	if err != nil {
-		// ML недоступен — сохраняем запись со статусом FAILED или пустым текстом
-		text := ""
 		entities, _ := json.Marshal(map[string]interface{}{"error": err.Error()})
-		return s.repo.Create(ctx, userID, audioURL, text, entities, model.VoiceFailed)
+		return s.repo.Create(ctx, userID, audioURL, "", entities, model.VoiceFailed)
 	}
 	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		entities, _ := json.Marshal(map[string]interface{}{"error": string(body), "status": resp.StatusCode})
 		return s.repo.Create(ctx, userID, audioURL, "", entities, model.VoiceFailed)
 	}
+
 	var mlResp model.MLTranscribeResponse
 	if err := json.NewDecoder(resp.Body).Decode(&mlResp); err != nil {
 		return nil, fmt.Errorf("decode ML response: %w", err)
 	}
-	var entities []byte
-	if mlResp.Entities != nil {
-		entities, _ = json.Marshal(mlResp.Entities)
-	}
+
+	entities, _ := json.Marshal(map[string]interface{}{
+		"language":   mlResp.Language,
+		"confidence": mlResp.Confidence,
+	})
+
 	return s.repo.Create(ctx, userID, audioURL, mlResp.Text, entities, model.VoicePending)
 }
 
-// UploadFromBytes — то же, но из []byte (удобно для multipart).
+// UploadFromBytes is a multipart-friendly helper for handler uploads.
 func (s *VoiceService) UploadFromBytes(ctx context.Context, userID uuid.UUID, audioData []byte, contentType string, audioURL *string) (*model.VoiceTranscription, error) {
 	return s.Upload(ctx, userID, bytes.NewReader(audioData), contentType, audioURL)
 }

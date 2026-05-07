@@ -1,4 +1,5 @@
 // @ts-nocheck
+import React from 'react';
 import "react-native-gesture-handler";
 import "react-native-reanimated";
 import { StatusBar } from "expo-status-bar";
@@ -6,9 +7,10 @@ import { StyleSheet, View, Text } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { LoginScreen } from "./src/screens/auth/LoginScreen";
+import { SimpleLoginScreen } from "./src/screens/auth/SimpleLoginScreen";
 import { AppNavigator } from "./src/app/navigation/AppNavigator";
 import { ThemeProvider } from "./src/shared/theme/ThemeProvider";
+import { UserProvider } from "./src/shared/contexts/UserContext";
 
 function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
@@ -53,13 +55,15 @@ function AppContent() {
   }
 
   if (!isAuthenticated) {
-    return <LoginScreen onLogin={handleLogin} />;
+    return <SimpleLoginScreen onLogin={handleLogin} />;
   }
 
   return (
-    <ThemeProvider>
-      <AppNavigator onLogout={handleLogout} />
-    </ThemeProvider>
+    <UserProvider>
+      <ThemeProvider>
+        <AppNavigator onLogout={handleLogout} />
+      </ThemeProvider>
+    </UserProvider>
   );
 }
 

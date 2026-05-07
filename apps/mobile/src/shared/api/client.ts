@@ -1,8 +1,9 @@
 // @ts-nocheck
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React from 'react';
+import { apiConfig } from './config';
 
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = apiConfig.collectionBaseUrl;
 
 export interface ApiResponse<T = any> {
   data?: T;
