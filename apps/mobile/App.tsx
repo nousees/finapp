@@ -5,11 +5,13 @@ import "react-native-reanimated";
 import { StyleSheet, Text, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import * as LocalAuthentication from "expo-local-authentication";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SimpleLoginScreen } from "./src/screens/auth/SimpleLoginScreen";
 import { AppNavigator } from "./src/app/navigation/AppNavigator";
 import { ThemeProvider } from "./src/shared/theme/ThemeProvider";
 import { UserProvider } from "./src/shared/contexts/UserContext";
+import { AppSettingsProvider } from "./src/shared/settings/AppSettingsContext";
 import { apiConfig } from "./src/shared/api/config";
 import { ErrorBoundary } from "./src/shared/ui/ErrorBoundary";
 
@@ -71,14 +73,39 @@ function AppContent() {
       const refreshed = await refreshSession(refreshToken);
       if (!refreshed) {
         await clearAuthData();
+        setIsAuthenticated(false);
+        return;
       }
-      setIsAuthenticated(refreshed);
+
+      const biometricPassed = await verifyBiometricIfEnabled();
+      if (!biometricPassed) {
+        setIsAuthenticated(false);
+        return;
+      }
+      setIsAuthenticated(true);
     } catch (error) {
       console.error("Error checking auth status:", error);
       await clearAuthData();
       setIsAuthenticated(false);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const verifyBiometricIfEnabled = async (): Promise<boolean> => {
+    try {
+      const settingsRaw = await AsyncStorage.getItem("app_settings");
+      const settings = settingsRaw ? JSON.parse(settingsRaw) : null;
+      if (!settings?.biometricEnabled) return true;
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: "Вход в FinApp",
+        cancelLabel: "Выйти",
+        disableDeviceFallback: false,
+      });
+      return result.success;
+    } catch (error) {
+      console.error("Biometric auth failed:", error);
+      return true;
     }
   };
 
@@ -109,9 +136,11 @@ function AppContent() {
 
   return (
     <UserProvider>
-      <ThemeProvider>
-        <AppNavigator onLogout={handleLogout} />
-      </ThemeProvider>
+      <AppSettingsProvider>
+        <ThemeProvider>
+          <AppNavigator onLogout={handleLogout} />
+        </ThemeProvider>
+      </AppSettingsProvider>
     </UserProvider>
   );
 }

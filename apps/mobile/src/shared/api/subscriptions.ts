@@ -12,8 +12,8 @@ export type ApiSubscription = {
 };
 
 type SubscriptionsResponse = {
-  subscriptions: ApiSubscription[];
-  count: number;
+  subscriptions?: ApiSubscription[] | null;
+  count?: number;
 };
 
 export async function listSubscriptions(): Promise<ApiSubscription[]> {
@@ -22,7 +22,7 @@ export async function listSubscriptions(): Promise<ApiSubscription[]> {
     path: "/api/v1/subscriptions",
     method: "GET",
   });
-  return response.subscriptions;
+  return Array.isArray(response.subscriptions) ? response.subscriptions : [];
 }
 
 export async function analyzeSubscriptions(): Promise<ApiSubscription[]> {
@@ -31,5 +31,5 @@ export async function analyzeSubscriptions(): Promise<ApiSubscription[]> {
     path: "/api/v1/analyze-subscriptions",
     method: "POST",
   });
-  return response.subscriptions;
+  return Array.isArray(response.subscriptions) ? response.subscriptions : [];
 }

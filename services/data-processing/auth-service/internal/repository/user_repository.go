@@ -3,8 +3,8 @@ package repository
 import (
 	"context"
 	"database/sql"
-	entities "finapp/services/data-processing/auth-service/internal/entities/user"
 	"errors"
+	entities "finapp/services/data-processing/auth-service/internal/entities/user"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +15,8 @@ import (
 type UserRepository interface {
 	Create(user *entities.User) error
 	GetUserByEmail(email string) (*entities.User, error)
+	GetUserByID(id uuid.UUID) (*entities.User, error)
+	UpdatePasswordHash(id uuid.UUID, passwordHash string) error
 }
 
 type Users struct {
@@ -74,4 +76,38 @@ func (us *Users) GetUserByEmail(email string) (*entities.User, error) {
 	}
 
 	return &user, nil
+}
+
+func (us *Users) GetUserByID(id uuid.UUID) (*entities.User, error) {
+	query := `
+		SELECT id, email, password_hash, full_name, phone, avatar_url, 
+			timezone, currency_preference, date_format, financial_start_day, is_premium, 
+			created_at, updated_at
+		FROM users 
+		WHERE id = $1
+	`
+
+	var user entities.User
+	err := us.pool.QueryRow(context.Background(), query, id).Scan(
+		&user.ID, &user.Email, &user.PasswordHash, &user.FullName, &user.Phone, &user.AvatarURL,
+		&user.Timezone, &user.CurrencyPreference, &user.DateFormat, &user.FinancialStartDay,
+		&user.IsPremium, &user.CreatedAt, &user.UpdatedAt)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, sql.ErrNoRows
+		}
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+func (us *Users) UpdatePasswordHash(id uuid.UUID, passwordHash string) error {
+	_, err := us.pool.Exec(context.Background(), `
+		UPDATE users
+		SET password_hash = $2, updated_at = NOW()
+		WHERE id = $1
+	`, id, passwordHash)
+	return err
 }

@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DashboardStackParamList } from "@app/navigation/types";
 import { getFinancialInsights, listRecommendations } from "@shared/api/analysis";
 import { listTransactions } from "@shared/api/transactions";
+import { useAppSettings } from "@shared/settings/AppSettingsContext";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
 
 type Props = NativeStackScreenProps<DashboardStackParamList, "Analytics">;
@@ -23,6 +24,7 @@ const PERIODS: Array<{ id: Period; label: string }> = [
 
 export function AnalyticsScreen({ navigation }: Props) {
   const { colors, gradients } = useAppTheme();
+  const { formatMoney } = useAppSettings();
   const insets = useSafeAreaInsets();
   const [period, setPeriod] = useState<Period>("month");
   const [insights, setInsights] = useState(null);
@@ -40,8 +42,8 @@ export function AnalyticsScreen({ navigation }: Props) {
         listRecommendations().catch(() => []),
       ]);
       setInsights(insightData);
-      setTransactions(txData || []);
-      setRecommendations(recData || []);
+      setTransactions(Array.isArray(txData) ? txData : []);
+      setRecommendations(Array.isArray(recData) ? recData : []);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить аналитику");
     } finally {
@@ -61,8 +63,8 @@ export function AnalyticsScreen({ navigation }: Props) {
   const expense = Number(summary?.totalExpenses || totalByType(transactions, "EXPENSE"));
   const savingsRate = income > 0 ? Math.round(((income - expense) / income) * 100) : 0;
   const categories = useMemo(() => normalizeCategories(insights?.categories, transactions), [insights, transactions]);
-  const bars = useMemo(() => buildBars(transactions, period), [transactions, period]);
-  const topExpenses = transactions.filter((item) => item.type === "EXPENSE").sort((a, b) => Number(b.amount) - Number(a.amount)).slice(0, 5);
+  const bars = useMemo(() => buildBars(transactions, period, insights?.cashflow), [transactions, period, insights]);
+  const topExpenses = (Array.isArray(transactions) ? transactions : []).filter((item) => item.type === "EXPENSE").sort((a, b) => Number(b.amount) - Number(a.amount)).slice(0, 5);
   const topPt = Platform.OS === "web" ? 42 : insets.top;
 
   return (
@@ -244,20 +246,25 @@ function normalizeCategories(apiCategories, transactions) {
   return [{ name: "Расходы", amount, percent: 100, color: palette[0] }];
 }
 
-function buildBars(transactions, period: Period) {
+function buildBars(transactions, period: Period, cashflow) {
+  if (Array.isArray(cashflow) && cashflow.length > 0) {
+    return cashflow.slice(period === "week" ? -7 : period === "year" ? -6 : -5).map((item) => ({
+      label: new Date(item.date).toLocaleDateString("ru-RU", period === "year" ? { month: "short" } : { day: "numeric", month: "short" }),
+      income: Number(item.income || 0),
+      expense: Number(item.expenses || 0),
+    }));
+  }
   const count = period === "week" ? 7 : period === "year" ? 6 : 5;
   const labels = period === "week" ? ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"] : period === "year" ? ["2021", "2022", "2023", "2024", "2025", "2026"] : ["Янв", "Фев", "Мар", "Апр", "Май"];
-  const income = totalByType(transactions, "INCOME");
-  const expense = totalByType(transactions, "EXPENSE");
-  return Array.from({ length: count }).map((_, index) => ({
-    label: labels[index],
-    income: income * (0.08 + index / (count * 6)),
-    expense: expense * (0.1 + (count - index) / (count * 7)),
-  }));
-}
-
-function formatMoney(value) {
-  return `${Math.abs(Number(value || 0)).toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ₽`;
+  const items = Array.isArray(transactions) ? transactions : [];
+  return Array.from({ length: count }).map((_, index) => {
+    const bucket = items.filter((_, txIndex) => txIndex % count === index);
+    return {
+      label: labels[index],
+      income: totalByType(bucket, "INCOME"),
+      expense: totalByType(bucket, "EXPENSE"),
+    };
+  });
 }
 
 const styles = StyleSheet.create({

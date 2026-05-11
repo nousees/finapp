@@ -49,13 +49,16 @@ class CategorizationService:
         )
 
     def _predict_with_real_model(self, request: CategorizeRequest) -> CategorizeResponse | None:
-        prediction = self.model.predict({
-            "amount": request.amount or 0,
-            "description": request.description,
-            "merchant": request.merchant or "",
-            "date": None,
-            "type": request.operation_type.value,
-        })
+        try:
+            prediction = self.model.predict({
+                "amount": request.amount or 0,
+                "description": request.description,
+                "merchant": request.merchant or "",
+                "date": None,
+                "type": request.operation_type.value,
+            })
+        except Exception:
+            return None
         if not prediction or not prediction.get("category") or float(prediction.get("confidence", 0) or 0) <= 0:
             return None
 

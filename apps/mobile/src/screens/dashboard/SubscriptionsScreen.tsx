@@ -8,12 +8,14 @@ import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DashboardStackParamList } from "@app/navigation/types";
 import { analyzeSubscriptions, ApiSubscription, listSubscriptions } from "@shared/api/subscriptions";
+import { useAppSettings } from "@shared/settings/AppSettingsContext";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
 
 type Props = NativeStackScreenProps<DashboardStackParamList, "Subscriptions">;
 
 export function SubscriptionsScreen({ navigation }: Props) {
   const { colors, gradients } = useAppTheme();
+  const { formatMoney } = useAppSettings();
   const insets = useSafeAreaInsets();
   const [subscriptions, setSubscriptions] = useState<ApiSubscription[]>([]);
   const [loading, setLoading] = useState(true);
@@ -159,6 +161,7 @@ function SubscriptionSection({ title, items }: { title: string; items: ApiSubscr
 
 function SubscriptionCard({ item }: { item: ApiSubscription }) {
   const { colors } = useAppTheme();
+  const { formatMoney } = useAppSettings();
   const usage = Number(item.usage_index || 0);
   const usageColor = usage < 30 ? colors.danger : usage < 60 ? colors.warning : colors.success;
   const icon = usage < 30 ? "alert-circle" : usage < 60 ? "clock" : "check-circle";
@@ -198,10 +201,6 @@ function SubscriptionCard({ item }: { item: ApiSubscription }) {
       </View>
     </View>
   );
-}
-
-function formatMoney(value) {
-  return `${Math.abs(Number(value || 0)).toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ₽`;
 }
 
 const styles = StyleSheet.create({

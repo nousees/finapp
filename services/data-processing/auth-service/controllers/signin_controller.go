@@ -51,9 +51,10 @@ func (sc *SignInController) SignIn(c *gin.Context) {
 		"token_type":    "Bearer",
 		"expires_in":    expiresIn,
 		"user": gin.H{
-			"id":    userData.ID,
-			"email": userData.Email,
+			"id":        userData.ID,
+			"email":     userData.Email,
 			"full_name": userData.FullName,
+			"phone":     userData.Phone,
 		},
 	})
 }

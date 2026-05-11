@@ -15,7 +15,10 @@ class NERModel:
         if not self.real or self.pipeline is None:
             return {}
 
-        entities = self.pipeline(text)
+        try:
+            entities = self.pipeline(text)
+        except Exception:
+            return {}
         grouped: dict[str, list[str]] = {}
         for entity in entities:
             label = str(entity.get("entity_group") or entity.get("entity") or "")

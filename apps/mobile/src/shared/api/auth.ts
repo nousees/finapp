@@ -71,3 +71,15 @@ export async function refreshToken(refreshTokenValue: string): Promise<AuthRespo
     body: { refresh_token: refreshTokenValue },
   });
 }
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  await requestJson({
+    baseUrl: apiConfig.authBaseUrl,
+    path: "/api/v1/auth/change-password",
+    method: "POST",
+    body: {
+      current_password: currentPassword,
+      new_password: newPassword,
+    },
+  });
+}

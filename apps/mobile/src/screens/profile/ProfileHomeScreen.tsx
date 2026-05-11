@@ -6,10 +6,12 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ProfileStackParamList } from "@app/navigation/types";
 import { getFinancialInsights } from "@shared/api/analysis";
 import { listTransactions } from "@shared/api/transactions";
 import { useUser } from "@shared/contexts/UserContext";
+import { useAppSettings } from "@shared/settings/AppSettingsContext";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
 
 type Props = NativeStackScreenProps<ProfileStackParamList, "ProfileHome"> & {
@@ -20,7 +22,6 @@ type EditableProfile = {
   displayName: string;
   phone: string;
   city: string;
-  notes: string;
 };
 
 const PROFILE_STORAGE_KEY = "profile_details";
@@ -28,29 +29,24 @@ const emptyProfile: EditableProfile = {
   displayName: "",
   phone: "",
   city: "",
-  notes: "",
 };
-
-const formatCurrency = (value?: number | null) =>
-  new Intl.NumberFormat("ru-RU", {
-    style: "currency",
-    currency: "RUB",
-    maximumFractionDigits: 0,
-  }).format(Number(value || 0));
 
 export function ProfileHomeScreen({ navigation, onLogout }: Props) {
   const { colors, gradients, mode, toggleMode } = useAppTheme();
+  const { formatMoney } = useAppSettings();
   const { user } = useUser();
+  const insets = useSafeAreaInsets();
   const [profile, setProfile] = useState<EditableProfile>(emptyProfile);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [insights, setInsights] = useState(null);
   const [transactionCount, setTransactionCount] = useState(0);
+  const profileStorageKey = useMemo(() => `${PROFILE_STORAGE_KEY}:${user?.id || user?.email || "anonymous"}`, [user?.email, user?.id]);
 
   useEffect(() => {
     void loadProfile();
-  }, []);
+  }, [profileStorageKey]);
 
   useFocusEffect(
     useCallback(() => {
@@ -85,7 +81,8 @@ export function ProfileHomeScreen({ navigation, onLogout }: Props) {
 
   const loadProfile = async () => {
     try {
-      const savedProfile = await AsyncStorage.getItem(PROFILE_STORAGE_KEY);
+      setProfile(emptyProfile);
+      const savedProfile = await AsyncStorage.getItem(profileStorageKey);
       if (savedProfile) {
         setProfile({ ...emptyProfile, ...JSON.parse(savedProfile) });
       }
@@ -105,9 +102,8 @@ export function ProfileHomeScreen({ navigation, onLogout }: Props) {
         displayName: profile.displayName.trim(),
         phone: profile.phone.trim(),
         city: profile.city.trim(),
-        notes: profile.notes.trim(),
       };
-      await AsyncStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(normalizedProfile));
+      await AsyncStorage.setItem(profileStorageKey, JSON.stringify(normalizedProfile));
       setProfile(normalizedProfile);
       setIsEditing(false);
     } catch (error) {
@@ -127,7 +123,7 @@ export function ProfileHomeScreen({ navigation, onLogout }: Props) {
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 18, paddingBottom: 118 + insets.bottom }]} showsVerticalScrollIndicator={false}>
         <View style={styles.topBar}>
           <Text style={[styles.title, { color: colors.text }]}>Профиль</Text>
           <Pressable
@@ -158,8 +154,8 @@ export function ProfileHomeScreen({ navigation, onLogout }: Props) {
           </View>
 
           <View style={styles.statsGrid}>
-            <Metric label="Доход" value={formatCurrency(summary?.totalIncome)} />
-            <Metric label="Расходы" value={formatCurrency(summary?.totalExpenses)} />
+            <Metric label="Доход" value={formatMoney(summary?.totalIncome)} />
+            <Metric label="Расходы" value={formatMoney(summary?.totalExpenses)} />
             <Metric label="Сбережения" value={`${savingsRate}%`} />
           </View>
         </LinearGradient>
@@ -175,7 +171,6 @@ export function ProfileHomeScreen({ navigation, onLogout }: Props) {
               <ProfileInput label="Имя" placeholder="Например, Даниил" value={profile.displayName} onChangeText={(value) => updateField("displayName", value)} />
               <ProfileInput label="Телефон" placeholder="+7..." value={profile.phone} onChangeText={(value) => updateField("phone", value)} keyboardType="phone-pad" />
               <ProfileInput label="Город" placeholder="Ваш город" value={profile.city} onChangeText={(value) => updateField("city", value)} />
-              <ProfileInput label="Заметка" placeholder="Короткая заметка для себя" value={profile.notes} onChangeText={(value) => updateField("notes", value)} multiline />
               <View style={styles.actionRow}>
                 <Pressable style={[styles.secondaryButton, { borderColor: colors.border }]} onPress={() => setIsEditing(false)}>
                   <Text style={[styles.secondaryButtonText, { color: colors.textSecondary }]}>Отмена</Text>
@@ -191,7 +186,6 @@ export function ProfileHomeScreen({ navigation, onLogout }: Props) {
             <View style={styles.fields}>
               <ProfileField icon="phone" label="Телефон" value={profile.phone || "Не указан"} />
               <ProfileField icon="map-pin" label="Город" value={profile.city || "Не указан"} />
-              <ProfileField icon="file-text" label="Заметка" value={profile.notes || "Нет заметки"} />
             </View>
           )}
         </View>
@@ -209,7 +203,7 @@ export function ProfileHomeScreen({ navigation, onLogout }: Props) {
           </View>
           <View style={styles.quickStats}>
             <SmallStat icon="list" label="Операций" value={String(transactionCount || summary?.transactionCount || 0)} />
-            <SmallStat icon="trending-up" label="Чистый поток" value={formatCurrency(summary?.netSavings)} />
+            <SmallStat icon="trending-up" label="Чистый поток" value={formatMoney(summary?.netSavings)} />
           </View>
         </View>
 
@@ -313,8 +307,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: 20,
-    paddingBottom: 118,
+    paddingHorizontal: 20,
     gap: 16,
   },
   topBar: {

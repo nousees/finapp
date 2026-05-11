@@ -38,7 +38,7 @@ def load_whisper_model(enable_real_models: bool, model_path: str) -> WhisperMode
             import whisper
 
             path = Path(model_path)
-            model_ref = str(path) if path.exists() else model_path
+            model_ref = str(path) if path.exists() else "large-v3"
             engine = whisper.load_model(model_ref)
             return WhisperModel(version="whisper-large-v3", real=True, engine=engine)
         except Exception:

@@ -12,12 +12,17 @@ import { TransactionsStackNavigator } from "./stacks/TransactionsStack";
 import { BudgetsStackNavigator } from "./stacks/BudgetsStack";
 import { GoalsStackNavigator } from "./stacks/GoalsStack";
 import { ProfileStackNavigator } from "./stacks/ProfileStack";
+import { useAppSettings } from "@shared/settings/AppSettingsContext";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
 
 const Tab = createBottomTabNavigator();
 
 export function AppNavigator({ onLogout }: { onLogout?: () => void }) {
   const { colors, gradients, isDark } = useAppTheme();
+  const { settings } = useAppSettings();
+  const labels = settings.language === "en"
+    ? { home: "Home", transactions: "Transactions", budgets: "Budgets", goals: "Goals", profile: "Profile" }
+    : { home: "Главная", transactions: "Транзакции", budgets: "Бюджеты", goals: "Цели", profile: "Профиль" };
   const navigationTheme = useMemo(
     () => ({
       ...(isDark ? DarkTheme : DefaultTheme),
@@ -54,11 +59,11 @@ export function AppNavigator({ onLogout }: { onLogout?: () => void }) {
         })}
         tabBar={(props) => <FinAppTabBar {...props} />}
       >
-        <Tab.Screen name="Home" component={DashboardStackNavigator} options={{ title: "\u0413\u043B\u0430\u0432\u043D\u0430\u044F" }} />
-        <Tab.Screen name="Transactions" component={TransactionsStackNavigator} options={{ title: "\u0422\u0440\u0430\u043D\u0437\u0430\u043A\u0446\u0438\u0438" }} />
-        <Tab.Screen name="Budgets" component={BudgetsStackNavigator} options={{ title: "\u0411\u044E\u0434\u0436\u0435\u0442\u044B" }} />
-        <Tab.Screen name="Goals" component={GoalsStackNavigator} options={{ title: "\u0426\u0435\u043B\u0438" }} />
-        <Tab.Screen name="Profile" options={{ title: "\u041F\u0440\u043E\u0444\u0438\u043B\u044C" }}>
+        <Tab.Screen name="Home" component={DashboardStackNavigator} options={{ title: labels.home }} />
+        <Tab.Screen name="Transactions" component={TransactionsStackNavigator} options={{ title: labels.transactions }} />
+        <Tab.Screen name="Budgets" component={BudgetsStackNavigator} options={{ title: labels.budgets }} />
+        <Tab.Screen name="Goals" component={GoalsStackNavigator} options={{ title: labels.goals }} />
+        <Tab.Screen name="Profile" options={{ title: labels.profile }}>
           {() => <ProfileStackNavigator onLogout={onLogout} />}
         </Tab.Screen>
       </Tab.Navigator>
@@ -82,7 +87,8 @@ function FinAppTabBar({ state, descriptors, navigation }) {
     return () => animation.stop();
   }, [pulse]);
 
-  const renderTab = (route, index) => {
+  const renderTab = (route) => {
+    const index = state.routes.findIndex((item) => item.key === route.key);
     const isFocused = state.index === index;
     const options = descriptors[route.key].options;
     const label = options.title ?? route.name;
@@ -107,12 +113,13 @@ function FinAppTabBar({ state, descriptors, navigation }) {
     );
   };
 
-  const left = state.routes.slice(0, 2);
-  const right = state.routes.slice(2);
+  const visibleRoutes = state.routes.filter((route) => route.name !== "Profile");
+  const left = visibleRoutes.slice(0, 2);
+  const right = visibleRoutes.slice(2);
 
   return (
     <View style={[styles.tabBar, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
-      {left.map((route, index) => renderTab(route, index))}
+      {left.map((route) => renderTab(route))}
       <View style={styles.micSlot}>
         <Animated.View style={{ transform: [{ scale: pulse }] }}>
           <Pressable
@@ -127,7 +134,7 @@ function FinAppTabBar({ state, descriptors, navigation }) {
         </Animated.View>
         <View style={[styles.micGlow, { backgroundColor: `${colors.primary}30` }]} />
       </View>
-      {right.map((route, offset) => renderTab(route, offset + 2))}
+      {right.map((route) => renderTab(route))}
       <InputModeSheet
         visible={sheetVisible}
         onClose={() => setSheetVisible(false)}

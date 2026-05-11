@@ -13,6 +13,9 @@ export type HomeStackParamList = {
 
 export type TransactionsStackParamList = {
   TransactionsList: undefined;
+  TransactionDetail: {
+    transaction: import("@shared/api/transactions").ApiTransaction;
+  };
   TransactionCreate: undefined;
   VoiceCapture: undefined;
   ImportCenter: undefined;

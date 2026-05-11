@@ -11,6 +11,7 @@ import { DashboardStackParamList } from "@app/navigation/types";
 import { getFinancialInsights, listRecommendations } from "@shared/api/analysis";
 import { listTransactions } from "@shared/api/transactions";
 import { useUser } from "@shared/contexts/UserContext";
+import { useAppSettings } from "@shared/settings/AppSettingsContext";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
 
 type Props = NativeStackScreenProps<DashboardStackParamList, "DashboardHome">;
@@ -24,6 +25,7 @@ const quickActions = [
 
 export function DashboardHomeScreen({ navigation }: Props) {
   const { colors, gradients } = useAppTheme();
+  const { formatMoney } = useAppSettings();
   const { user } = useUser();
   const insets = useSafeAreaInsets();
   const [insights, setInsights] = useState(null);
@@ -105,20 +107,20 @@ export function DashboardHomeScreen({ navigation }: Props) {
             <Text style={styles.greeting}>Доброе утро</Text>
             <Text style={styles.username} numberOfLines={1}>{user?.full_name || user?.email || "FinApp"}</Text>
           </View>
-          <View style={styles.avatar}>
+          <Pressable style={styles.avatar} onPress={() => navigation.getParent()?.navigate("Profile")}>
             <Text style={styles.avatarText}>{initials(user?.full_name || user?.email)}</Text>
-          </View>
+          </Pressable>
         </View>
 
         <View style={styles.balanceBlock}>
           <Text style={styles.balanceLabel}>Общий баланс</Text>
-          <Text style={styles.balanceAmount}>{formatMoney(balance, true)}</Text>
+          <Text style={styles.balanceAmount}>{formatMoney(balance, { cents: true })}</Text>
         </View>
 
         <View style={styles.statsRow}>
-          <Metric icon="arrow-down-left" label="Доходы" value={formatShort(income)} color="#A8E6CF" />
+          <Metric icon="arrow-down-left" label="Доходы" value={formatShort(income, formatMoney)} color="#A8E6CF" />
           <View style={styles.statDivider} />
-          <Metric icon="arrow-up-right" label="Расходы" value={formatShort(expense)} color="#FCA5A5" />
+          <Metric icon="arrow-up-right" label="Расходы" value={formatShort(expense, formatMoney)} color="#FCA5A5" />
           <View style={styles.statDivider} />
           <Metric icon="percent" label="Сбережения" value={`${savingsRate}%`} color={savingsRate >= 0 ? "#A8E6CF" : "#FCA5A5"} />
         </View>
@@ -153,7 +155,7 @@ export function DashboardHomeScreen({ navigation }: Props) {
         </View>
         <View style={[styles.chartCard, { backgroundColor: colors.surface }]}>
           <LinearGradient colors={gradients.success} style={styles.chartGradient}>
-            <DonutChart data={categories} total={expense} />
+            <DonutChart data={categories} total={expense} formatMoney={formatMoney} />
           </LinearGradient>
           <View style={styles.legend}>
             {categories.length === 0 ? (
@@ -222,7 +224,7 @@ function SectionTitle({ title }: { title: string }) {
   return <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>;
 }
 
-function DonutChart({ data, total }) {
+function DonutChart({ data, total, formatMoney }) {
   const size = 132;
   const stroke = 16;
   const radius = (size - stroke) / 2;
@@ -242,7 +244,7 @@ function DonutChart({ data, total }) {
         })}
       </Svg>
       <View style={styles.donutCenter}>
-        <Text style={styles.donutValue}>{formatShort(total)}</Text>
+        <Text style={styles.donutValue}>{formatShort(total, formatMoney)}</Text>
         <Text style={styles.donutLabel}>расходы</Text>
       </View>
     </View>
@@ -251,6 +253,7 @@ function DonutChart({ data, total }) {
 
 function TransactionRow({ item }) {
   const { colors } = useAppTheme();
+  const { formatMoney } = useAppSettings();
   const isIncome = item.type === "INCOME";
   return (
     <View style={[styles.txRow, { backgroundColor: colors.surface }]}>
@@ -261,7 +264,7 @@ function TransactionRow({ item }) {
         <Text style={[styles.txTitle, { color: colors.text }]} numberOfLines={1}>{item.description || item.original_description || "Транзакция"}</Text>
         <Text style={[styles.txMeta, { color: colors.textMuted }]}>{isIncome ? "Доход" : item.is_recurring ? "Подписка" : "Расход"}</Text>
       </View>
-      <Text style={[styles.txAmount, { color: isIncome ? colors.success : colors.danger }]}>{formatMoney(item.amount, false, isIncome)}</Text>
+      <Text style={[styles.txAmount, { color: isIncome ? colors.success : colors.danger }]}>{formatMoney(isIncome ? item.amount : -item.amount, { sign: true })}</Text>
     </View>
   );
 }
@@ -270,17 +273,9 @@ function initials(value?: string) {
   return (value || "FA").trim().slice(0, 2).toUpperCase();
 }
 
-function formatMoney(value: number, cents = false, positive = true) {
+function formatShort(value: number, formatMoney: (value: number) => string) {
   const amount = Math.abs(Number(value || 0));
-  const sign = positive && value > 0 ? "+" : value < 0 ? "-" : "";
-  return `${sign}${amount.toLocaleString("ru-RU", { minimumFractionDigits: cents ? 2 : 0, maximumFractionDigits: cents ? 2 : 0 })} ₽`;
-}
-
-function formatShort(value: number) {
-  const amount = Math.abs(Number(value || 0));
-  if (amount >= 1000000) return `${(amount / 1000000).toFixed(1)} млн ₽`;
-  if (amount >= 1000) return `${(amount / 1000).toFixed(1)} тыс. ₽`;
-  return `${amount.toFixed(0)} ₽`;
+  return formatMoney(amount);
 }
 
 const palette = ["#F97316", "#3B82F6", "#EC4899", "#8B5CF6", "#10B981"];

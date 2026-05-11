@@ -14,7 +14,10 @@ class CategoryModel:
     def predict(self, transaction: dict[str, Any]) -> dict[str, Any] | None:
         if not self.real or self.engine is None:
             return None
-        return self.engine.predict_category(transaction)
+        try:
+            return self.engine.predict_category(transaction)
+        except Exception:
+            return None
 
 
 def load_category_model(enable_real_models: bool, model_path: str) -> CategoryModel:

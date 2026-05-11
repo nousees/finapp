@@ -3,31 +3,42 @@ import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
-import { addFundsToGoal, createGoal, getFinancialInsights, listGoals } from "@shared/api/analysis";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { addFundsToGoal, createGoal, deleteGoal, getFinancialInsights, listGoals, updateGoal } from "@shared/api/analysis";
+import { listTransactions } from "@shared/api/transactions";
+import { useAppSettings } from "@shared/settings/AppSettingsContext";
+import { DatePickerField, formatISODate, tomorrow } from "@shared/ui/DatePickerField";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
 
 const goalColors = ["#10B981", "#8B5CF6", "#3B82F6", "#F97316", "#EC4899", "#F59E0B"];
 const goalIcons = ["shield", "map-pin", "monitor", "trending-up", "star", "gift"];
+const emptyForm = { id: null, name: "", targetAmount: "", deadline: formatISODate(tomorrow()), icon: goalIcons[0], color: goalColors[0] };
 
 export function GoalsScreen() {
   const { colors, gradients } = useAppTheme();
+  const { formatMoney } = useAppSettings();
+  const insets = useSafeAreaInsets();
   const [goals, setGoals] = useState([]);
   const [insights, setInsights] = useState(null);
+  const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
-  const [name, setName] = useState("");
-  const [targetAmount, setTargetAmount] = useState("");
-  const [deadline, setDeadline] = useState("2026-12-31");
+  const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
       setError(null);
-      const [goalItems, insightData] = await Promise.all([listGoals(), getFinancialInsights()]);
-      setGoals(goalItems || []);
+      const [goalItems, insightData, transactionItems] = await Promise.all([
+        listGoals(),
+        getFinancialInsights(),
+        listTransactions({ limit: 500 }).catch(() => []),
+      ]);
+      setGoals(Array.isArray(goalItems) ? goalItems : []);
       setInsights(insightData);
+      setTransactions(Array.isArray(transactionItems) ? transactionItems : []);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить цели");
     } finally {
@@ -35,20 +46,21 @@ export function GoalsScreen() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => {
-    setLoading(true);
-    void loadData();
-  }, [loadData]));
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      void loadData();
+    }, [loadData]),
+  );
 
   const cards = useMemo(() => {
-    const insightMap = new Map((insights?.goals || []).map((item) => [item.goalId, item]));
-    return (goals || []).map((goal, index) => {
+    const insightMap = new Map((Array.isArray(insights?.goals) ? insights.goals : []).map((item) => [item.goalId, item]));
+    return goals.map((goal, index) => {
       const insight = insightMap.get(goal.id);
       const target = Number(insight?.targetAmount ?? goal.targetAmount ?? 0);
       const current = Number(insight?.currentAmount ?? goal.currentAmount ?? 0);
       return {
-        id: goal.id,
-        name: goal.name,
+        ...goal,
         target,
         current,
         deadline: goal.deadline,
@@ -65,51 +77,120 @@ export function GoalsScreen() {
   const totalSaved = cards.reduce((sum, item) => sum + item.current, 0);
   const totalTarget = cards.reduce((sum, item) => sum + item.target, 0);
   const totalProgress = totalTarget > 0 ? Math.round((totalSaved / totalTarget) * 100) : 0;
+  const transactionBalance = transactions.reduce((sum, item) => {
+    const amount = Number(item.amount || 0);
+    return item.type === "INCOME" ? sum + amount : sum - amount;
+  }, 0);
+  const summaryBalance = Number(insights?.summary?.netSavings ?? NaN);
+  const availableBalance = Math.max(0, Number.isFinite(summaryBalance) ? summaryBalance : transactionBalance, transactionBalance);
+
+  const openCreate = () => {
+    const index = goals.length % goalColors.length;
+    setForm({ ...emptyForm, icon: goalIcons[index], color: goalColors[index] });
+    setModalVisible(true);
+  };
+
+  const openEdit = (goal) => {
+    setForm({
+      id: goal.id,
+      name: goal.name || "",
+      targetAmount: String(Number(goal.target || goal.targetAmount || 0)),
+      deadline: String(goal.deadline || formatISODate(tomorrow())).slice(0, 10),
+      icon: goal.icon || goalIcons[0],
+      color: goal.color || goalColors[0],
+    });
+    setModalVisible(true);
+  };
+
+  const closeForm = () => {
+    setModalVisible(false);
+    setForm(emptyForm);
+    setError(null);
+  };
 
   const saveGoal = async () => {
-    const parsed = Number(targetAmount.replace(",", "."));
-    if (!name.trim() || !parsed || !deadline.trim()) {
+    const parsed = Number(form.targetAmount.replace(",", "."));
+    const selectedDeadline = parseISODate(form.deadline);
+    if (!form.name.trim() || !parsed || !form.deadline.trim()) {
       setError("Укажите название, сумму и дату цели.");
+      return;
+    }
+    if (!selectedDeadline || selectedDeadline < tomorrow()) {
+      setError("Для цели можно выбрать только будущую дату.");
+      return;
+    }
+    const payload = {
+      name: form.name.trim(),
+      targetAmount: parsed,
+      deadline: form.deadline,
+      goalType: "SAVING",
+      priority: 1,
+      currency: "RUB",
+      icon: form.icon,
+      color: form.color,
+    };
+
+    try {
+      setError(null);
+      if (form.id) {
+        await updateGoal(form.id, payload);
+      } else {
+        await createGoal(payload);
+      }
+      closeForm();
+      await loadData();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Не удалось сохранить цель");
+    }
+  };
+
+  const contribute = async (goal, amount: number) => {
+    const remaining = Math.max(0, goal.target - goal.current);
+    const safeAmount = Math.min(amount, remaining);
+    if (safeAmount <= 0) {
+      setError("Цель уже закрыта.");
+      return;
+    }
+    if (safeAmount > availableBalance) {
+      Alert.alert("Недостаточно средств", `Доступно для целей: ${formatMoney(availableBalance)}. Пополнение не выполнено.`);
       return;
     }
     try {
       setError(null);
-      const index = goals.length % goalColors.length;
-      await createGoal({
-        name: name.trim(),
-        targetAmount: parsed,
-        deadline,
-        goalType: "SAVING",
-        priority: 1,
-        currency: "RUB",
-        icon: goalIcons[index],
-        color: goalColors[index],
-      });
-      setName("");
-      setTargetAmount("");
-      setDeadline("2026-12-31");
-      setModalVisible(false);
-      await loadData();
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Не удалось создать цель");
-    }
-  };
-
-  const contribute = async (goalId: string, amount: number) => {
-    try {
-      await addFundsToGoal(goalId, amount);
+      await addFundsToGoal(goal.id, safeAmount);
       await loadData();
     } catch (fundError) {
       setError(fundError instanceof Error ? fundError.message : "Не удалось пополнить цель");
     }
   };
 
+  const removeGoal = async (id: string) => {
+    Alert.alert("Удалить цель?", "Прогресс цели будет удалён.", [
+      { text: "Отмена", style: "cancel" },
+      {
+        text: "Удалить",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await deleteGoal(id);
+            await loadData();
+          } catch (deleteError) {
+            setError(deleteError instanceof Error ? deleteError.message : "Не удалось удалить цель");
+          }
+        },
+      },
+    ]);
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 18, paddingBottom: 120 + insets.bottom }]} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <Text style={[styles.pageTitle, { color: colors.text }]}>Цели</Text>
-          <Pressable onPress={() => setModalVisible(true)}>
+          <View>
+            <Text style={[styles.pageTitle, { color: colors.text }]}>Цели</Text>
+            <Text style={[styles.balanceText, { color: colors.textMuted }]}>Доступно для целей: {formatMoney(availableBalance)}</Text>
+          </View>
+          <Pressable onPress={openCreate}>
             <LinearGradient colors={gradients.successDeep} style={styles.addButton}>
               <Feather name="plus" size={20} color="#FFFFFF" />
             </LinearGradient>
@@ -134,23 +215,29 @@ export function GoalsScreen() {
         {loading ? <ActivityIndicator color={colors.primary} size="large" style={styles.loader} /> : null}
 
         {active.length > 0 ? <Text style={[styles.sectionTitle, { color: colors.text }]}>В процессе</Text> : null}
-        {active.map((goal) => <GoalCard key={goal.id} goal={goal} onContribute={contribute} />)}
+        {active.map((goal) => <GoalCard key={goal.id} goal={goal} onEdit={() => openEdit(goal)} onDelete={() => removeGoal(goal.id)} onContribute={(amount) => contribute(goal, amount)} />)}
         {completed.length > 0 ? <Text style={[styles.sectionTitle, { color: colors.text }]}>Выполненные</Text> : null}
-        {completed.map((goal) => <GoalCard key={goal.id} goal={goal} onContribute={contribute} />)}
+        {completed.map((goal) => <GoalCard key={goal.id} goal={goal} onEdit={() => openEdit(goal)} onDelete={() => removeGoal(goal.id)} onContribute={(amount) => contribute(goal, amount)} />)}
         {cards.length === 0 && !loading ? <Text style={[styles.empty, { color: colors.textMuted }]}>Целей пока нет. Создайте первую финансовую цель.</Text> : null}
       </ScrollView>
 
-      <Modal visible={modalVisible} transparent animationType="slide" onRequestClose={() => setModalVisible(false)}>
-        <Pressable style={styles.overlay} onPress={() => setModalVisible(false)}>
-          <Pressable style={[styles.sheet, { backgroundColor: colors.background }]} onPress={(event) => event.stopPropagation()}>
+      <Modal visible={modalVisible} transparent animationType="slide" onRequestClose={closeForm}>
+        <Pressable style={styles.overlay} onPress={closeForm}>
+          <Pressable style={[styles.sheet, { backgroundColor: colors.background, paddingBottom: 20 + insets.bottom }]} onPress={(event) => event.stopPropagation()}>
             <View style={[styles.handle, { backgroundColor: colors.border }]} />
-            <Text style={[styles.sheetTitle, { color: colors.text }]}>Новая цель</Text>
-            <Field label="Название" placeholder="Например, резервный фонд" value={name} onChangeText={setName} />
-            <Field label="Целевая сумма" placeholder="100000" value={targetAmount} onChangeText={setTargetAmount} keyboardType="numeric" />
-            <Field label="Дата завершения" placeholder="2026-12-31" value={deadline} onChangeText={setDeadline} />
+            <Text style={[styles.sheetTitle, { color: colors.text }]}>{form.id ? "Редактировать цель" : "Новая цель"}</Text>
+            <Field label="Название" placeholder="Например, резервный фонд" value={form.name} onChangeText={(value) => setForm((current) => ({ ...current, name: value }))} />
+            <Field label="Целевая сумма" placeholder="100000" value={form.targetAmount} onChangeText={(value) => setForm((current) => ({ ...current, targetAmount: value }))} keyboardType="numeric" />
+            <DatePickerField
+              label="Дата завершения"
+              value={form.deadline}
+              onChange={(value) => setForm((current) => ({ ...current, deadline: value }))}
+              minimumDate={tomorrow()}
+              helper="Для целей доступна только будущая дата."
+            />
             <Pressable onPress={saveGoal}>
               <LinearGradient colors={gradients.successDeep} style={styles.createButton}>
-                <Text style={styles.createText}>Создать цель</Text>
+                <Text style={styles.createText}>{form.id ? "Сохранить изменения" : "Создать цель"}</Text>
               </LinearGradient>
             </Pressable>
           </Pressable>
@@ -160,13 +247,15 @@ export function GoalsScreen() {
   );
 }
 
-function GoalCard({ goal, onContribute }) {
+function GoalCard({ goal, onEdit, onDelete, onContribute }) {
   const { colors } = useAppTheme();
+  const { formatMoney } = useAppSettings();
+  const remaining = Math.max(0, goal.target - goal.current);
   return (
-    <View style={[styles.goalCard, { backgroundColor: colors.surface }]}>
+    <Pressable style={[styles.goalCard, { backgroundColor: colors.surface }]} onPress={onEdit}>
       <View style={styles.goalTop}>
         <View style={[styles.goalIcon, { backgroundColor: `${goal.color}20` }]}>
-          <Feather name={goal.icon} size={20} color={goal.color} />
+          <Feather name={goal.icon as any} size={20} color={goal.color} />
         </View>
         <View style={styles.goalInfo}>
           <Text style={[styles.goalName, { color: colors.text }]}>{goal.name}</Text>
@@ -174,16 +263,34 @@ function GoalCard({ goal, onContribute }) {
           <Text style={[styles.goalNumbers, { color: colors.textMuted }]}>{goal.deadline}</Text>
         </View>
         <Progress value={goal.percent} color={goal.color} />
+        <Pressable
+          onPress={(event) => {
+            event.stopPropagation();
+            onDelete();
+          }}
+          style={[styles.deleteButton, { backgroundColor: colors.surfaceAlt }]}
+        >
+          <Feather name="trash-2" size={15} color={colors.danger} />
+        </Pressable>
       </View>
       {goal.message ? <Text style={[styles.goalMessage, { color: colors.primary }]}>{goal.message}</Text> : null}
-      <View style={styles.contributeRow}>
-        {[1000, 5000].map((amount) => (
-          <Pressable key={amount} onPress={() => onContribute(goal.id, amount)} style={[styles.contributeButton, { borderColor: colors.borderStrong }]}>
-            <Text style={[styles.contributeText, { color: colors.primary }]}>+ {formatMoney(amount)}</Text>
-          </Pressable>
-        ))}
-      </View>
-    </View>
+      {remaining > 0 ? (
+        <View style={styles.contributeRow}>
+          {[1000, 5000].map((amount) => (
+            <Pressable
+              key={amount}
+              onPress={(event) => {
+                event.stopPropagation();
+                onContribute(amount);
+              }}
+              style={[styles.contributeButton, { borderColor: colors.borderStrong }]}
+            >
+              <Text style={[styles.contributeText, { color: colors.primary }]}>+ {formatMoney(Math.min(amount, remaining))}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -223,15 +330,18 @@ function Field({ label, ...props }) {
   );
 }
 
-function formatMoney(value: number) {
-  return `${Number(value || 0).toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ₽`;
+function parseISODate(value: string): Date | null {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 120 },
+  content: { paddingHorizontal: 20 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   pageTitle: { fontSize: 28, fontFamily: "Inter_700Bold" },
+  balanceText: { fontSize: 13, fontFamily: "Inter_500Medium", marginTop: 2 },
   addButton: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
   overviewCard: { borderRadius: 20, padding: 22, marginBottom: 24 },
   overviewLabel: { fontSize: 12, color: "rgba(255,255,255,0.75)", fontFamily: "Inter_400Regular", marginBottom: 6 },
@@ -254,6 +364,7 @@ const styles = StyleSheet.create({
   goalName: { fontSize: 16, fontFamily: "Inter_700Bold" },
   goalNumbers: { fontSize: 12, fontFamily: "Inter_500Medium" },
   goalMessage: { fontSize: 13, lineHeight: 19, fontFamily: "Inter_600SemiBold" },
+  deleteButton: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
   progressWrap: { width: 72, height: 72, alignItems: "center", justifyContent: "center" },
   progressText: { position: "absolute", fontSize: 13, fontFamily: "Inter_700Bold" },
   contributeRow: { flexDirection: "row", gap: 8 },

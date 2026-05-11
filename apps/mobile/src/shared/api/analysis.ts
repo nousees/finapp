@@ -305,6 +305,24 @@ export async function createBudget(data: CreateBudgetRequest): Promise<Budget> {
   return response.data;
 }
 
+export async function updateBudget(budgetId: string, data: CreateBudgetRequest): Promise<Budget> {
+  const response = await requestJson<ApiEnvelope<Budget>>({
+    baseUrl: apiConfig.analysisBaseUrl,
+    path: `/api/v1/budgets/${budgetId}`,
+    method: "PUT",
+    body: data,
+  });
+  return response.data;
+}
+
+export async function deleteBudget(budgetId: string): Promise<void> {
+  await requestJson<ApiEnvelope<null>>({
+    baseUrl: apiConfig.analysisBaseUrl,
+    path: `/api/v1/budgets/${budgetId}`,
+    method: "DELETE",
+  });
+}
+
 export async function listGoals(): Promise<Goal[]> {
   const response = await requestJson<ApiEnvelope<Goal[]>>({
     baseUrl: apiConfig.analysisBaseUrl,
@@ -322,6 +340,24 @@ export async function createGoal(data: CreateGoalRequest): Promise<Goal> {
     body: data,
   });
   return response.data;
+}
+
+export async function updateGoal(goalId: string, data: CreateGoalRequest): Promise<Goal> {
+  const response = await requestJson<ApiEnvelope<Goal>>({
+    baseUrl: apiConfig.analysisBaseUrl,
+    path: `/api/v1/goals/${goalId}`,
+    method: "PUT",
+    body: data,
+  });
+  return response.data;
+}
+
+export async function deleteGoal(goalId: string): Promise<void> {
+  await requestJson<ApiEnvelope<null>>({
+    baseUrl: apiConfig.analysisBaseUrl,
+    path: `/api/v1/goals/${goalId}`,
+    method: "DELETE",
+  });
 }
 
 export async function addFundsToGoal(goalId: string, amount: number): Promise<Goal> {

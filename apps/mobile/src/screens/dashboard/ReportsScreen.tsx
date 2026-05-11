@@ -8,12 +8,14 @@ import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, V
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DashboardStackParamList } from "@app/navigation/types";
 import { generateRecommendations, getFinancialInsights, listRecommendations, listReports } from "@shared/api/analysis";
+import { useAppSettings } from "@shared/settings/AppSettingsContext";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
 
 type Props = NativeStackScreenProps<DashboardStackParamList, "Reports">;
 
 export function ReportsScreen({ navigation }: Props) {
   const { colors, gradients } = useAppTheme();
+  const { formatMoney } = useAppSettings();
   const insets = useSafeAreaInsets();
   const [insights, setInsights] = useState(null);
   const [reports, setReports] = useState([]);
@@ -199,10 +201,6 @@ function InfoCard({ icon, title, text }) {
 function EmptyText({ text }) {
   const { colors } = useAppTheme();
   return <Text style={[styles.empty, { color: colors.textMuted }]}>{text}</Text>;
-}
-
-function formatMoney(value) {
-  return `${Number(value || 0).toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ₽`;
 }
 
 const palette = ["#F97316", "#3B82F6", "#EC4899", "#8B5CF6", "#10B981", "#F59E0B"];

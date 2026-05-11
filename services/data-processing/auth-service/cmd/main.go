@@ -9,6 +9,7 @@ import (
 	"finapp/services/data-processing/auth-service/pkg/jwt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -29,9 +30,11 @@ func main() {
 	users := repository.NewUsers(db.Pool)
 	signUpUsecase := usecases.NewSignUpUsecase(users)
 	signInUsecase := usecases.NewSignInUsecase(users, tokens)
+	changePasswordUsecase := usecases.NewChangePasswordUsecase(users)
 
 	signInController := controllers.NewSignInController(*signInUsecase)
 	signUpController := controllers.NewSignUpController(*signUpUsecase, *signInUsecase)
+	changePasswordController := controllers.NewChangePasswordController(*changePasswordUsecase)
 	refreshController := controllers.NewRefreshController(tokens)
 
 	router := gin.Default()
@@ -54,6 +57,23 @@ func main() {
 	router.POST("/sign-up", signUpController.SignUp)
 	router.POST("/sign-in", signInController.SignIn)
 	router.POST("/refresh", refreshController.Refresh)
+	router.POST("/change-password", func(c *gin.Context) {
+		header := c.GetHeader("Authorization")
+		tokenString := strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
+		if tokenString == "" || tokenString == header {
+			c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": "missing bearer token"})
+			c.Abort()
+			return
+		}
+		userID, err := tokens.Parse(tokenString, "access")
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": "invalid token", "error": err.Error()})
+			c.Abort()
+			return
+		}
+		c.Set("user_id", userID)
+		changePasswordController.ChangePassword(c)
+	})
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "service": "auth"})
 	})

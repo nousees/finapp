@@ -182,6 +182,8 @@ services:
     build:
       context: ./services/ml-service
       dockerfile: Dockerfile
+      args:
+        INSTALL_REAL_MODEL_DEPS: ${INSTALL_REAL_MODEL_DEPS:-true}
     container_name: finapp-ml-service
     environment:
       APP_ENV: local
@@ -197,6 +199,8 @@ services:
       REDIS_URL: redis://redis:6379/0
     ports:
       - "8000:8000"
+    volumes:
+      - ./services/ml-service/ml_models:/app/ml_models:ro
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 15s

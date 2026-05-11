@@ -32,6 +32,7 @@ func (s *SignUpUsecase) SignUp(sup entities.SignUpInput) error {
 		Email:        sup.Email,
 		PasswordHash: hashPass,
 		FullName:     sup.FullName,
+		Phone:        sup.Phone,
 	}
 
 	return s.Users.Create(user)

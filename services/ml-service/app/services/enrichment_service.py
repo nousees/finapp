@@ -10,20 +10,40 @@ class EnrichmentService:
         self.categorization_service = categorization_service
 
     def enrich(self, text: str) -> EnrichResponse:
-        ner = self.ner_service.extract(text)
-        category = self.categorization_service.categorize_values(
-            description=ner.description or ner.raw_text,
-            amount=ner.amount,
-            merchant=ner.merchant,
-            operation_type=ner.operation_type,
-        )
-        overall = combine_confidence(ner.confidence, category.confidence)
-        needs_review = (
-            ner.confidence < 0.75
-            or category.confidence < 0.8
-            or ner.amount is None
-            or ner.operation_type == "unknown"
-        )
+        try:
+            ner = self.ner_service.extract(text)
+            category = self.categorization_service.categorize_values(
+                description=ner.description or ner.raw_text,
+                amount=ner.amount,
+                merchant=ner.merchant,
+                operation_type=ner.operation_type,
+            )
+            overall = combine_confidence(ner.confidence, category.confidence)
+            needs_review = (
+                ner.confidence < 0.75
+                or category.confidence < 0.8
+                or ner.amount is None
+                or ner.operation_type == "unknown"
+            )
+        except Exception:
+            return EnrichResponse(
+                transaction=EnrichedTransaction(
+                    amount=None,
+                    currency="RUB",
+                    merchant=None,
+                    date=None,
+                    operation_type="unknown",
+                    description=text,
+                    category_code="other",
+                    category_name="Другое",
+                ),
+                confidence=ConfidenceBreakdown(ner=0.0, categorization=0.0, overall=0.0),
+                needs_review=True,
+                model_versions=ModelVersions(
+                    ner=self.ner_service.model_version,
+                    categorization=self.categorization_service.model_version,
+                ),
+            )
 
         return EnrichResponse(
             transaction=EnrichedTransaction(
