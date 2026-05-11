@@ -11,6 +11,7 @@ import { AppNavigator } from "./src/app/navigation/AppNavigator";
 import { ThemeProvider } from "./src/shared/theme/ThemeProvider";
 import { UserProvider } from "./src/shared/contexts/UserContext";
 import { apiConfig } from "./src/shared/api/config";
+import { ErrorBoundary } from "./src/shared/ui/ErrorBoundary";
 
 const AUTH_KEYS = ["access_token", "refresh_token", "user_data"];
 
@@ -119,7 +120,9 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
-        <AppContent />
+        <ErrorBoundary onError={(error, stack) => console.error("App error boundary:", error, stack)}>
+          <AppContent />
+        </ErrorBoundary>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

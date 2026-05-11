@@ -27,14 +27,37 @@ export type CreateTransactionPayload = {
   currency?: string;
 };
 
-export async function listTransactions(query?: string): Promise<ApiTransaction[]> {
-  const suffix = query?.trim() ? `?q=${encodeURIComponent(query.trim())}` : "";
+export async function listTransactions(params?: string | { q?: string; type?: "INCOME" | "EXPENSE" | "TRANSFER"; limit?: number; offset?: number }): Promise<ApiTransaction[]> {
+  const search = new URLSearchParams();
+  if (typeof params === "string") {
+    if (params.trim()) search.set("q", params.trim());
+  } else if (params) {
+    if (params.q?.trim()) search.set("q", params.q.trim());
+    if (params.type) search.set("type", params.type);
+    if (typeof params.limit === "number") search.set("limit", String(params.limit));
+    if (typeof params.offset === "number") search.set("offset", String(params.offset));
+  }
+  const suffix = search.toString() ? `?${search.toString()}` : "";
   const response = await requestJson<ListTransactionsResponse>({
     baseUrl: apiConfig.collectionBaseUrl,
     path: `/api/v1/transactions${suffix}`,
     method: "GET",
   });
   return response.transactions;
+}
+
+export type UpdateTransactionPayload = Partial<CreateTransactionPayload> & {
+  is_verified?: boolean;
+  category_id?: string | null;
+};
+
+export function updateTransaction(id: string, payload: UpdateTransactionPayload): Promise<ApiTransaction> {
+  return requestJson<ApiTransaction>({
+    baseUrl: apiConfig.collectionBaseUrl,
+    path: `/api/v1/transactions/${id}`,
+    method: "PATCH",
+    body: payload,
+  });
 }
 
 export function createTransaction(payload: CreateTransactionPayload): Promise<ApiTransaction> {

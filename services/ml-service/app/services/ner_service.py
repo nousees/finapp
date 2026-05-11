@@ -36,13 +36,14 @@ class NERService:
 
     def extract(self, text: str) -> NERExtractResponse:
         normalized = preprocess_text(text)
-        amount = extract_amount(normalized)
+        model_entities = self.model.extract_entities(normalized)
+        amount = extract_amount(model_entities.get("amount") or normalized)
         operation_type = self._extract_operation_type(normalized)
-        merchant = self._extract_merchant(normalized)
-        currency = extract_currency(normalized)
+        merchant = model_entities.get("merchant") or self._extract_merchant(normalized)
+        currency = extract_currency(model_entities.get("currency") or normalized)
         transaction_date = extract_date(normalized)
 
-        confidence = 0.9
+        confidence = 0.94 if self.model.real else 0.9
         if amount is None:
             confidence -= 0.25
         if operation_type == OperationType.unknown:

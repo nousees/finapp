@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     test_mode: bool = Field(default=True, alias="TEST_MODE")
     whisper_model_path: str = Field(default="/models/whisper-large-v3", alias="WHISPER_MODEL_PATH")
     ner_model_path: str = Field(default="/models/rubert-tiny-ner", alias="NER_MODEL_PATH")
-    category_model_path: str = Field(default="/models/category-ensemble", alias="CATEGORY_MODEL_PATH")
+    category_model_path: str = Field(default="/app/ml_models", alias="CATEGORY_MODEL_PATH")
     redis_url: str = Field(default="redis://redis:6379/0", alias="REDIS_URL")
     database_url: str = Field(default="postgresql://finapp:finapp@postgres:5432/finapp", alias="DATABASE_URL")
     cors_origins: list[str] = Field(default=["*"], alias="CORS_ORIGINS")

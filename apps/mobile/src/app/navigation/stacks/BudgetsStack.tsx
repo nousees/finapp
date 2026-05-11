@@ -11,7 +11,7 @@ export function BudgetsStackNavigator() {
 
   return (
     <Stack.Navigator screenOptions={defaultStackOptions}>
-      <Stack.Screen name="BudgetsHome" component={BudgetsScreen} options={{ title: "\u0411\u044E\u0434\u0436\u0435\u0442\u044B" }} />
+      <Stack.Screen name="BudgetsHome" component={BudgetsScreen} options={{ headerShown: false }} />
       <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: "\u0423\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u044F" }} />
     </Stack.Navigator>
   );

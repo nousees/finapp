@@ -1,0 +1,22 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.pyd
+
+# Local datasets and training outputs are not needed in the runtime image.
+catboost_info/
+examples/
+tests/
+*.csv
+*.json
+*.txt
+
+# Keep compact inference models at ml_models/*.pkl/*.cbm, but exclude
+# transformer checkpoints/training state from the default Docker context.
+ml_models/bert_finapp/
+ml_models/rubert_tiny_ner_finapp/
+ml_models/**/checkpoint-*/
+ml_models/**/*.pt
+ml_models/**/*.pth
+ml_models/**/*.safetensors

@@ -2,10 +2,12 @@ package com.finapp.repositories.shared;
 
 import com.finapp.models.shared.Recommendation;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -29,7 +31,8 @@ public interface RecommendationRepository extends JpaRepository<Recommendation, 
            "WHERE r.userId = :userId AND r.isApplied = false")
     Double getTotalPotentialSavings(@Param("userId") UUID userId);
     
-    @Query("UPDATE Recommendation r SET r.isApplied = true, r.appliedAt = CURRENT_TIMESTAMP " +
+    @Modifying
+    @Query("UPDATE Recommendation r SET r.isApplied = true, r.appliedAt = :appliedAt " +
            "WHERE r.id = :id AND r.userId = :userId")
-    void markAsApplied(@Param("id") UUID id, @Param("userId") UUID userId);
+    void markAsApplied(@Param("id") UUID id, @Param("userId") UUID userId, @Param("appliedAt") OffsetDateTime appliedAt);
 }

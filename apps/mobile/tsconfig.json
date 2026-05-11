@@ -23,6 +23,10 @@
     "**/*.tsx"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "FrontendTest-main",
+    "dist-check",
+    "dist-check-2",
+    "dist-check-3"
   ]
 }

@@ -188,11 +188,11 @@ services:
       APP_VERSION: 1.0.0
       LOG_LEVEL: INFO
       MAX_AUDIO_SIZE_MB: "25"
-      ENABLE_REAL_MODELS: "false"
-      TEST_MODE: "true"
-      WHISPER_MODEL_PATH: /models/whisper-large-v3
-      NER_MODEL_PATH: /models/rubert-tiny-ner
-      CATEGORY_MODEL_PATH: /models/category-ensemble
+      ENABLE_REAL_MODELS: "true"
+      TEST_MODE: "false"
+      WHISPER_MODEL_PATH: /app/ml_models/whisper-large-v3
+      NER_MODEL_PATH: /app/ml_models/rubert_tiny_ner_finapp
+      CATEGORY_MODEL_PATH: /app/ml_models
       DATABASE_URL: postgresql://finapp:finapp@postgres:5432/finapp
       REDIS_URL: redis://redis:6379/0
     ports:

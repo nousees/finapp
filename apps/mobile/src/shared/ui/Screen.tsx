@@ -16,8 +16,6 @@ export function Screen({ children, scroll = true, withGradient = true }: ScreenP
       {withGradient ? (
         <LinearGradient colors={screenGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
       ) : null}
-      <View style={[styles.glowTop, { backgroundColor: isDark ? "#1E293B66" : colors.surfaceAlt }]} />
-      <View style={[styles.glowRight, { backgroundColor: isDark ? "#22C55E1A" : "#DCFCE7" }]} />
       {scroll ? (
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           {content}
@@ -35,22 +33,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 92,
-  },
-  glowTop: {
-    position: "absolute",
-    width: 260,
-    height: 260,
-    top: -110,
-    left: -80,
-    borderRadius: 140,
-  },
-  glowRight: {
-    position: "absolute",
-    width: 210,
-    height: 210,
-    top: 34,
-    right: -90,
-    borderRadius: 120,
   },
   content: {
     padding: spacing.md,

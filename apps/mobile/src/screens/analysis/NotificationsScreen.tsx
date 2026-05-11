@@ -1,16 +1,14 @@
 // @ts-nocheck
-import React from "react";
-import { useCallback, useState } from "react";
+import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { useCallback, useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { getUnreadNotificationCount, listNotifications, listRecommendations, markNotificationsRead } from "@shared/api/analysis";
-import { Screen } from "@shared/ui/Screen";
-import { SectionCard } from "@shared/ui/SectionCard";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
-import { radius, spacing } from "@shared/theme/spacing";
 
 export function NotificationsScreen() {
-  const { colors } = useAppTheme();
+  const { colors, gradients } = useAppTheme();
   const [notifications, setNotifications] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -25,8 +23,8 @@ export function NotificationsScreen() {
         listRecommendations().catch(() => []),
         getUnreadNotificationCount().catch(() => 0),
       ]);
-      setNotifications(notificationItems);
-      setRecommendations(recommendationItems.slice(0, 5));
+      setNotifications(notificationItems || []);
+      setRecommendations((recommendationItems || []).slice(0, 5));
       setUnreadCount(unread);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить уведомления");
@@ -52,62 +50,92 @@ export function NotificationsScreen() {
   };
 
   return (
-    <Screen>
-      <SectionCard title="Лента уведомлений" subtitle={`Непрочитанных: ${unreadCount}`}>
-        {loading ? (
-          <View style={styles.stateWrap}>
-            <ActivityIndicator color={colors.primaryDark} size="large" />
-          </View>
-        ) : notifications.length === 0 ? (
-          <Text style={[styles.emptyText, { color: colors.textMuted }]}>Уведомлений пока нет.</Text>
-        ) : (
-          notifications.map((item) => (
-            <View
-              key={item.id}
-              style={[
-                styles.item,
-                {
-                  borderColor: item.isRead ? colors.border : colors.primaryDark,
-                  backgroundColor: colors.surface,
-                },
-              ]}
-            >
-              <Text style={[styles.title, { color: colors.text }]}>{item.title}</Text>
-              <Text style={[styles.body, { color: colors.textSecondary }]}>{item.message}</Text>
-              <Text style={[styles.time, { color: colors.accent }]}>{formatDate(item.createdAt)}</Text>
-            </View>
-          ))
-        )}
+    <ScrollView style={[styles.scroll, { backgroundColor: colors.background }]} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <LinearGradient colors={gradients.success} style={styles.headerCard}>
+        <Text style={styles.headerLabel}>Центр уведомлений</Text>
+        <Text style={styles.headerValue}>{unreadCount}</Text>
+        <Text style={styles.headerText}>непрочитанных событий по бюджетам, целям и рекомендациям</Text>
+      </LinearGradient>
 
+      {loading ? <ActivityIndicator color={colors.primary} size="large" /> : null}
+      {error ? <Text style={[styles.error, { color: colors.danger }]}>{error}</Text> : null}
+
+      <Panel title="Лента уведомлений">
+        {notifications.length === 0 ? (
+          <Empty text="Уведомлений пока нет." />
+        ) : (
+          notifications.map((item) => <NotificationCard key={item.id} item={item} />)
+        )}
         {notifications.length > 0 ? (
-          <Pressable style={[styles.markReadButton, { borderColor: colors.borderStrong }]} onPress={() => void markAllRead()}>
-            <Text style={[styles.markReadText, { color: colors.primaryDark }]}>Отметить все как прочитанные</Text>
+          <Pressable onPress={markAllRead}>
+            <LinearGradient colors={gradients.successDeep} style={styles.actionButton}>
+              <Feather name="check-circle" size={18} color="#FFFFFF" />
+              <Text style={styles.actionText}>Отметить все как прочитанные</Text>
+            </LinearGradient>
           </Pressable>
         ) : null}
-      </SectionCard>
+      </Panel>
 
-      <SectionCard title="Рекомендации" subtitle="Персональные советы по финансам">
+      <Panel title="Рекомендации">
         {recommendations.length === 0 ? (
-          <Text style={[styles.emptyText, { color: colors.textMuted }]}>Рекомендаций пока нет.</Text>
+          <Empty text="Рекомендаций пока нет." />
         ) : (
-          recommendations.map((item) => (
-            <View key={item.id} style={[styles.recommendationCard, { borderColor: colors.border, backgroundColor: colors.surfaceAlt }]}>
-              <Text style={[styles.title, { color: colors.text }]}>{item.title}</Text>
-              <Text style={[styles.body, { color: colors.textSecondary }]}>{item.description}</Text>
-              <Text style={[styles.time, { color: colors.primaryDark }]}>
-                Потенциальная экономия: {Number(item.estimatedSavings || 0).toLocaleString("ru-RU")} ₽
-              </Text>
-            </View>
-          ))
+          recommendations.map((item) => <RecommendationCard key={item.id} item={item} />)
         )}
-      </SectionCard>
-
-      {error ? <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text> : null}
-    </Screen>
+      </Panel>
+    </ScrollView>
   );
 }
 
-function formatDate(value: string | null | undefined): string {
+function Panel({ title, children }) {
+  const { colors } = useAppTheme();
+  return (
+    <View style={[styles.panel, { backgroundColor: colors.surface }]}>
+      <Text style={[styles.panelTitle, { color: colors.text }]}>{title}</Text>
+      {children}
+    </View>
+  );
+}
+
+function NotificationCard({ item }) {
+  const { colors } = useAppTheme();
+  const isRead = Boolean(item.isRead);
+  return (
+    <View style={[styles.card, { backgroundColor: colors.backgroundAlt }]}>
+      <View style={[styles.icon, { backgroundColor: isRead ? colors.border : `${colors.primary}20` }]}>
+        <Feather name={isRead ? "bell" : "bell-ring"} size={17} color={isRead ? colors.textMuted : colors.primary} />
+      </View>
+      <View style={styles.cardText}>
+        <Text style={[styles.title, { color: colors.text }]}>{item.title}</Text>
+        <Text style={[styles.body, { color: colors.textMuted }]}>{item.message}</Text>
+        <Text style={[styles.meta, { color: colors.primary }]}>{formatDate(item.createdAt)}</Text>
+      </View>
+    </View>
+  );
+}
+
+function RecommendationCard({ item }) {
+  const { colors } = useAppTheme();
+  return (
+    <View style={[styles.card, { backgroundColor: colors.backgroundAlt }]}>
+      <View style={[styles.icon, { backgroundColor: `${colors.accent}40` }]}>
+        <Feather name="zap" size={17} color={colors.primary} />
+      </View>
+      <View style={styles.cardText}>
+        <Text style={[styles.title, { color: colors.text }]}>{item.title}</Text>
+        <Text style={[styles.body, { color: colors.textMuted }]}>{item.description}</Text>
+        <Text style={[styles.meta, { color: colors.success }]}>Экономия: {Number(item.estimatedSavings || 0).toLocaleString("ru-RU")} ₽</Text>
+      </View>
+    </View>
+  );
+}
+
+function Empty({ text }) {
+  const { colors } = useAppTheme();
+  return <Text style={[styles.empty, { color: colors.textMuted }]}>{text}</Text>;
+}
+
+function formatDate(value?: string | null) {
   if (!value) return "Без даты";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -115,51 +143,22 @@ function formatDate(value: string | null | undefined): string {
 }
 
 const styles = StyleSheet.create({
-  stateWrap: {
-    paddingVertical: spacing.lg,
-    alignItems: "center",
-  },
-  emptyText: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  item: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    gap: 4,
-  },
-  title: {
-    fontWeight: "700",
-    fontSize: 14,
-  },
-  body: {
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  time: {
-    fontSize: 11,
-    marginTop: 4,
-  },
-  markReadButton: {
-    borderWidth: 1,
-    borderRadius: radius.full,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10,
-  },
-  markReadText: {
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  recommendationCard: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    gap: 4,
-  },
-  errorText: {
-    fontSize: 14,
-    fontWeight: "500",
-  },
+  scroll: { flex: 1 },
+  content: { padding: 20, paddingBottom: 120, gap: 14 },
+  headerCard: { borderRadius: 20, padding: 22, gap: 5 },
+  headerLabel: { color: "rgba(255,255,255,0.72)", fontSize: 12, fontFamily: "Inter_400Regular" },
+  headerValue: { color: "#FFFFFF", fontSize: 38, fontFamily: "Inter_700Bold" },
+  headerText: { color: "rgba(255,255,255,0.74)", fontSize: 13, lineHeight: 19, fontFamily: "Inter_400Regular" },
+  panel: { borderRadius: 18, padding: 16, gap: 12 },
+  panelTitle: { fontSize: 17, fontFamily: "Inter_700Bold" },
+  card: { flexDirection: "row", gap: 12, borderRadius: 14, padding: 12 },
+  icon: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
+  cardText: { flex: 1, gap: 3 },
+  title: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  body: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular" },
+  meta: { fontSize: 11, fontFamily: "Inter_600SemiBold", marginTop: 2 },
+  actionButton: { minHeight: 48, borderRadius: 16, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },
+  actionText: { color: "#FFFFFF", fontSize: 15, fontFamily: "Inter_700Bold" },
+  empty: { fontSize: 13, lineHeight: 19, fontFamily: "Inter_400Regular" },
+  error: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
 });

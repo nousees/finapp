@@ -1,23 +1,18 @@
 // @ts-nocheck
-import React from "react";
-import { useCallback, useMemo, useState } from "react";
+import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { LinearGradient } from "expo-linear-gradient";
-import { MaterialIcons } from "@expo/vector-icons";
+import { useCallback, useMemo, useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { createBudget, getFinancialInsights, listBudgets } from "@shared/api/analysis";
-import { Screen } from "@shared/ui/Screen";
-import { SectionCard } from "@shared/ui/SectionCard";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
-import { radius, spacing } from "@shared/theme/spacing";
 
-const SYSTEM_EXPENSE_CATEGORIES = [
-  { id: "11111111-1111-1111-1111-111111111111", name: "Продукты" },
-  { id: "44444444-4444-4444-4444-444444444444", name: "Кафе и рестораны" },
-  { id: "55555555-5555-5555-5555-555555555555", name: "Транспорт" },
-  { id: "66666666-6666-6666-6666-666666666666", name: "Развлечения" },
-  { id: "77777777-7777-7777-7777-777777777777", name: "Здоровье" },
+const systemCategories = [
+  { id: "11111111-1111-1111-1111-111111111111", name: "Продукты", icon: "shopping-cart", color: "#F97316" },
+  { id: "55555555-5555-5555-5555-555555555555", name: "Транспорт", icon: "navigation", color: "#3B82F6" },
+  { id: "44444444-4444-4444-4444-444444444444", name: "Кафе", icon: "coffee", color: "#EC4899" },
+  { id: "66666666-6666-6666-6666-666666666666", name: "Развлечения", icon: "film", color: "#8B5CF6" },
+  { id: "77777777-7777-7777-7777-777777777777", name: "Здоровье", icon: "heart", color: "#10B981" },
 ];
 
 export function BudgetsScreen() {
@@ -25,20 +20,16 @@ export function BudgetsScreen() {
   const [budgets, setBudgets] = useState([]);
   const [insights, setInsights] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [categoryId, setCategoryId] = useState("");
+  const [categoryId, setCategoryId] = useState(systemCategories[0].id);
   const [amountLimit, setAmountLimit] = useState("");
-  const [period, setPeriod] = useState<"MONTHLY" | "WEEKLY">("MONTHLY");
-
-  const progressWidth = useSharedValue(0);
+  const [error, setError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
       setError(null);
       const [budgetItems, insightData] = await Promise.all([listBudgets(), getFinancialInsights()]);
-      setBudgets(budgetItems);
+      setBudgets(budgetItems || []);
       setInsights(insightData);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить бюджеты");
@@ -47,345 +38,192 @@ export function BudgetsScreen() {
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      setLoading(true);
-      void loadData();
-    }, [loadData]),
-  );
+  useFocusEffect(useCallback(() => {
+    setLoading(true);
+    void loadData();
+  }, [loadData]));
 
-  const availableCategories = useMemo(() => {
-    const insightCategories = (insights?.categories || [])
-      .filter((item) => item.categoryId)
-      .map((item) => ({
-        id: item.categoryId,
-        name: item.categoryName || "Без категории",
-      }));
-
-    const merged = [...insightCategories, ...SYSTEM_EXPENSE_CATEGORIES];
-    return Array.from(new Map(merged.map((item) => [item.id, item])).values());
-  }, [insights]);
-
-  const budgetCards = useMemo(() => {
+  const cards = useMemo(() => {
     const insightMap = new Map((insights?.budgets || []).map((item) => [item.budgetId, item]));
-    const categoryMap = new Map((insights?.categories || []).map((item) => [item.categoryId, item.categoryName]));
-    return (budgets || []).map((item) => {
+    return (budgets || []).map((item, index) => {
       const insight = insightMap.get(item.id);
+      const category = systemCategories.find((cat) => cat.id === item.categoryId) || systemCategories[index % systemCategories.length];
       const spent = Number(insight?.spentAmount ?? item.spentAmount ?? 0);
       const limit = Number(insight?.amountLimit ?? item.amountLimit ?? 0);
-      const progress = limit > 0 ? spent / limit : 0;
-      return {
-        id: item.id,
-        categoryName: insight?.categoryName || categoryMap.get(item.categoryId) || item.categoryId || "Без категории",
-        spent,
-        limit,
-        remaining: Number(insight?.remainingAmount ?? limit - spent),
-        progress,
-        riskLevel: insight?.riskLevel || "LOW",
-        periodLabel: `${item.periodStart} - ${item.periodEnd}`,
-      };
+      return { id: item.id, name: insight?.categoryName || category.name, icon: category.icon, color: category.color, spent, limit, progress: limit > 0 ? spent / limit : 0 };
     });
   }, [budgets, insights]);
 
-  const recommendationText = insights?.budgets?.find((item) => item.message)?.message || null;
+  const totalLimit = cards.reduce((sum, item) => sum + item.limit, 0);
+  const totalSpent = cards.reduce((sum, item) => sum + item.spent, 0);
+  const remaining = totalLimit - totalSpent;
+  const totalProgress = totalLimit > 0 ? Math.round((totalSpent / totalLimit) * 100) : 0;
 
   const saveBudget = async () => {
-    if (!categoryId || !amountLimit) {
-      setError("Укажите категорию и лимит бюджета");
+    const parsed = Number(amountLimit.replace(",", "."));
+    if (!categoryId || !parsed) {
+      setError("Выберите категорию и укажите лимит.");
       return;
     }
-
     const today = new Date();
-    const start = new Date(today.getFullYear(), today.getMonth(), 1);
-    const end =
-      period === "MONTHLY"
-        ? new Date(today.getFullYear(), today.getMonth() + 1, 0)
-        : new Date(today.getTime() + 6 * 24 * 60 * 60 * 1000);
-
+    const periodStart = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+    const periodEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().slice(0, 10);
     try {
-      setSaving(true);
-      setError(null);
-      await createBudget({
-        categoryId,
-        amountLimit: Number(amountLimit.replace(",", ".")),
-        period,
-        periodStart: start.toISOString().slice(0, 10),
-        periodEnd: end.toISOString().slice(0, 10),
-        currency: "RUB",
-      });
-      setCategoryId("");
+      await createBudget({ categoryId, amountLimit: parsed, period: "MONTHLY", periodStart, periodEnd, currency: "RUB" });
       setAmountLimit("");
       setShowForm(false);
       await loadData();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Не удалось создать бюджет");
-    } finally {
-      setSaving(false);
     }
   };
 
   return (
-    <Screen>
-      <SectionCard title="Бюджеты месяца" subtitle="Реальные бюджеты пользователя и их текущее состояние">
-        {loading ? (
-          <View style={styles.stateWrap}>
-            <ActivityIndicator color={colors.primaryDark} size="large" />
-          </View>
-        ) : budgetCards.length === 0 ? (
-          <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-            Бюджетов пока нет. Создайте первый бюджет по категории, которая уже встречалась в ваших транзакциях.
-          </Text>
-        ) : (
-          budgetCards.map((item) => <BudgetCard key={item.id} item={item} />)
-        )}
-      </SectionCard>
+    <ScrollView style={[styles.scroll, { backgroundColor: colors.background }]} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <View style={styles.header}>
+        <Text style={[styles.pageTitle, { color: colors.text }]}>Бюджеты</Text>
+        <Text style={[styles.pageDate, { color: colors.textMuted }]}>{new Date().toLocaleDateString("ru-RU", { month: "long", year: "numeric" })}</Text>
+      </View>
 
-      <Pressable onPress={() => setShowForm((prev) => !prev)}>
-        <LinearGradient colors={gradients.success} style={styles.createButton}>
-          <MaterialIcons name={showForm ? "expand-less" : "add-circle-outline"} size={20} color="#FFFFFF" />
-          <Text style={styles.createButtonText}>{showForm ? "Скрыть форму" : "Новый бюджет"}</Text>
+      <LinearGradient colors={gradients.success} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.summaryCard}>
+        <View style={styles.summaryRow}>
+          <Summary label="Лимит" value={formatMoney(totalLimit)} />
+          <Divider />
+          <Summary label="Потрачено" value={formatMoney(totalSpent)} />
+          <Divider />
+          <Summary label="Остаток" value={formatMoney(Math.abs(remaining))} accent={remaining >= 0} />
+        </View>
+        <View style={styles.track}>
+          <View style={[styles.fill, { width: `${Math.min(totalProgress, 100)}%`, backgroundColor: remaining < 0 ? "#EF4444" : "#A8E6CF" }]} />
+        </View>
+        <Text style={styles.summaryHint}>{totalProgress}% месячного бюджета использовано</Text>
+      </LinearGradient>
+
+      <Pressable onPress={() => setShowForm((value) => !value)}>
+        <LinearGradient colors={gradients.successDeep} style={styles.createButton}>
+          <Feather name={showForm ? "chevron-up" : "plus"} size={19} color="#FFFFFF" />
+          <Text style={styles.createText}>{showForm ? "Скрыть форму" : "Новый бюджет"}</Text>
         </LinearGradient>
       </Pressable>
 
       {showForm ? (
-        <SectionCard title="Создание бюджета" subtitle="Категории берутся из уже найденных расходов">
-          <View style={styles.categoryList}>
-            {availableCategories.length === 0 ? (
-              <Text style={[styles.emptyText, { color: colors.textMuted }]}>
-                Пока нет доступных категорий. Сначала добавьте и обработайте несколько транзакций.
-              </Text>
-            ) : (
-              availableCategories.map((item) => (
-                <Pressable
-                  key={item.id}
-                  style={[
-                    styles.categoryChip,
-                    {
-                      borderColor: categoryId === item.id ? colors.primaryDark : colors.border,
-                      backgroundColor: categoryId === item.id ? colors.surfaceAlt : colors.surface,
-                    },
-                  ]}
-                  onPress={() => setCategoryId(item.id)}
-                >
-                  <Text style={{ color: categoryId === item.id ? colors.primaryDark : colors.text }}>{item.name}</Text>
-                </Pressable>
-              ))
-            )}
-          </View>
-
-          <TextInput
-            value={amountLimit}
-            onChangeText={setAmountLimit}
-            keyboardType="numeric"
-            placeholder="Лимит, например 15000"
-            placeholderTextColor={colors.textMuted}
-            style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surfaceAlt, color: colors.text }]}
-          />
-
-          <View style={styles.periodRow}>
-            {["MONTHLY", "WEEKLY"].map((item) => (
-              <Pressable
-                key={item}
-                style={[
-                  styles.periodChip,
-                  {
-                    borderColor: period === item ? colors.primaryDark : colors.border,
-                    backgroundColor: period === item ? colors.surfaceAlt : colors.surface,
-                  },
-                ]}
-                onPress={() => setPeriod(item as "MONTHLY" | "WEEKLY")}
-              >
-                <Text style={{ color: period === item ? colors.primaryDark : colors.text }}>
-                  {item === "MONTHLY" ? "Месяц" : "Неделя"}
-                </Text>
+        <View style={[styles.formCard, { backgroundColor: colors.surface }]}>
+          <Text style={[styles.sectionTitle, { color: colors.text }]}>Создание бюджета</Text>
+          <View style={styles.categoryGrid}>
+            {systemCategories.map((cat) => (
+              <Pressable key={cat.id} onPress={() => setCategoryId(cat.id)} style={[styles.categoryChip, { backgroundColor: categoryId === cat.id ? `${cat.color}20` : colors.surfaceAlt, borderColor: categoryId === cat.id ? cat.color : "transparent" }]}>
+                <Feather name={cat.icon} size={15} color={categoryId === cat.id ? cat.color : colors.textMuted} />
+                <Text style={[styles.categoryText, { color: categoryId === cat.id ? cat.color : colors.textMuted }]}>{cat.name}</Text>
               </Pressable>
             ))}
           </View>
-
-          <Pressable style={[styles.actionButton, { backgroundColor: colors.primaryDark }]} onPress={() => void saveBudget()} disabled={saving}>
-            <Text style={styles.actionButtonText}>{saving ? "Сохранение..." : "Сохранить бюджет"}</Text>
+          <TextInput value={amountLimit} onChangeText={setAmountLimit} keyboardType="numeric" placeholder="Лимит, например 15000" placeholderTextColor={colors.textMuted} style={[styles.input, { backgroundColor: colors.surfaceAlt, color: colors.text }]} />
+          <Pressable onPress={saveBudget} style={[styles.actionButton, { backgroundColor: colors.primary }]}>
+            <Text style={styles.actionText}>Сохранить бюджет</Text>
           </Pressable>
-        </SectionCard>
-      ) : null}
-
-      {recommendationText ? (
-        <View style={[styles.tipCard, { borderColor: colors.borderStrong, backgroundColor: colors.surface }]}>
-          <Text style={[styles.tipTitle, { color: colors.text }]}>Рекомендация FinApp</Text>
-          <Text style={[styles.tipBody, { color: colors.textMuted }]}>{recommendationText}</Text>
         </View>
       ) : null}
 
-      {error ? <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text> : null}
-    </Screen>
+      {error ? <Text style={[styles.error, { color: colors.danger }]}>{error}</Text> : null}
+      {loading ? <ActivityIndicator color={colors.primary} size="large" style={styles.loader} /> : null}
+
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>По категориям</Text>
+      {cards.length === 0 && !loading ? <Text style={[styles.empty, { color: colors.textMuted }]}>Бюджетов пока нет. Создайте первый лимит по категории.</Text> : null}
+      {cards.map((item) => <BudgetCard key={item.id} item={item} />)}
+
+      <View style={[styles.tipCard, { backgroundColor: colors.surface }]}>
+        <LinearGradient colors={gradients.successDeep} style={styles.tipIcon}>
+          <Feather name="bar-chart-2" size={16} color="#FFFFFF" />
+        </LinearGradient>
+        <View style={styles.tipText}>
+          <Text style={[styles.tipTitle, { color: colors.text }]}>Совет месяца</Text>
+          <Text style={[styles.tipBody, { color: colors.textMuted }]}>Следите за категориями с прогрессом выше 80%: они первыми приводят к перерасходу.</Text>
+        </View>
+      </View>
+    </ScrollView>
   );
 }
 
-function BudgetCard({ item }: { item: any }) {
+function BudgetCard({ item }) {
   const { colors } = useAppTheme();
-  const progressColor = item.progress < 0.75 ? "#22C55E" : item.progress < 0.95 ? "#F59E0B" : "#EF4444";
-  const width = `${Math.min(item.progress * 100, 100)}%`;
-
+  const isOver = item.progress >= 1;
+  const progressColor = isOver ? colors.danger : item.progress >= 0.85 ? colors.warning : item.color;
   return (
-    <View style={[styles.budgetCard, { borderColor: colors.border, backgroundColor: colors.surfaceAlt }]}>
-      <View style={styles.header}>
-        <Text style={[styles.name, { color: colors.text }]}>{item.categoryName}</Text>
-        <Text style={[styles.limit, { color: colors.textMuted }]}>{item.periodLabel}</Text>
+    <View style={[styles.budgetCard, { backgroundColor: colors.surface }]}>
+      <View style={styles.budgetRow}>
+        <View style={[styles.budgetIcon, { backgroundColor: `${item.color}20` }]}>
+          <Feather name={item.icon} size={18} color={item.color} />
+        </View>
+        <View style={styles.budgetInfo}>
+          <Text style={[styles.budgetName, { color: colors.text }]}>{item.name}</Text>
+          <Text style={[styles.budgetSub, { color: colors.textMuted }]}>{formatMoney(item.spent)} из {formatMoney(item.limit)}</Text>
+        </View>
+        <Text style={[styles.budgetPct, { color: progressColor }]}>{Math.round(item.progress * 100)}%</Text>
       </View>
-
-      <View style={styles.metaRow}>
-        <MetaValue label="Лимит" value={formatCurrency(item.limit)} />
-        <MetaValue label="Потрачено" value={formatCurrency(item.spent)} />
-        <MetaValue label="Остаток" value={formatCurrency(item.remaining)} tone={item.remaining < 0 ? "danger" : "normal"} />
-      </View>
-
-      <View style={[styles.track, { backgroundColor: colors.background }]}>
-        <Animated.View style={[styles.fill, { backgroundColor: progressColor, width }]} />
+      <View style={[styles.budgetTrack, { backgroundColor: colors.border }]}>
+        <View style={[styles.budgetFill, { width: `${Math.min(item.progress * 100, 100)}%`, backgroundColor: progressColor }]} />
       </View>
     </View>
   );
 }
 
-function MetaValue({ label, value, tone = "normal" }: { label: string; value: string; tone?: "normal" | "danger" }) {
-  const { colors } = useAppTheme();
+function Summary({ label, value, accent = false }) {
   return (
-    <View style={styles.metaCell}>
-      <Text style={[styles.metaLabel, { color: colors.textMuted }]}>{label}</Text>
-      <Text style={[styles.metaValue, { color: tone === "danger" ? colors.danger : colors.text }]}>{value}</Text>
+    <View style={styles.summaryItem}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={[styles.summaryValue, accent ? { color: "#A8E6CF" } : null]}>{value}</Text>
     </View>
   );
 }
 
-function formatCurrency(value: number): string {
+function Divider() {
+  return <View style={styles.summaryDivider} />;
+}
+
+function formatMoney(value: number) {
   return `${Number(value || 0).toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ₽`;
 }
 
 const styles = StyleSheet.create({
-  stateWrap: {
-    paddingVertical: spacing.lg,
-    alignItems: "center",
-  },
-  emptyText: {
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  budgetCard: {
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    padding: spacing.sm,
-    gap: spacing.sm,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  name: {
-    fontSize: 16,
-    fontFamily: "Inter_700Bold",
-    flex: 1,
-  },
-  limit: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-  },
-  metaRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: spacing.sm,
-  },
-  metaCell: {
-    flex: 1,
-    gap: 3,
-  },
-  metaLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_500Medium",
-  },
-  metaValue: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-  },
-  track: {
-    height: 10,
-    borderRadius: radius.full,
-    overflow: "hidden",
-  },
-  fill: {
-    height: 10,
-    borderRadius: radius.full,
-  },
-  createButton: {
-    height: 54,
-    borderRadius: radius.lg,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
-    gap: 6,
-  },
-  createButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontFamily: "Inter_700Bold",
-  },
-  categoryList: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.sm,
-  },
-  categoryChip: {
-    borderWidth: 1,
-    borderRadius: radius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-  },
-  periodRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-  },
-  periodChip: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: radius.full,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10,
-  },
-  actionButton: {
-    height: 48,
-    borderRadius: radius.lg,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  actionButtonText: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontFamily: "Inter_700Bold",
-  },
-  tipCard: {
-    borderWidth: 1,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    gap: 4,
-  },
-  tipTitle: {
-    fontSize: 14,
-    fontFamily: "Inter_700Bold",
-  },
-  tipBody: {
-    fontSize: 13,
-    lineHeight: 18,
-    fontFamily: "Inter_500Medium",
-  },
-  errorText: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
-  },
+  scroll: { flex: 1 },
+  content: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 120 },
+  header: { marginBottom: 16 },
+  pageTitle: { fontSize: 28, fontFamily: "Inter_700Bold" },
+  pageDate: { fontSize: 14, fontFamily: "Inter_400Regular", marginTop: 2 },
+  summaryCard: { borderRadius: 20, padding: 20, marginBottom: 16 },
+  summaryRow: { flexDirection: "row", marginBottom: 16 },
+  summaryItem: { flex: 1, alignItems: "center" },
+  summaryLabel: { fontSize: 11, color: "rgba(255,255,255,0.72)", fontFamily: "Inter_400Regular", marginBottom: 4 },
+  summaryValue: { fontSize: 16, color: "#FFFFFF", fontFamily: "Inter_700Bold" },
+  summaryDivider: { width: 1, backgroundColor: "rgba(255,255,255,0.22)", marginVertical: 4 },
+  track: { height: 8, backgroundColor: "rgba(255,255,255,0.25)", borderRadius: 4, overflow: "hidden", marginBottom: 8 },
+  fill: { height: "100%", borderRadius: 4 },
+  summaryHint: { fontSize: 12, color: "rgba(255,255,255,0.75)", fontFamily: "Inter_400Regular" },
+  createButton: { height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 7, marginBottom: 16 },
+  createText: { color: "#FFFFFF", fontSize: 15, fontFamily: "Inter_700Bold" },
+  formCard: { borderRadius: 18, padding: 16, gap: 12, marginBottom: 16 },
+  categoryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  categoryChip: { flexDirection: "row", alignItems: "center", gap: 6, borderWidth: 1.5, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8 },
+  categoryText: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  input: { borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },
+  actionButton: { height: 48, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  actionText: { color: "#FFFFFF", fontSize: 15, fontFamily: "Inter_700Bold" },
+  error: { fontSize: 13, fontFamily: "Inter_500Medium", marginBottom: 12 },
+  loader: { marginVertical: 20 },
+  sectionTitle: { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 12 },
+  empty: { fontSize: 14, lineHeight: 20, marginBottom: 16 },
+  budgetCard: { padding: 16, borderRadius: 16, marginBottom: 10, gap: 12 },
+  budgetRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  budgetIcon: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  budgetInfo: { flex: 1, gap: 2 },
+  budgetName: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  budgetSub: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  budgetPct: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  budgetTrack: { height: 6, borderRadius: 3, overflow: "hidden" },
+  budgetFill: { height: "100%", borderRadius: 3 },
+  tipCard: { borderRadius: 16, padding: 16, marginTop: 8, flexDirection: "row", gap: 12 },
+  tipIcon: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center" },
+  tipText: { flex: 1, gap: 4 },
+  tipTitle: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  tipBody: { fontSize: 13, lineHeight: 19, fontFamily: "Inter_400Regular" },
 });

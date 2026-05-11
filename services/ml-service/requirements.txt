@@ -8,7 +8,10 @@ redis==5.2.1
 psycopg[binary]==3.2.3
 pytest==8.3.4
 httpx==0.28.1
+joblib==1.4.2
+numpy==2.2.1
+pandas==2.2.3
+scikit-learn==1.6.0
 
-# Real model dependencies are intentionally optional for local fallback mode.
-# Install them in a dedicated model image/profile when ENABLE_REAL_MODELS=true:
-# openai-whisper, transformers, torch, catboost, numpy, pandas, librosa
+# Heavy speech/NER dependencies are optional for local Docker builds.
+# See requirements-real.txt and Dockerfile ARG INSTALL_REAL_MODEL_DEPS=true.

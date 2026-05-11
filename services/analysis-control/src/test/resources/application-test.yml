@@ -1,0 +1,26 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:finapp;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+  data:
+    redis:
+      repositories:
+        enabled: false
+
+app:
+  bootstrap:
+    enabled: false
+  jwt:
+    secret: finapp-dev-secret

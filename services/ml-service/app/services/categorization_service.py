@@ -26,6 +26,10 @@ class CategorizationService:
         return self.model.version
 
     def categorize(self, request: CategorizeRequest) -> CategorizeResponse:
+        real_prediction = self._predict_with_real_model(request)
+        if real_prediction is not None:
+            return real_prediction
+
         text = normalize_text(" ".join(filter(None, [request.description, request.merchant or ""]))).lower()
         for code, name, confidence, keywords in CATEGORY_RULES:
             if any(keyword in text for keyword in keywords):
@@ -43,6 +47,53 @@ class CategorizationService:
             model_version=self.model_version,
             alternatives=self._alternatives(exclude="other"),
         )
+
+    def _predict_with_real_model(self, request: CategorizeRequest) -> CategorizeResponse | None:
+        prediction = self.model.predict({
+            "amount": request.amount or 0,
+            "description": request.description,
+            "merchant": request.merchant or "",
+            "date": None,
+            "type": request.operation_type.value,
+        })
+        if not prediction or not prediction.get("category") or float(prediction.get("confidence", 0) or 0) <= 0:
+            return None
+
+        category_name = str(prediction["category"])
+        category_code = self._category_code(category_name)
+        probabilities = prediction.get("probabilities") or {}
+        alternatives = [
+            CategoryAlternative(
+                category_code=self._category_code(str(name)),
+                category_name=str(name),
+                confidence=float(confidence),
+            )
+            for name, confidence in sorted(probabilities.items(), key=lambda item: float(item[1]), reverse=True)
+            if str(name) != category_name
+        ][:2]
+        return CategorizeResponse(
+            category_code=category_code,
+            category_name=category_name,
+            confidence=float(prediction["confidence"]),
+            model_version=self.model_version,
+            alternatives=alternatives or self._alternatives(exclude=category_code),
+        )
+
+    def _category_code(self, category_name: str) -> str:
+        normalized = normalize_text(category_name).lower()
+        mapping = {
+            "продукты": "groceries",
+            "питание": "groceries",
+            "транспорт": "transport",
+            "подписки": "subscriptions",
+            "здоровье": "health",
+            "кафе и рестораны": "restaurants",
+            "зарплата": "salary",
+            "доход": "salary",
+            "прочее": "other",
+            "другое": "other",
+        }
+        return mapping.get(normalized, normalized.replace(" ", "_") or "other")
 
     def categorize_values(
         self,

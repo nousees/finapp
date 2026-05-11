@@ -10,7 +10,7 @@ export function GoalsStackNavigator() {
 
   return (
     <Stack.Navigator screenOptions={defaultStackOptions}>
-      <Stack.Screen name="GoalsHome" component={GoalsScreen} options={{ title: "\u0426\u0435\u043B\u0438" }} />
+      <Stack.Screen name="GoalsHome" component={GoalsScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }

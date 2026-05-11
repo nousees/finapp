@@ -1,26 +1,31 @@
 // @ts-nocheck
-import React from "react";
-import { useCallback, useMemo, useState } from "react";
+import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop } from "react-native-svg";
-import { MaterialIcons } from "@expo/vector-icons";
+import { useCallback, useMemo, useState } from "react";
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import Svg, { Circle } from "react-native-svg";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DashboardStackParamList } from "@app/navigation/types";
 import { getFinancialInsights, listRecommendations } from "@shared/api/analysis";
 import { listTransactions } from "@shared/api/transactions";
 import { useUser } from "@shared/contexts/UserContext";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
-import { radius, spacing } from "@shared/theme/spacing";
-import { Screen } from "@shared/ui/Screen";
-import { SectionCard } from "@shared/ui/SectionCard";
 
 type Props = NativeStackScreenProps<DashboardStackParamList, "DashboardHome">;
 
+const quickActions = [
+  { icon: "bar-chart-2", label: "Аналитика", target: "Analytics", gradient: ["#6B46C1", "#8B5CF6"] },
+  { icon: "repeat", label: "Подписки", target: "Subscriptions", gradient: ["#059669", "#7ED9B6"] },
+  { icon: "file-text", label: "Отчёты", target: "Reports", gradient: ["#2563EB", "#60A5FA"] },
+  { icon: "target", label: "Цели", target: "GoalsTab", gradient: ["#D97706", "#FBBF24"] },
+];
+
 export function DashboardHomeScreen({ navigation }: Props) {
-  const { colors, gradients, isDark } = useAppTheme();
+  const { colors, gradients } = useAppTheme();
   const { user } = useUser();
+  const insets = useSafeAreaInsets();
   const [insights, setInsights] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
@@ -30,14 +35,14 @@ export function DashboardHomeScreen({ navigation }: Props) {
   const loadData = useCallback(async () => {
     try {
       setError(null);
-      const [insightsData, txData, recsData] = await Promise.all([
+      const [insightData, txData, recData] = await Promise.all([
         getFinancialInsights(),
-        listTransactions(),
+        listTransactions({ limit: 5 }),
         listRecommendations().catch(() => []),
       ]);
-      setInsights(insightsData);
-      setTransactions(asArray(txData).slice(0, 5));
-      setRecommendations(asArray(recsData).slice(0, 3));
+      setInsights(insightData);
+      setTransactions(Array.isArray(txData) ? txData : []);
+      setRecommendations(Array.isArray(recData) ? recData.slice(0, 2) : []);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить дашборд");
     } finally {
@@ -52,480 +57,288 @@ export function DashboardHomeScreen({ navigation }: Props) {
     }, [loadData]),
   );
 
+  const summary = insights?.summary;
+  const income = Number(summary?.totalIncome || 0);
+  const expense = Number(summary?.totalExpenses || 0);
+  const balance = Number(summary?.netSavings || income - expense || 0);
+  const savingsRate = income > 0 ? Math.round(((income - expense) / income) * 100) : 0;
+
   const categories = useMemo(
     () =>
-      (insights?.categories || [])
+      (Array.isArray(insights?.categories) ? insights.categories : [])
         .filter((item) => Number(item.amount) > 0)
-        .slice(0, 4)
+        .slice(0, 5)
         .map((item, index) => ({
           id: item.categoryId || `category-${index}`,
-          title: item.categoryName || "Без категории",
+          name: item.categoryName || "Без категории",
+          amount: Number(item.amount || 0),
           percent: Math.round(Number(item.percentage || 0)),
-          amount: formatCurrency(item.amount),
-          color: chartPalette[index % chartPalette.length],
+          color: palette[index % palette.length],
         })),
     [insights],
   );
 
-  const topGoal = useMemo(() => {
-    const goals = [...(insights?.goals || [])];
-    goals.sort((a, b) => Number(b.progressPercent || 0) - Number(a.progressPercent || 0));
-    return goals[0] || null;
-  }, [insights]);
+  const topSignals = [
+    ...(Array.isArray(insights?.anomalies) ? insights.anomalies : []).slice(0, 1).map((item) => ({
+      id: `anomaly-${item.title || item.type}`,
+      title: item.title || "Проверьте необычную трату",
+      text: item.description || "Сумма отличается от обычного поведения в категории.",
+      icon: "alert-triangle",
+      gradient: ["#EF4444", "#F97316"],
+    })),
+    ...recommendations.map((item) => ({
+      id: item.id || item.title,
+      title: item.title || "Рекомендация FinApp",
+      text: item.description || "Посмотрите, где можно снизить расходы.",
+      icon: "zap",
+      gradient: ["#6B46C1", "#8B5CF6"],
+    })),
+  ].slice(0, 2);
 
-  const alerts = useMemo(() => {
-    const anomalyAlerts = (insights?.anomalies || []).slice(0, 2).map((item) => ({
-      id: `anomaly-${item.title}`,
-      title: item.title,
-      tone: item.severity === "HIGH" ? "danger" : "success",
-    }));
-    const recommendationAlerts = (recommendations || []).slice(0, 2).map((item) => ({
-      id: item.id,
-      title: item.title,
-      tone: Number(item.priority || 0) >= 4 ? "danger" : "success",
-    }));
-    return [...anomalyAlerts, ...recommendationAlerts].slice(0, 4);
-  }, [insights, recommendations]);
-
-  const txCards = useMemo(
-    () =>
-      (transactions || []).map((item) => ({
-        id: item.id,
-        amount: `${item.type === "INCOME" ? "+" : "-"}${formatCurrency(item.amount)}`,
-        title: item.description || item.original_description || "Транзакция",
-        category: item.is_verified ? "Обработано" : "Ожидает обработки",
-        icon: item.type === "INCOME" ? "south-west" : "north-east",
-      })),
-    [transactions],
-  );
-
-  const spendingPercent = categories.reduce((sum, item) => sum + item.percent, 0);
-  const summary = insights?.summary;
+  const topPt = Platform.OS === "web" ? 42 : insets.top;
 
   return (
-    <Screen>
-      <LinearGradient colors={gradients.success} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.heroCard}>
-        <Text style={styles.balanceLabel}>
-          {user ? `Добро пожаловать, ${user.full_name || user.email}!` : "Добро пожаловать!"}
-        </Text>
-        <Text style={[styles.balanceValue, { color: colors.white }]}>
-          {summary ? formatCurrency(summary.netSavings) : "0 ₽"}
-        </Text>
-        <Text style={styles.heroMeta}>
-          {summary
-            ? `Доходы ${formatCurrency(summary.totalIncome)} • Расходы ${formatCurrency(summary.totalExpenses)}`
-            : "Добавьте транзакции, чтобы увидеть финансовую картину"}
-        </Text>
+    <ScrollView style={[styles.scroll, { backgroundColor: colors.background }]} contentContainerStyle={{ paddingBottom: 118 }} showsVerticalScrollIndicator={false}>
+      <LinearGradient colors={gradients.success} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.header, { paddingTop: topPt + 16 }]}>
+        <View style={styles.headerTop}>
+          <View>
+            <Text style={styles.greeting}>Доброе утро</Text>
+            <Text style={styles.username} numberOfLines={1}>{user?.full_name || user?.email || "FinApp"}</Text>
+          </View>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{initials(user?.full_name || user?.email)}</Text>
+          </View>
+        </View>
+
+        <View style={styles.balanceBlock}>
+          <Text style={styles.balanceLabel}>Общий баланс</Text>
+          <Text style={styles.balanceAmount}>{formatMoney(balance, true)}</Text>
+        </View>
+
+        <View style={styles.statsRow}>
+          <Metric icon="arrow-down-left" label="Доходы" value={formatShort(income)} color="#A8E6CF" />
+          <View style={styles.statDivider} />
+          <Metric icon="arrow-up-right" label="Расходы" value={formatShort(expense)} color="#FCA5A5" />
+          <View style={styles.statDivider} />
+          <Metric icon="percent" label="Сбережения" value={`${savingsRate}%`} color={savingsRate >= 0 ? "#A8E6CF" : "#FCA5A5"} />
+        </View>
       </LinearGradient>
 
-      {loading ? (
-        <View style={styles.stateWrap}>
-          <ActivityIndicator color={colors.primaryDark} size="large" />
-        </View>
-      ) : null}
-
-      {error ? (
-        <SectionCard title="Ошибка загрузки">
-          <Text style={[styles.errorText, { color: colors.danger }]}>{error}</Text>
-          <Pressable style={[styles.retryButton, { borderColor: colors.borderStrong }]} onPress={() => void loadData()}>
-            <Text style={[styles.retryText, { color: colors.primaryDark }]}>Обновить</Text>
+      <View style={[styles.body, { backgroundColor: colors.background }]}>
+        {loading ? <ActivityIndicator color={colors.primary} size="large" style={styles.loader} /> : null}
+        {error ? (
+          <Pressable style={[styles.errorCard, { backgroundColor: colors.surfaceAlt }]} onPress={() => void loadData()}>
+            <Feather name="refresh-cw" size={18} color={colors.primary} />
+            <Text style={[styles.errorText, { color: colors.text }]}>{error}</Text>
           </Pressable>
-        </SectionCard>
-      ) : null}
+        ) : null}
 
-      {!loading && !error ? (
-        <>
-          <SectionCard title="Структура расходов" subtitle="Категории за выбранный период">
-            {categories.length === 0 ? (
-              <EmptyState text="Пока нет данных о расходах. Добавьте и обработайте транзакции." />
-            ) : (
-              <>
-                <View style={styles.chartRow}>
-                  <DonutChart percentage={Math.min(spendingPercent, 100)} />
-                  <View style={styles.legendWrap}>
-                    {categories.map((item) => (
-                      <View key={item.id} style={styles.legendItem}>
-                        <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-                        <Text style={[styles.legendText, { color: colors.text }]}>{item.title}</Text>
-                        <Text style={[styles.legendPercent, { color: colors.textMuted }]}>{item.percent}%</Text>
-                      </View>
-                    ))}
-                  </View>
-                </View>
-              </>
-            )}
-          </SectionCard>
-
-          <SectionCard title="Ближайшая цель">
-            {topGoal ? (
-              <View style={styles.goalCard}>
-                <View style={styles.goalLeft}>
-                  <View style={[styles.goalIcon, { backgroundColor: colors.surfaceAlt }]}>
-                    <MaterialIcons name="emoji-events" size={22} color={colors.primaryDark} />
-                  </View>
-                  <View style={styles.goalTextWrap}>
-                    <Text style={[styles.goalTitle, { color: colors.text }]}>{topGoal.name}</Text>
-                    <Text style={[styles.goalHint, { color: colors.textMuted }]}>
-                      {`${formatCurrency(topGoal.currentAmount)} из ${formatCurrency(topGoal.targetAmount)}`}
-                    </Text>
-                    <Text style={[styles.goalHint, { color: colors.primaryDark }]}>
-                      {topGoal.message || `Осталось ${formatCurrency(topGoal.remainingAmount)}`}
-                    </Text>
-                  </View>
-                </View>
-                <CircularProgress value={Number(topGoal.progressPercent || 0)} />
-              </View>
-            ) : (
-              <EmptyState text="Пока нет целей. Создайте первую цель во вкладке «Цели»." />
-            )}
-          </SectionCard>
-
-          <SectionCard title="Последние транзакции">
-            {txCards.length === 0 ? (
-              <EmptyState text="Транзакции пока не найдены." />
-            ) : (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={styles.txRow}>
-                  {txCards.map((item) => (
-                    <View key={item.id} style={[styles.txCard, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
-                      <View style={[styles.txIcon, { backgroundColor: colors.background }]}>
-                        <MaterialIcons name={item.icon} size={18} color={colors.primaryDark} />
-                      </View>
-                      <Text style={[styles.txAmount, { color: item.amount.includes("+") ? colors.success : colors.text }]}>{item.amount}</Text>
-                      <Text style={[styles.txTitle, { color: colors.text }]} numberOfLines={1}>
-                        {item.title}
-                      </Text>
-                      <Text style={[styles.txCategory, { color: colors.textMuted }]}>{item.category}</Text>
-                    </View>
-                  ))}
-                </View>
-              </ScrollView>
-            )}
-          </SectionCard>
-
-          <SectionCard title="Важные сигналы">
-            {alerts.length === 0 ? (
-              <EmptyState text="Пока нет предупреждений и рекомендаций." />
-            ) : (
-              alerts.map((item) => <AlertCard key={item.id} title={item.title} tone={item.tone} />)
-            )}
-            <Pressable style={styles.reportButton} onPress={() => navigation.navigate("Reports")}>
-              <Text style={styles.reportButtonText}>Открыть подробные отчеты</Text>
+        <SectionTitle title="Быстрый доступ" />
+        <View style={styles.quickActions}>
+          {quickActions.map((action) => (
+            <Pressable key={action.label} style={styles.quickAction} onPress={() => action.target === "GoalsTab" ? navigation.getParent()?.navigate("Goals") : navigation.navigate(action.target)}>
+              <LinearGradient colors={action.gradient} style={styles.quickIcon}>
+                <Feather name={action.icon} size={20} color="#FFFFFF" />
+              </LinearGradient>
+              <Text style={[styles.quickLabel, { color: colors.text }]}>{action.label}</Text>
             </Pressable>
-          </SectionCard>
-        </>
-      ) : null}
+          ))}
+        </View>
 
-      <View style={[styles.footerSpacer, { backgroundColor: isDark ? "transparent" : colors.backgroundAlt }]} />
-    </Screen>
+        <View style={styles.sectionHeader}>
+          <SectionTitle title="За этот месяц" />
+          <Pressable onPress={() => navigation.navigate("Analytics")}>
+            <Text style={[styles.seeAll, { color: colors.primary }]}>Подробнее</Text>
+          </Pressable>
+        </View>
+        <View style={[styles.chartCard, { backgroundColor: colors.surface }]}>
+          <LinearGradient colors={gradients.success} style={styles.chartGradient}>
+            <DonutChart data={categories} total={expense} />
+          </LinearGradient>
+          <View style={styles.legend}>
+            {categories.length === 0 ? (
+              <Text style={[styles.emptyText, { color: colors.textMuted }]}>Добавьте транзакции, чтобы увидеть структуру расходов.</Text>
+            ) : (
+              categories.map((item) => (
+                <View key={item.id} style={styles.legendRow}>
+                  <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+                  <Text style={[styles.legendName, { color: colors.text }]} numberOfLines={1}>{item.name}</Text>
+                  <Text style={[styles.legendPct, { color: colors.textMuted }]}>{item.percent}%</Text>
+                </View>
+              ))
+            )}
+          </View>
+        </View>
+
+        <View style={styles.sectionHeader}>
+          <SectionTitle title="Последние" />
+          <Pressable onPress={() => navigation.getParent()?.navigate("Transactions")}>
+            <Text style={[styles.seeAll, { color: colors.primary }]}>Все</Text>
+          </Pressable>
+        </View>
+        {transactions.length === 0 ? (
+          <View style={[styles.emptyCard, { backgroundColor: colors.surface }]}>
+            <Feather name="inbox" size={30} color={colors.border} />
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>Нажмите на микрофон, чтобы добавить первую транзакцию</Text>
+          </View>
+        ) : (
+          transactions.map((item) => <TransactionRow key={item.id} item={item} />)
+        )}
+
+        <SectionTitle title="Советы" />
+        {(topSignals.length ? topSignals : fallbackSignals).map((item) => (
+          <Pressable key={item.id} style={[styles.tipCard, { backgroundColor: colors.surfaceAlt }]} onPress={() => navigation.navigate("Analytics")}>
+            <LinearGradient colors={item.gradient} style={styles.tipIcon}>
+              <Feather name={item.icon} size={16} color="#FFFFFF" />
+            </LinearGradient>
+            <View style={styles.tipText}>
+              <Text style={[styles.tipTitle, { color: colors.text }]}>{item.title}</Text>
+              <Text style={[styles.tipBody, { color: colors.textMuted }]} numberOfLines={2}>{item.text}</Text>
+            </View>
+            <Feather name="chevron-right" size={16} color={colors.textMuted} />
+          </Pressable>
+        ))}
+      </View>
+    </ScrollView>
   );
 }
 
-function EmptyState({ text }: { text: string }) {
-  const { colors } = useAppTheme();
+function Metric({ icon, label, value, color }) {
   return (
-    <View style={styles.emptyState}>
-      <Text style={[styles.emptyText, { color: colors.textMuted }]}>{text}</Text>
+    <View style={styles.statCard}>
+      <View style={styles.statIcon}>
+        <Feather name={icon} size={14} color={color} />
+      </View>
+      <View>
+        <Text style={styles.statLabel}>{label}</Text>
+        <Text style={[styles.statValue, { color }]}>{value}</Text>
+      </View>
     </View>
   );
 }
 
-function DonutChart({ percentage }: { percentage: number }) {
-  const { colors, isDark } = useAppTheme();
-  const size = 140;
-  const stroke = 18;
-  const radiusValue = (size - stroke) / 2;
-  const circumference = radiusValue * Math.PI * 2;
-  const progress = Math.min(percentage / 100, 1);
-  const dash = circumference * progress;
+function SectionTitle({ title }: { title: string }) {
+  const { colors } = useAppTheme();
+  return <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>;
+}
 
+function DonutChart({ data, total }) {
+  const size = 132;
+  const stroke = 16;
+  const radius = (size - stroke) / 2;
+  const circumference = radius * Math.PI * 2;
+  let offset = 0;
   return (
     <View style={styles.donutWrap}>
       <Svg width={size} height={size}>
-        <Defs>
-          <SvgGradient id="greenGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <Stop offset="0%" stopColor="#86EFAC" />
-            <Stop offset="100%" stopColor="#22C55E" />
-          </SvgGradient>
-        </Defs>
-        <Circle cx={size / 2} cy={size / 2} r={radiusValue} stroke={isDark ? "#334155" : "#DCFCE7"} strokeWidth={stroke} fill="none" />
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radiusValue}
-          stroke="url(#greenGradient)"
-          strokeWidth={stroke}
-          strokeLinecap="round"
-          fill="none"
-          strokeDasharray={`${dash} ${circumference}`}
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
+        <Circle cx={size / 2} cy={size / 2} r={radius} stroke="rgba(255,255,255,0.22)" strokeWidth={stroke} fill="none" />
+        {data.map((item) => {
+          const dash = total > 0 ? (item.amount / total) * circumference : 0;
+          const circle = (
+            <Circle key={item.id} cx={size / 2} cy={size / 2} r={radius} stroke={item.color} strokeWidth={stroke} strokeDasharray={`${dash} ${circumference - dash}`} strokeDashoffset={-offset} strokeLinecap="round" fill="none" transform={`rotate(-90 ${size / 2} ${size / 2})`} />
+          );
+          offset += dash;
+          return circle;
+        })}
       </Svg>
       <View style={styles.donutCenter}>
-        <Text style={[styles.donutValue, { color: colors.primaryDark }]}>{percentage}%</Text>
-        <Text style={[styles.donutLabel, { color: colors.textSecondary }]}>Расходы</Text>
+        <Text style={styles.donutValue}>{formatShort(total)}</Text>
+        <Text style={styles.donutLabel}>расходы</Text>
       </View>
     </View>
   );
 }
 
-function CircularProgress({ value }: { value: number }) {
-  const normalized = Math.max(0, Math.min(Math.round(value), 100));
-  const size = 78;
-  const stroke = 9;
-  const radiusValue = (size - stroke) / 2;
-  const circumference = radiusValue * Math.PI * 2;
-  const progress = Math.min(normalized / 100, 1);
-  const dash = circumference * progress;
-
-  return (
-    <View style={styles.progressWrap}>
-      <Svg width={size} height={size}>
-        <Circle cx={size / 2} cy={size / 2} r={radiusValue} stroke="#DCFCE7" strokeWidth={stroke} fill="none" />
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radiusValue}
-          stroke="#22C55E"
-          strokeWidth={stroke}
-          strokeLinecap="round"
-          fill="none"
-          strokeDasharray={`${dash} ${circumference}`}
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
-      </Svg>
-      <View style={styles.progressCenter}>
-        <Text style={styles.progressLabel}>{normalized}%</Text>
-      </View>
-    </View>
-  );
-}
-
-function AlertCard({ title, tone }: { title: string; tone: "success" | "danger" }) {
+function TransactionRow({ item }) {
   const { colors } = useAppTheme();
-  const borderColor = tone === "success" ? colors.success : colors.danger;
-  const icon = tone === "success" ? "check-circle-outline" : "warning-amber";
-
+  const isIncome = item.type === "INCOME";
   return (
-    <View style={[styles.alertCard, { borderColor }]}>
-      <MaterialIcons name={icon} size={20} color={borderColor} />
-      <Text style={[styles.alertText, { color: colors.text }]}>{title}</Text>
+    <View style={[styles.txRow, { backgroundColor: colors.surface }]}>
+      <View style={[styles.txIcon, { backgroundColor: colors.surfaceAlt }]}>
+        <Feather name={isIncome ? "arrow-down-left" : item.is_recurring ? "repeat" : "shopping-bag"} size={18} color={colors.primary} />
+      </View>
+      <View style={styles.txText}>
+        <Text style={[styles.txTitle, { color: colors.text }]} numberOfLines={1}>{item.description || item.original_description || "Транзакция"}</Text>
+        <Text style={[styles.txMeta, { color: colors.textMuted }]}>{isIncome ? "Доход" : item.is_recurring ? "Подписка" : "Расход"}</Text>
+      </View>
+      <Text style={[styles.txAmount, { color: isIncome ? colors.success : colors.danger }]}>{formatMoney(item.amount, false, isIncome)}</Text>
     </View>
   );
 }
 
-function formatCurrency(value: number | string | null | undefined): string {
-  const numeric = Number(value || 0);
-  return `${numeric.toLocaleString("ru-RU", { maximumFractionDigits: 0 })} ₽`;
+function initials(value?: string) {
+  return (value || "FA").trim().slice(0, 2).toUpperCase();
 }
 
-function asArray<T>(value: T[] | null | undefined): T[] {
-  return Array.isArray(value) ? value : [];
+function formatMoney(value: number, cents = false, positive = true) {
+  const amount = Math.abs(Number(value || 0));
+  const sign = positive && value > 0 ? "+" : value < 0 ? "-" : "";
+  return `${sign}${amount.toLocaleString("ru-RU", { minimumFractionDigits: cents ? 2 : 0, maximumFractionDigits: cents ? 2 : 0 })} ₽`;
 }
 
-const chartPalette = ["#22C55E", "#16A34A", "#14B8A6", "#0EA5E9"];
+function formatShort(value: number) {
+  const amount = Math.abs(Number(value || 0));
+  if (amount >= 1000000) return `${(amount / 1000000).toFixed(1)} млн ₽`;
+  if (amount >= 1000) return `${(amount / 1000).toFixed(1)} тыс. ₽`;
+  return `${amount.toFixed(0)} ₽`;
+}
+
+const palette = ["#F97316", "#3B82F6", "#EC4899", "#8B5CF6", "#10B981"];
+const fallbackSignals = [
+  { id: "plan", title: "Вы в рамках плана", text: "Расходы ниже среднего уровня. Продолжайте отслеживать категории.", icon: "zap", gradient: ["#6B46C1", "#8B5CF6"] },
+  { id: "subs", title: "Проверьте подписки", text: "FinApp найдёт регулярные списания и покажет индекс использования.", icon: "repeat", gradient: ["#059669", "#7ED9B6"] },
+];
 
 const styles = StyleSheet.create({
-  heroCard: {
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    gap: spacing.sm,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 18,
-    elevation: 3,
-  },
-  balanceLabel: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
-    color: "#ECFDF5",
-  },
-  balanceValue: {
-    fontSize: 36,
-    fontFamily: "Inter_700Bold",
-  },
-  heroMeta: {
-    fontSize: 13,
-    color: "#ECFDF5",
-    fontFamily: "Inter_500Medium",
-  },
-  stateWrap: {
-    paddingVertical: spacing.xl,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  errorText: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
-  },
-  retryButton: {
-    alignSelf: "flex-start",
-    borderWidth: 1,
-    borderRadius: radius.full,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  retryText: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-  },
-  chartRow: {
-    flexDirection: "row",
-    gap: spacing.md,
-    alignItems: "center",
-  },
-  donutWrap: {
-    width: 140,
-    height: 140,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  donutCenter: {
-    position: "absolute",
-    alignItems: "center",
-  },
-  donutValue: {
-    fontSize: 24,
-    fontFamily: "Inter_700Bold",
-  },
-  donutLabel: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-  },
-  legendWrap: {
-    flex: 1,
-    gap: spacing.xs,
-  },
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingVertical: 2,
-  },
-  legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  legendText: {
-    flex: 1,
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
-  },
-  legendPercent: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-  },
-  goalCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.md,
-  },
-  goalLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    flex: 1,
-  },
-  goalIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  goalTextWrap: {
-    flex: 1,
-    gap: 4,
-  },
-  goalTitle: {
-    fontSize: 16,
-    fontFamily: "Inter_700Bold",
-  },
-  goalHint: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-  },
-  progressWrap: {
-    width: 78,
-    height: 78,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  progressCenter: {
-    position: "absolute",
-  },
-  progressLabel: {
-    color: "#16A34A",
-    fontSize: 14,
-    fontFamily: "Inter_700Bold",
-  },
-  txRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    paddingRight: spacing.sm,
-  },
-  txCard: {
-    width: 164,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    padding: spacing.sm,
-    gap: 8,
-  },
-  txIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  txAmount: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-  },
-  txTitle: {
-    fontSize: 14,
-    fontFamily: "Inter_600SemiBold",
-  },
-  txCategory: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-  },
-  alertCard: {
-    borderWidth: 1,
-    borderRadius: radius.lg,
-    padding: spacing.sm,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  alertText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 18,
-    fontFamily: "Inter_500Medium",
-  },
-  reportButton: {
-    marginTop: spacing.xs,
-    alignSelf: "flex-start",
-  },
-  reportButtonText: {
-    color: "#16A34A",
-    fontSize: 14,
-    fontFamily: "Inter_700Bold",
-  },
-  emptyState: {
-    paddingVertical: spacing.md,
-  },
-  emptyText: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontFamily: "Inter_500Medium",
-  },
-  footerSpacer: {
-    height: 6,
-    borderRadius: radius.full,
-  },
+  scroll: { flex: 1 },
+  header: { paddingHorizontal: 20, paddingBottom: 32 },
+  headerTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 24 },
+  greeting: { fontSize: 13, color: "rgba(255,255,255,0.72)", fontFamily: "Inter_400Regular" },
+  username: { maxWidth: 260, fontSize: 20, color: "#FFFFFF", fontFamily: "Inter_700Bold" },
+  avatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: "#A8E6CF", alignItems: "center", justifyContent: "center" },
+  avatarText: { fontSize: 14, color: "#1A1A2E", fontFamily: "Inter_700Bold" },
+  balanceBlock: { alignItems: "center", marginBottom: 24 },
+  balanceLabel: { fontSize: 13, color: "rgba(255,255,255,0.72)", fontFamily: "Inter_400Regular", marginBottom: 6 },
+  balanceAmount: { fontSize: 34, color: "#FFFFFF", fontFamily: "Inter_700Bold" },
+  statsRow: { flexDirection: "row", backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 16, padding: 14, gap: 8 },
+  statCard: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
+  statIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center" },
+  statLabel: { fontSize: 10, color: "rgba(255,255,255,0.65)", fontFamily: "Inter_400Regular" },
+  statValue: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  statDivider: { width: 1, height: "100%", backgroundColor: "rgba(255,255,255,0.2)" },
+  body: { marginTop: -16, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: 24, paddingHorizontal: 20, gap: 14 },
+  loader: { marginVertical: 20 },
+  sectionTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
+  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 },
+  seeAll: { fontSize: 14, fontFamily: "Inter_500Medium" },
+  quickActions: { flexDirection: "row", gap: 12, marginBottom: 6 },
+  quickAction: { flex: 1, alignItems: "center", gap: 8 },
+  quickIcon: { width: 54, height: 54, borderRadius: 27, alignItems: "center", justifyContent: "center" },
+  quickLabel: { fontSize: 11, fontFamily: "Inter_500Medium", textAlign: "center" },
+  chartCard: { borderRadius: 20, padding: 18, flexDirection: "row", alignItems: "center", gap: 18 },
+  chartGradient: { width: 140, height: 140, borderRadius: 70, alignItems: "center", justifyContent: "center" },
+  donutWrap: { width: 132, height: 132, alignItems: "center", justifyContent: "center" },
+  donutCenter: { position: "absolute", alignItems: "center" },
+  donutValue: { color: "#FFFFFF", fontSize: 16, fontFamily: "Inter_700Bold" },
+  donutLabel: { color: "rgba(255,255,255,0.75)", fontSize: 11, fontFamily: "Inter_500Medium" },
+  legend: { flex: 1, gap: 10 },
+  legendRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
+  legendName: { flex: 1, fontSize: 12, fontFamily: "Inter_500Medium" },
+  legendPct: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  txRow: { minHeight: 64, borderRadius: 16, padding: 12, flexDirection: "row", alignItems: "center", gap: 12 },
+  txIcon: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
+  txText: { flex: 1, gap: 2 },
+  txTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  txMeta: { fontSize: 12, fontFamily: "Inter_400Regular" },
+  txAmount: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  tipCard: { flexDirection: "row", alignItems: "center", gap: 12, padding: 14, borderRadius: 14 },
+  tipIcon: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
+  tipText: { flex: 1, gap: 2 },
+  tipTitle: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  tipBody: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular" },
+  emptyCard: { borderRadius: 16, padding: 24, alignItems: "center", gap: 10 },
+  emptyText: { fontSize: 13, lineHeight: 19, fontFamily: "Inter_400Regular", textAlign: "center" },
+  errorCard: { borderRadius: 14, padding: 12, flexDirection: "row", alignItems: "center", gap: 10 },
+  errorText: { flex: 1, fontSize: 13, fontFamily: "Inter_500Medium" },
 });

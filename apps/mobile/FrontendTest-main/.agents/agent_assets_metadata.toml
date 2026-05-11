@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "HkHGbYatmoLHM9nryskTd"
+uri = "file://artifacts/mobile/assets/images/icon.png"
+type = "image"
+title = "finapp icon"

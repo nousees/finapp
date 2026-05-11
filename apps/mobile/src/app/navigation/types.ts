@@ -30,6 +30,8 @@ export type GoalsStackParamList = {
 export type DashboardStackParamList = {
   DashboardHome: undefined;
   Reports: undefined;
+  Analytics: undefined;
+  Subscriptions: undefined;
 };
 
 export type DataStackParamList = {

@@ -12,12 +12,16 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+ARG INSTALL_REAL_MODEL_DEPS=false
+COPY requirements.txt requirements-real.txt ./
+RUN pip install --no-cache-dir --upgrade "pip<26" "setuptools<81" wheel \
+    && pip install --no-cache-dir --no-build-isolation -r requirements.txt \
+    && if [ "$INSTALL_REAL_MODEL_DEPS" = "true" ]; then pip install --no-cache-dir --no-build-isolation -r requirements-real.txt; fi
 
 COPY app ./app
 COPY main.py ./main.py
+COPY ml_models.py ./ml_models.py
+COPY ml_models ./ml_models
 
 EXPOSE 8000
 

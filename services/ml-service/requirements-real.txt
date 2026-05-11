@@ -1,0 +1,4 @@
+transformers==4.48.0
+safetensors==0.4.5
+torch==2.5.1
+openai-whisper==20240930

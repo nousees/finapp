@@ -1,11 +1,11 @@
 ﻿// @ts-nocheck
 import React from 'react';
-import { MaterialIcons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { StyleSheet, View } from "react-native";
+import { Animated, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { RootTabParamList } from "./types";
 import { DashboardStackNavigator } from "./stacks/DashboardStack";
 import { TransactionsStackNavigator } from "./stacks/TransactionsStack";
@@ -16,7 +16,7 @@ import { useAppTheme } from "@shared/theme/ThemeProvider";
 
 const Tab = createBottomTabNavigator();
 
-export function AppNavigator() {
+export function AppNavigator({ onLogout }: { onLogout?: () => void }) {
   const { colors, gradients, isDark } = useAppTheme();
   const navigationTheme = useMemo(
     () => ({
@@ -39,7 +39,7 @@ export function AppNavigator() {
         screenOptions={({ route }) => ({
           headerShown: false,
           tabBarHideOnKeyboard: true,
-          tabBarActiveTintColor: colors.white,
+          tabBarActiveTintColor: colors.primary,
           tabBarInactiveTintColor: colors.textSecondary,
           tabBarShowLabel: true,
           tabBarLabelStyle: styles.label,
@@ -50,82 +50,266 @@ export function AppNavigator() {
               borderTopColor: colors.tabBarBorder,
             },
           ],
-          tabBarIcon: ({ focused, color }) => {
-            const icon = iconName(route.name);
-
-            if (focused) {
-              return (
-                <LinearGradient colors={gradients.success} style={styles.activeIconWrap}>
-                  <MaterialIcons name={icon} size={20} color={colors.white} />
-                </LinearGradient>
-              );
-            }
-
-            return (
-              <View style={[styles.inactiveIconWrap, { borderColor: colors.border }]}>
-                <MaterialIcons name={icon} size={20} color={color} />
-              </View>
-            );
-          },
+          tabBarIcon: ({ color }) => <Feather name={iconName(route.name)} size={22} color={color} />,
         })}
+        tabBar={(props) => <FinAppTabBar {...props} />}
       >
         <Tab.Screen name="Home" component={DashboardStackNavigator} options={{ title: "\u0413\u043B\u0430\u0432\u043D\u0430\u044F" }} />
         <Tab.Screen name="Transactions" component={TransactionsStackNavigator} options={{ title: "\u0422\u0440\u0430\u043D\u0437\u0430\u043A\u0446\u0438\u0438" }} />
         <Tab.Screen name="Budgets" component={BudgetsStackNavigator} options={{ title: "\u0411\u044E\u0434\u0436\u0435\u0442\u044B" }} />
         <Tab.Screen name="Goals" component={GoalsStackNavigator} options={{ title: "\u0426\u0435\u043B\u0438" }} />
-        <Tab.Screen name="Profile" component={ProfileStackNavigator} options={{ title: "\u041F\u0440\u043E\u0444\u0438\u043B\u044C" }} />
+        <Tab.Screen name="Profile" options={{ title: "\u041F\u0440\u043E\u0444\u0438\u043B\u044C" }}>
+          {() => <ProfileStackNavigator onLogout={onLogout} />}
+        </Tab.Screen>
       </Tab.Navigator>
     </NavigationContainer>
   );
 }
 
-function iconName(routeName: keyof RootTabParamList): keyof typeof MaterialIcons.glyphMap {
+function FinAppTabBar({ state, descriptors, navigation }) {
+  const { colors, gradients } = useAppTheme();
+  const pulse = useRef(new Animated.Value(1)).current;
+  const [sheetVisible, setSheetVisible] = useState(false);
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.08, duration: 700, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
+      ]),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [pulse]);
+
+  const renderTab = (route, index) => {
+    const isFocused = state.index === index;
+    const options = descriptors[route.key].options;
+    const label = options.title ?? route.name;
+    const tint = isFocused ? colors.primary : colors.textMuted;
+
+    return (
+      <Pressable
+        key={route.key}
+        style={styles.tabItem}
+        onPress={() => {
+          if (!isFocused) {
+            navigation.navigate(route.name);
+          }
+        }}
+      >
+        <Feather name={iconName(route.name)} size={22} color={tint} />
+        <Text style={[styles.tabLabel, { color: tint }]} numberOfLines={1}>
+          {label}
+        </Text>
+        {isFocused ? <View style={[styles.activeIndicator, { backgroundColor: colors.primary }]} /> : null}
+      </Pressable>
+    );
+  };
+
+  const left = state.routes.slice(0, 2);
+  const right = state.routes.slice(2);
+
+  return (
+    <View style={[styles.tabBar, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+      {left.map((route, index) => renderTab(route, index))}
+      <View style={styles.micSlot}>
+        <Animated.View style={{ transform: [{ scale: pulse }] }}>
+          <Pressable
+            onPress={() => navigation.navigate("Transactions", { screen: "VoiceCapture" })}
+            onLongPress={() => setSheetVisible(true)}
+            delayLongPress={350}
+          >
+            <LinearGradient colors={gradients.success} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.micButton}>
+              <Feather name="mic" size={26} color="#FFFFFF" />
+            </LinearGradient>
+          </Pressable>
+        </Animated.View>
+        <View style={[styles.micGlow, { backgroundColor: `${colors.primary}30` }]} />
+      </View>
+      {right.map((route, offset) => renderTab(route, offset + 2))}
+      <InputModeSheet
+        visible={sheetVisible}
+        onClose={() => setSheetVisible(false)}
+        onSelect={(screen) => {
+          setSheetVisible(false);
+          navigation.navigate("Transactions", { screen });
+        }}
+      />
+    </View>
+  );
+}
+
+function InputModeSheet({ visible, onClose, onSelect }) {
+  const { colors, gradients } = useAppTheme();
+  const modes = [
+    { screen: "VoiceCapture", icon: "mic", label: "Голос", desc: "Сказать транзакцию" },
+    { screen: "TransactionCreate", icon: "edit-3", label: "Вручную", desc: "Ввести сумму и описание" },
+    { screen: "ImportCenter", icon: "file-text", label: "Файл", desc: "CSV или Excel" },
+  ];
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.overlay} onPress={onClose}>
+        <Pressable style={[styles.sheet, { backgroundColor: colors.background }]} onPress={(event) => event.stopPropagation()}>
+          <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
+          <Text style={[styles.sheetTitle, { color: colors.text }]}>Добавить транзакцию</Text>
+          <Text style={[styles.sheetSub, { color: colors.textMuted }]}>Выберите способ ввода данных в FinApp</Text>
+          <View style={styles.modeGrid}>
+            {modes.map((mode) => (
+              <Pressable
+                key={mode.screen}
+                style={[styles.modeCard, { backgroundColor: colors.backgroundAlt }]}
+                onPress={() => onSelect(mode.screen)}
+              >
+                <LinearGradient colors={gradients.success} style={styles.modeIcon}>
+                  <Feather name={mode.icon} size={22} color="#FFFFFF" />
+                </LinearGradient>
+                <Text style={[styles.modeLabel, { color: colors.text }]}>{mode.label}</Text>
+                <Text style={[styles.modeDesc, { color: colors.textMuted }]}>{mode.desc}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function iconName(routeName: keyof RootTabParamList): keyof typeof Feather.glyphMap {
   switch (routeName) {
     case "Home":
       return "home";
     case "Transactions":
-      return "receipt-long";
+      return "list";
     case "Budgets":
-      return "account-balance-wallet";
+      return "pie-chart";
     case "Goals":
-      return "emoji-events";
+      return "flag";
     case "Profile":
-      return "person-outline";
+      return "user";
     default:
-      return "radio-button-unchecked";
+      return "circle";
   }
 }
 
 const styles = StyleSheet.create({
   tabBar: {
-    height: 72,
+    minHeight: 78,
+    flexDirection: "row",
+    alignItems: "flex-end",
     paddingTop: 8,
-    paddingBottom: 8,
+    paddingBottom: 10,
     borderTopWidth: 1,
     shadowColor: "#000",
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.06,
     shadowOffset: { width: 0, height: -2 },
-    shadowRadius: 16,
-    elevation: 3,
+    shadowRadius: 12,
+    elevation: 8,
   },
-  label: {
+  tabItem: {
+    flex: 1,
+    minHeight: 50,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+    gap: 3,
+  },
+  tabLabel: {
+    fontSize: 10,
+    fontFamily: "Inter_500Medium",
+  },
+  activeIndicator: {
+    position: "absolute",
+    top: 0,
+    width: 20,
+    height: 2,
+    borderRadius: 1,
+  },
+  micSlot: {
+    width: 74,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 2,
+  },
+  micButton: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#6B46C1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  micGlow: {
+    position: "absolute",
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    bottom: -10,
+    zIndex: -1,
+  },
+  overlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.48)",
+    justifyContent: "flex-end",
+  },
+  sheet: {
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 12,
+    paddingHorizontal: 20,
+    paddingBottom: 34,
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: 20,
+  },
+  sheetTitle: {
+    fontSize: 22,
+    fontFamily: "Inter_700Bold",
+    marginBottom: 4,
+  },
+  sheetSub: {
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    marginBottom: 22,
+  },
+  modeGrid: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  modeCard: {
+    flex: 1,
+    minHeight: 128,
+    borderRadius: 16,
+    padding: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  modeIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modeLabel: {
+    fontSize: 13,
+    fontFamily: "Inter_700Bold",
+    textAlign: "center",
+  },
+  modeDesc: {
     fontSize: 11,
-    fontWeight: "600",
-    marginTop: 2,
-  },
-  activeIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  inactiveIconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
+    lineHeight: 15,
+    fontFamily: "Inter_400Regular",
+    textAlign: "center",
   },
 });
