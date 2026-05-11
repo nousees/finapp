@@ -21,7 +21,6 @@ RUN pip install --no-cache-dir --upgrade "pip<26" "setuptools<81" wheel \
 COPY app ./app
 COPY main.py ./main.py
 COPY ml_models.py ./ml_models.py
-COPY ml_models ./ml_models
 
 EXPOSE 8000
 

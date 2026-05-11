@@ -183,14 +183,14 @@ services:
       context: ./services/ml-service
       dockerfile: Dockerfile
       args:
-        INSTALL_REAL_MODEL_DEPS: ${INSTALL_REAL_MODEL_DEPS:-true}
+        INSTALL_REAL_MODEL_DEPS: ${INSTALL_REAL_MODEL_DEPS:-false}
     container_name: finapp-ml-service
     environment:
       APP_ENV: local
       APP_VERSION: 1.0.0
       LOG_LEVEL: INFO
       MAX_AUDIO_SIZE_MB: "25"
-      ENABLE_REAL_MODELS: "true"
+      ENABLE_REAL_MODELS: ${ENABLE_REAL_MODELS:-true}
       TEST_MODE: "false"
       WHISPER_MODEL_PATH: /app/ml_models/whisper-large-v3
       NER_MODEL_PATH: /app/ml_models/rubert_tiny_ner_finapp
