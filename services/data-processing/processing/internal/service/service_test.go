@@ -19,8 +19,8 @@ func TestCategorizeExpense(t *testing.T) {
 
 	category, confidence, recurring := classifier.Classify(tx)
 
-	if category != "Питание" {
-		t.Fatalf("expected category Питание, got %s", category)
+	if category != "Продукты" {
+		t.Fatalf("expected category Продукты, got %s", category)
 	}
 	if confidence < 0.9 {
 		t.Fatalf("expected confidence >= 0.9, got %.2f", confidence)
@@ -39,8 +39,8 @@ func TestCategorizeRecurringSubscription(t *testing.T) {
 
 	category, _, recurring := classifier.Classify(tx)
 
-	if category != "Развлечения" {
-		t.Fatalf("expected category Развлечения, got %s", category)
+	if category != "Подписки" {
+		t.Fatalf("expected category Подписки, got %s", category)
 	}
 	if !recurring {
 		t.Fatalf("expected recurring true")

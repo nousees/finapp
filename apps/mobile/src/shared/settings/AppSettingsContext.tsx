@@ -15,9 +15,7 @@ export const defaultAppSettings = {
 };
 
 const currencyMeta = {
-  RUB: { locale: "ru-RU", currency: "RUB", rate: 1 },
-  USD: { locale: "en-US", currency: "USD", rate: 90 },
-  EUR: { locale: "de-DE", currency: "EUR", rate: 100 },
+  RUB: { locale: "ru-RU", currency: "RUB" },
 };
 
 const languageLabels = {
@@ -57,8 +55,8 @@ export function AppSettingsProvider({ children }) {
 
   const formatMoney = useCallback(
     (value, options = {}) => {
-      const meta = currencyMeta[settings.currency] || currencyMeta.RUB;
-      const amount = Math.abs(Number(value || 0)) / meta.rate;
+      const meta = currencyMeta.RUB;
+      const amount = Math.abs(Number(value || 0));
       const sign = options.sign ? (Number(value || 0) >= 0 ? "+" : "-") : "";
       const formatter = new Intl.NumberFormat(meta.locale, {
         style: "currency",
@@ -94,7 +92,7 @@ function normalizeSettings(value) {
   return {
     ...defaultAppSettings,
     ...value,
-    currency: currencyMeta[value?.currency] ? value.currency : "RUB",
-    language: language === "en" ? "en" : "ru",
+    currency: "RUB",
+    language: "ru",
   };
 }

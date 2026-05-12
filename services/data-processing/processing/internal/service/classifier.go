@@ -19,15 +19,33 @@ type categoryRule struct {
 }
 
 var expenseRules = []categoryRule{
-	{Category: "Питание", Confidence: 0.92, Keywords: []string{"кофе", "cafe", "кафе", "restaurant", "еда", "food", "delivery", "пятерочка", "магнит"}},
-	{Category: "Транспорт", Confidence: 0.90, Keywords: []string{"taxi", "такси", "metro", "метро", "bus", "автобус", "транспорт", "fuel", "бензин"}},
-	{Category: "Жилье", Confidence: 0.88, Keywords: []string{"rent", "аренда", "квартира", "жкх", "electricity", "internet", "коммун"}},
-	{Category: "Развлечения", Confidence: 0.84, Keywords: []string{"cinema", "кино", "spotify", "netflix", "подписк", "yandex plus", "игры"}},
-	{Category: "Здоровье", Confidence: 0.83, Keywords: []string{"pharmacy", "аптека", "doctor", "clinic", "мед"}},
+	{Category: "Продукты", Confidence: 0.93, Keywords: []string{"кофе to go", "пятерочка", "пятёрочка", "магнит", "лента", "перекресток", "вкусвилл", "продукты", "супермаркет"}},
+	{Category: "Кафе и рестораны", Confidence: 0.9, Keywords: []string{"cafe", "кафе", "restaurant", "ресторан", "еда", "food", "delivery", "доставка еды", "пицца", "бургер", "кофе"}},
+	{Category: "Транспорт", Confidence: 0.9, Keywords: []string{"taxi", "такси", "metro", "метро", "bus", "автобус", "транспорт", "fuel", "бензин", "азс", "парковка"}},
+	{Category: "Жилье", Confidence: 0.88, Keywords: []string{"rent", "аренда", "ипотека", "квартира", "жилье"}},
+	{Category: "Коммунальные услуги", Confidence: 0.88, Keywords: []string{"жкх", "electricity", "internet", "коммун", "вода", "газ", "электричество"}},
+	{Category: "Развлечения", Confidence: 0.84, Keywords: []string{"cinema", "кино", "игры", "театр", "концерт"}},
+	{Category: "Подписки", Confidence: 0.92, Keywords: []string{"spotify", "netflix", "подписк", "yandex plus", "youtube premium", "google one", "icloud"}},
+	{Category: "Здоровье", Confidence: 0.84, Keywords: []string{"pharmacy", "аптека", "doctor", "clinic", "мед", "врач", "лекарств"}},
+	{Category: "Образование", Confidence: 0.84, Keywords: []string{"курс", "обучени", "учеб", "school", "университет", "репетитор"}},
+	{Category: "Покупки", Confidence: 0.8, Keywords: []string{"wildberries", "ozon", "marketplace", "покупк", "товар"}},
+	{Category: "Одежда и обувь", Confidence: 0.85, Keywords: []string{"одежд", "обув", "кроссовк", "куртк", "футболк"}},
+	{Category: "Путешествия", Confidence: 0.86, Keywords: []string{"авиабилет", "отель", "поездка", "отпуск", "путешеств"}},
+	{Category: "Семья и дети", Confidence: 0.82, Keywords: []string{"ребен", "дети", "садик", "игрушк", "подгузник"}},
+	{Category: "Красота и уход", Confidence: 0.82, Keywords: []string{"маникюр", "салон", "косметик", "барбершоп", "уход"}},
+	{Category: "Спорт", Confidence: 0.83, Keywords: []string{"фитнес", "зал", "спорт", "тренировк", "бассейн"}},
+	{Category: "Питомцы", Confidence: 0.82, Keywords: []string{"зоомагазин", "ветеринар", "корм", "питом", "собак", "кот"}},
+	{Category: "Электроника", Confidence: 0.84, Keywords: []string{"смартфон", "ноутбук", "наушник", "техник", "электроник", "dns"}},
+	{Category: "Подарки", Confidence: 0.8, Keywords: []string{"подарок", "цветы", "букет", "праздник"}},
+	{Category: "Налоги и комиссии", Confidence: 0.85, Keywords: []string{"комисси", "налог", "штраф", "пошлин", "сбор"}},
 }
 
 var incomeRules = []categoryRule{
-	{Category: "Доход", Confidence: 0.96, Keywords: []string{"salary", "зарплата", "income", "bonus", "премия", "freelance"}},
+	{Category: "Зарплата", Confidence: 0.96, Keywords: []string{"salary", "зарплата", "income", "аванс", "оклад"}},
+	{Category: "Фриланс", Confidence: 0.88, Keywords: []string{"freelance", "фриланс", "заказ", "проект"}},
+	{Category: "Бонусы и премии", Confidence: 0.87, Keywords: []string{"bonus", "премия", "бонус"}},
+	{Category: "Кэшбэк", Confidence: 0.91, Keywords: []string{"cashback", "кэшбэк"}},
+	{Category: "Подарки и переводы", Confidence: 0.8, Keywords: []string{"перевод", "подарили", "подарок от"}},
 }
 
 func NewRuleBasedClassifier() *RuleBasedClassifier {
@@ -41,7 +59,7 @@ func (RuleBasedClassifier) Classify(tx *model.Transaction) (string, float64, boo
 	defaultConfidence := 0.55
 	if tx.Type == "INCOME" {
 		rules = incomeRules
-		defaultCategory = "Доход"
+		defaultCategory = "Зарплата"
 		defaultConfidence = 0.72
 	}
 

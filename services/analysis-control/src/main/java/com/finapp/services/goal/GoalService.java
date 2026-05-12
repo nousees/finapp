@@ -5,15 +5,19 @@ import com.finapp.models.enums.GoalStatus;
 import com.finapp.repositories.goal.GoalRepository;
 import com.finapp.services.dtos.GoalDTO;
 import com.finapp.services.exceptions.NotFoundException;
+import com.finapp.services.exceptions.ValidationException;
 import com.finapp.services.shared.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -23,6 +27,7 @@ public class GoalService {
     
     private final GoalRepository goalRepository;
     private final NotificationService notificationService;
+    private final JdbcTemplate jdbcTemplate;
     
     public List<Goal> getUserGoals(UUID userId) {
         return goalRepository.findByUserId(userId);
@@ -87,12 +92,23 @@ public class GoalService {
     public Goal addToGoal(UUID userId, UUID goalId, BigDecimal amount) {
         Goal goal = getGoal(userId, goalId);
         BigDecimal safeAmount = amount == null ? BigDecimal.ZERO : amount;
+        validateContribution(goal, safeAmount);
+
         BigDecimal currentAmount = nullToZero(goal.getCurrentAmount());
         BigDecimal targetAmount = nullToZero(goal.getTargetAmount());
+        BigDecimal availableBalance = getAvailableBalanceForGoals(userId);
         if (targetAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            if (safeAmount.compareTo(availableBalance) > 0) {
+                throw insufficientFunds(availableBalance);
+            }
             goal.setCurrentAmount(currentAmount.add(safeAmount));
             return goalRepository.save(goal);
         }
+
+        if (safeAmount.compareTo(availableBalance) > 0) {
+            throw insufficientFunds(availableBalance);
+        }
+
         BigDecimal previousProgress = getProgressPercent(currentAmount, targetAmount);
         BigDecimal newAmount = currentAmount.add(safeAmount);
         BigDecimal newProgress = getProgressPercent(newAmount, targetAmount);
@@ -188,5 +204,59 @@ public class GoalService {
 
     private BigDecimal nullToZero(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
+    }
+
+    private void validateContribution(Goal goal, BigDecimal amount) {
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            Map<String, String> errors = new HashMap<>();
+            errors.put("amount", "Contribution amount must be greater than zero");
+            throw new ValidationException("Invalid contribution amount", errors);
+        }
+
+        if (GoalStatus.COMPLETED.toString().equalsIgnoreCase(goal.getStatus())) {
+            Map<String, String> errors = new HashMap<>();
+            errors.put("goal", "Completed goal cannot be funded");
+            throw new ValidationException("Goal is already completed", errors);
+        }
+    }
+
+    private BigDecimal getAvailableBalanceForGoals(UUID userId) {
+        BigDecimal netBalance = jdbcTemplate.queryForObject(
+            """
+            SELECT COALESCE(
+                SUM(CASE
+                    WHEN type = 'INCOME' THEN amount
+                    WHEN type = 'EXPENSE' THEN -amount
+                    ELSE 0
+                END),
+                0
+            )
+            FROM transactions
+            WHERE user_id = ?
+            """,
+            BigDecimal.class,
+            userId
+        );
+
+        BigDecimal reservedInGoals = jdbcTemplate.queryForObject(
+            """
+            SELECT COALESCE(SUM(current_amount), 0)
+            FROM goals
+            WHERE user_id = ?
+              AND status <> 'CANCELLED'
+            """,
+            BigDecimal.class,
+            userId
+        );
+
+        BigDecimal available = nullToZero(netBalance).subtract(nullToZero(reservedInGoals));
+        return available.max(BigDecimal.ZERO);
+    }
+
+    private ValidationException insufficientFunds(BigDecimal availableBalance) {
+        Map<String, String> errors = new HashMap<>();
+        errors.put("amount", "Not enough available balance for this goal contribution");
+        errors.put("availableBalance", nullToZero(availableBalance).toPlainString());
+        return new ValidationException("Insufficient available balance for goals", errors);
     }
 }

@@ -71,7 +71,11 @@ func (r *Repository) EnsureCategory(ctx context.Context, userID uuid.UUID, name,
 	err := r.pool.QueryRow(ctx, `
 		SELECT id, user_id, name, type
 		FROM categories
-		WHERE user_id = $1 AND LOWER(name) = LOWER($2) AND type = $3
+		WHERE LOWER(name) = LOWER($2)
+		  AND type = $3
+		  AND (user_id = $1 OR user_id IS NULL)
+		ORDER BY CASE WHEN user_id = $1 THEN 0 ELSE 1 END
+		LIMIT 1
 	`, userID, name, txType).Scan(&c.ID, &c.UserID, &c.Name, &c.Type)
 	if err == nil {
 		return &c, nil

@@ -12,7 +12,7 @@ import { useAppTheme } from "@shared/theme/ThemeProvider";
 
 export function SettingsScreen() {
   const { colors, gradients, mode, toggleMode } = useAppTheme();
-  const { settings, languageLabel, setSetting } = useAppSettings();
+  const { settings, setSetting } = useAppSettings();
   const insets = useSafeAreaInsets();
   const [passwordModal, setPasswordModal] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ current: "", next: "", confirm: "" });
@@ -20,21 +20,18 @@ export function SettingsScreen() {
 
   const update = (key, value) => void setSetting(key, value);
 
-  const chooseCurrency = () => {
-    Alert.alert("Валюта", "Выберите валюту интерфейса", [
-      { text: "RUB", onPress: () => update("currency", "RUB") },
-      { text: "USD", onPress: () => update("currency", "USD") },
-      { text: "EUR", onPress: () => update("currency", "EUR") },
-      { text: "Отмена", style: "cancel" },
-    ]);
+  const showLanguageInfo = () => {
+    Alert.alert(
+      "Язык интерфейса",
+      "Сейчас мобильный интерфейс работает на русском языке. Переключение языка скрыто, пока не будет переведен весь клиент целиком.",
+    );
   };
 
-  const chooseLanguage = () => {
-    Alert.alert("Язык", "Интерфейс FinApp", [
-      { text: "Русский", onPress: () => update("language", "ru") },
-      { text: "English", onPress: () => update("language", "en") },
-      { text: "Отмена", style: "cancel" },
-    ]);
+  const showCurrencyInfo = () => {
+    Alert.alert(
+      "Валюта отображения",
+      "Смена валюты временно отключена. Следующий этап — подключение реального курса и корректный мультивалютный пересчет, а не фиктивная конвертация в интерфейсе.",
+    );
   };
 
   const toggleBiometric = async (value: boolean) => {
@@ -46,7 +43,7 @@ export function SettingsScreen() {
     const hasHardware = await LocalAuthentication.hasHardwareAsync();
     const enrolled = await LocalAuthentication.isEnrolledAsync();
     if (!hasHardware || !enrolled) {
-      Alert.alert("Биометрия недоступна", "На устройстве нет настроенной биометрической проверки.");
+      Alert.alert("Биометрия недоступна", "На устройстве не настроена биометрическая проверка.");
       return;
     }
 
@@ -79,7 +76,7 @@ export function SettingsScreen() {
       await changePassword(passwordForm.current, passwordForm.next);
       setPasswordModal(false);
       setPasswordForm({ current: "", next: "", confirm: "" });
-      Alert.alert("Готово", "Пароль изменён.");
+      Alert.alert("Готово", "Пароль изменен.");
     } catch (error) {
       Alert.alert("Ошибка", error instanceof Error ? error.message : "Не удалось изменить пароль.");
     } finally {
@@ -97,12 +94,12 @@ export function SettingsScreen() {
         <LinearGradient colors={gradients.success} style={styles.hero}>
           <Text style={styles.heroLabel}>FinApp</Text>
           <Text style={styles.heroTitle}>Настройки приложения</Text>
-          <Text style={styles.heroText}>Синхронизация, безопасность и поведение мобильного клиента.</Text>
+          <Text style={styles.heroText}>Безопасность, поведение клиента и системные параметры, которые уже реально поддерживаются приложением.</Text>
         </LinearGradient>
 
         <SettingsSection title="Основные">
-          <SettingsRow icon="dollar-sign" label="Валюта по умолчанию" value={settings.currency} onPress={chooseCurrency} />
-          <SettingsRow icon="globe" label="Язык" value={languageLabel} onPress={chooseLanguage} />
+          <SettingsRow icon="dollar-sign" label="Валюта учета" value="RUB" onPress={showCurrencyInfo} />
+          <SettingsRow icon="globe" label="Язык интерфейса" value="Русский" onPress={showLanguageInfo} />
           <SettingsRow icon="moon" label="Темная тема" toggle value={mode === "dark"} onToggle={toggleMode} />
         </SettingsSection>
 

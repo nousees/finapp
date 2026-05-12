@@ -7,6 +7,14 @@ export type VoiceTranscription = {
   confidence: number;
 };
 
+type CollectionVoiceResponse = {
+  id: string;
+  transcribed_text: string;
+  entities?: string | Record<string, unknown> | null;
+  status?: string;
+  confidence?: number | null;
+};
+
 export type EnrichedVoiceTransaction = {
   transaction: {
     amount?: number | null;
@@ -31,6 +39,20 @@ export type EnrichedVoiceTransaction = {
 };
 
 export async function transcribeAudioFile(file: { uri: string; name: string; mimeType?: string | null }): Promise<VoiceTranscription> {
+  try {
+    const uploaded = await uploadVoiceFile(file);
+    if (uploaded?.transcribed_text) {
+      const entityPayload = parseEntities(uploaded.entities);
+      return {
+        text: uploaded.transcribed_text,
+        language: String(entityPayload?.language || "ru"),
+        confidence: Number(entityPayload?.confidence ?? uploaded.confidence ?? 0.9),
+      };
+    }
+  } catch {
+    // Fallback to direct ML call below.
+  }
+
   const formData = new FormData();
   formData.append("file", {
     uri: file.uri,
@@ -41,6 +63,22 @@ export async function transcribeAudioFile(file: { uri: string; name: string; mim
   return requestJson<VoiceTranscription>({
     baseUrl: apiConfig.mlBaseUrl,
     path: "/api/v1/voice/transcribe",
+    method: "POST",
+    body: formData,
+  });
+}
+
+export async function uploadVoiceFile(file: { uri: string; name: string; mimeType?: string | null }): Promise<CollectionVoiceResponse> {
+  const formData = new FormData();
+  formData.append("file", {
+    uri: file.uri,
+    name: file.name,
+    type: file.mimeType || "audio/mpeg",
+  } as any);
+
+  return requestJson<CollectionVoiceResponse>({
+    baseUrl: apiConfig.collectionBaseUrl,
+    path: "/api/v1/voice/upload",
     method: "POST",
     body: formData,
   });
@@ -63,7 +101,7 @@ function fallbackEnrichText(text: string): EnrichedVoiceTransaction {
   const amountMatch = text.match(/\b(\d{1,9}(?:[ .,]\d{3})*(?:[,.]\d{1,2})?|\d{1,9})\b/);
   const amount = amountMatch ? Number(amountMatch[1].replace(/\s/g, "").replace(",", ".")) : undefined;
   const lowered = text.toLowerCase();
-  const isIncome = /(получил|получила|зачислили|зарплата|аванс|доход)/i.test(lowered);
+  const isIncome = /(получил|получила|зачислили|зарплата|аванс|доход|премия|кэшбэк)/i.test(lowered);
   const category = detectCategory(lowered, isIncome);
 
   return {
@@ -79,8 +117,8 @@ function fallbackEnrichText(text: string): EnrichedVoiceTransaction {
     },
     confidence: {
       ner: amount ? 0.72 : 0.45,
-      categorization: category.code === "other" ? 0.55 : 0.78,
-      overall: amount ? 0.7 : 0.5,
+      categorization: category.code === "other" ? 0.55 : 0.8,
+      overall: amount ? 0.72 : 0.52,
     },
     needs_review: !amount || category.code === "other",
     model_versions: {
@@ -91,12 +129,32 @@ function fallbackEnrichText(text: string): EnrichedVoiceTransaction {
 }
 
 function detectCategory(text: string, isIncome: boolean) {
-  if (isIncome) return { code: "salary", name: "Зарплата" };
-  if (/(пятер|магнит|продукт|супермаркет)/i.test(text)) return { code: "groceries", name: "Продукты" };
-  if (/(такси|метро|автобус|транспорт)/i.test(text)) return { code: "transport", name: "Транспорт" };
-  if (/(netflix|spotify|подписк)/i.test(text)) return { code: "subscriptions", name: "Подписки" };
-  if (/(аптек|лекарств|здоров)/i.test(text)) return { code: "health", name: "Здоровье" };
-  if (/(кафе|ресторан|кофе)/i.test(text)) return { code: "restaurants", name: "Кафе" };
+  if (isIncome) {
+    if (/(фриланс|заказ|проект)/i.test(text)) return { code: "freelance", name: "Фриланс" };
+    if (/(премия|бонус)/i.test(text)) return { code: "bonus", name: "Бонусы и премии" };
+    if (/(кэшбэк|cashback)/i.test(text)) return { code: "cashback", name: "Кэшбэк" };
+    if (/(перевод|подарили|подарок)/i.test(text)) return { code: "gifts_income", name: "Подарки и переводы" };
+    return { code: "salary", name: "Зарплата" };
+  }
+
+  if (/(пятер|магнит|перекресток|лента|вкусвилл|продукт|супермаркет)/i.test(text)) return { code: "groceries", name: "Продукты" };
+  if (/(кафе|ресторан|кофе|пицц|бургер|доставка еды)/i.test(text)) return { code: "restaurants", name: "Кафе и рестораны" };
+  if (/(такси|метро|автобус|транспорт|бензин|азс|парковка)/i.test(text)) return { code: "transport", name: "Транспорт" };
+  if (/(netflix|spotify|youtube premium|яндекс плюс|подписк|ivi)/i.test(text)) return { code: "subscriptions", name: "Подписки" };
+  if (/(аптек|лекарств|клиник|стоматолог|врач|здоров)/i.test(text)) return { code: "health", name: "Здоровье" };
+  if (/(аренд|ипотек|квартир|жилье)/i.test(text)) return { code: "housing", name: "Жилье" };
+  if (/(жкх|коммунал|электрич|вода|газ|интернет)/i.test(text)) return { code: "utilities", name: "Коммунальные услуги" };
+  if (/(курс|обучен|учеб|университет|школ|репетитор)/i.test(text)) return { code: "education", name: "Образование" };
+  if (/(wildberries|ozon|marketplace|покупк|товар)/i.test(text)) return { code: "shopping", name: "Покупки" };
+  if (/(одежд|обув|кроссовк|куртк|футболк)/i.test(text)) return { code: "clothing", name: "Одежда и обувь" };
+  if (/(отель|авиабилет|поездк|отпуск|путешеств)/i.test(text)) return { code: "travel", name: "Путешествия" };
+  if (/(ребен|дети|садик|игрушк|подгузник)/i.test(text)) return { code: "family", name: "Семья и дети" };
+  if (/(маникюр|салон|косметик|барбершоп|уход)/i.test(text)) return { code: "beauty", name: "Красота и уход" };
+  if (/(фитнес|зал|спорт|тренировк|бассейн)/i.test(text)) return { code: "sports", name: "Спорт" };
+  if (/(зоомагазин|ветеринар|корм|кот|собак|питом)/i.test(text)) return { code: "pets", name: "Питомцы" };
+  if (/(смартфон|ноутбук|наушник|техник|электроник|dns)/i.test(text)) return { code: "electronics", name: "Электроника" };
+  if (/(подарок|цветы|букет|праздник)/i.test(text)) return { code: "gifts", name: "Подарки" };
+  if (/(комисси|налог|штраф|пошлин|сбор)/i.test(text)) return { code: "fees", name: "Налоги и комиссии" };
   return { code: "other", name: "Прочее" };
 }
 
@@ -109,6 +167,18 @@ function offsetDate(days: number): string {
   const date = new Date();
   date.setDate(date.getDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+function parseEntities(value: CollectionVoiceResponse["entities"]): Record<string, unknown> | null {
+  if (!value) return null;
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  return value;
 }
 
 export async function importStatementFile(file: { uri: string; name: string; mimeType?: string | null }): Promise<{

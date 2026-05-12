@@ -15,6 +15,7 @@ import { useAppTheme } from "@shared/theme/ThemeProvider";
 const goalColors = ["#10B981", "#8B5CF6", "#3B82F6", "#F97316", "#EC4899", "#F59E0B"];
 const goalIcons = ["shield", "map-pin", "monitor", "trending-up", "star", "gift"];
 const emptyForm = { id: null, name: "", targetAmount: "", deadline: formatISODate(tomorrow()), icon: goalIcons[0], color: goalColors[0] };
+const emptyContribution = { goalId: null, goalName: "", amount: "" };
 
 export function GoalsScreen() {
   const { colors, gradients } = useAppTheme();
@@ -25,7 +26,9 @@ export function GoalsScreen() {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
+  const [contributeVisible, setContributeVisible] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [contribution, setContribution] = useState(emptyContribution);
   const [error, setError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
@@ -79,10 +82,12 @@ export function GoalsScreen() {
   const totalProgress = totalTarget > 0 ? Math.round((totalSaved / totalTarget) * 100) : 0;
   const transactionBalance = transactions.reduce((sum, item) => {
     const amount = Number(item.amount || 0);
-    return item.type === "INCOME" ? sum + amount : sum - amount;
+    return item.type === "INCOME" ? sum + amount : item.type === "EXPENSE" ? sum - amount : sum;
   }, 0);
   const summaryBalance = Number(insights?.summary?.netSavings ?? NaN);
-  const availableBalance = Math.max(0, Number.isFinite(summaryBalance) ? summaryBalance : transactionBalance, transactionBalance);
+  const grossBalance = Number.isFinite(summaryBalance) ? summaryBalance : transactionBalance;
+  const reservedInGoals = cards.reduce((sum, item) => sum + Number(item.current || 0), 0);
+  const availableBalance = Math.max(0, grossBalance - reservedInGoals);
 
   const openCreate = () => {
     const index = goals.length % goalColors.length;
@@ -102,9 +107,21 @@ export function GoalsScreen() {
     setModalVisible(true);
   };
 
+  const openContribute = (goal) => {
+    setContribution({ goalId: goal.id, goalName: goal.name, amount: "" });
+    setContributeVisible(true);
+    setError(null);
+  };
+
   const closeForm = () => {
     setModalVisible(false);
     setForm(emptyForm);
+    setError(null);
+  };
+
+  const closeContribution = () => {
+    setContributeVisible(false);
+    setContribution(emptyContribution);
     setError(null);
   };
 
@@ -144,10 +161,21 @@ export function GoalsScreen() {
     }
   };
 
-  const contribute = async (goal, amount: number) => {
+  const contribute = async () => {
+    const goal = cards.find((item) => item.id === contribution.goalId);
+    const parsedAmount = Number(String(contribution.amount).replace(",", "."));
+    if (!goal) {
+      setError("Цель не найдена.");
+      return;
+    }
+    if (!parsedAmount || parsedAmount <= 0) {
+      setError("Введите корректную сумму пополнения.");
+      return;
+    }
+
     const remaining = Math.max(0, goal.target - goal.current);
-    const safeAmount = Math.min(amount, remaining);
-    if (safeAmount <= 0) {
+    const safeAmount = Math.min(parsedAmount, remaining);
+    if (remaining <= 0) {
       setError("Цель уже закрыта.");
       return;
     }
@@ -155,9 +183,11 @@ export function GoalsScreen() {
       Alert.alert("Недостаточно средств", `Доступно для целей: ${formatMoney(availableBalance)}. Пополнение не выполнено.`);
       return;
     }
+
     try {
       setError(null);
       await addFundsToGoal(goal.id, safeAmount);
+      closeContribution();
       await loadData();
     } catch (fundError) {
       setError(fundError instanceof Error ? fundError.message : "Не удалось пополнить цель");
@@ -165,7 +195,7 @@ export function GoalsScreen() {
   };
 
   const removeGoal = async (id: string) => {
-    Alert.alert("Удалить цель?", "Прогресс цели будет удалён.", [
+    Alert.alert("Удалить цель?", "Прогресс цели будет удален.", [
       { text: "Отмена", style: "cancel" },
       {
         text: "Удалить",
@@ -188,7 +218,7 @@ export function GoalsScreen() {
         <View style={styles.header}>
           <View>
             <Text style={[styles.pageTitle, { color: colors.text }]}>Цели</Text>
-            <Text style={[styles.balanceText, { color: colors.textMuted }]}>Доступно для целей: {formatMoney(availableBalance)}</Text>
+            <Text style={[styles.balanceText, { color: colors.textMuted }]}>Свободно для пополнения целей: {formatMoney(availableBalance)}</Text>
           </View>
           <Pressable onPress={openCreate}>
             <LinearGradient colors={gradients.successDeep} style={styles.addButton}>
@@ -205,7 +235,7 @@ export function GoalsScreen() {
             <View style={[styles.overviewFill, { width: `${Math.min(totalProgress, 100)}%` }]} />
           </View>
           <View style={styles.overviewStats}>
-            <OverviewStat value={active.length} label="Активных" />
+            <OverviewStat value={active.length} label="Активные" />
             <OverviewStat value={completed.length} label="Выполнено" />
             <OverviewStat value={cards.length} label="Всего" />
           </View>
@@ -215,9 +245,9 @@ export function GoalsScreen() {
         {loading ? <ActivityIndicator color={colors.primary} size="large" style={styles.loader} /> : null}
 
         {active.length > 0 ? <Text style={[styles.sectionTitle, { color: colors.text }]}>В процессе</Text> : null}
-        {active.map((goal) => <GoalCard key={goal.id} goal={goal} onEdit={() => openEdit(goal)} onDelete={() => removeGoal(goal.id)} onContribute={(amount) => contribute(goal, amount)} />)}
+        {active.map((goal) => <GoalCard key={goal.id} goal={goal} onEdit={() => openEdit(goal)} onDelete={() => removeGoal(goal.id)} onContribute={() => openContribute(goal)} />)}
         {completed.length > 0 ? <Text style={[styles.sectionTitle, { color: colors.text }]}>Выполненные</Text> : null}
-        {completed.map((goal) => <GoalCard key={goal.id} goal={goal} onEdit={() => openEdit(goal)} onDelete={() => removeGoal(goal.id)} onContribute={(amount) => contribute(goal, amount)} />)}
+        {completed.map((goal) => <GoalCard key={goal.id} goal={goal} onEdit={() => openEdit(goal)} onDelete={() => removeGoal(goal.id)} onContribute={() => openContribute(goal)} />)}
         {cards.length === 0 && !loading ? <Text style={[styles.empty, { color: colors.textMuted }]}>Целей пока нет. Создайте первую финансовую цель.</Text> : null}
       </ScrollView>
 
@@ -243,6 +273,29 @@ export function GoalsScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <Modal visible={contributeVisible} transparent animationType="slide" onRequestClose={closeContribution}>
+        <Pressable style={styles.overlay} onPress={closeContribution}>
+          <Pressable style={[styles.sheet, { backgroundColor: colors.background, paddingBottom: 20 + insets.bottom }]} onPress={(event) => event.stopPropagation()}>
+            <View style={[styles.handle, { backgroundColor: colors.border }]} />
+            <Text style={[styles.sheetTitle, { color: colors.text }]}>Пополнить цель</Text>
+            <Text style={[styles.sheetSubtitle, { color: colors.textMuted }]}>{contribution.goalName || "Выбранная цель"}</Text>
+            <Text style={[styles.sheetHint, { color: colors.textMuted }]}>Свободно для пополнения: {formatMoney(availableBalance)}</Text>
+            <Field
+              label="Сумма пополнения"
+              placeholder="Например, 5000"
+              value={contribution.amount}
+              onChangeText={(value) => setContribution((current) => ({ ...current, amount: value }))}
+              keyboardType="numeric"
+            />
+            <Pressable onPress={contribute}>
+              <LinearGradient colors={gradients.successDeep} style={styles.createButton}>
+                <Text style={styles.createText}>Пополнить цель</Text>
+              </LinearGradient>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -250,7 +303,6 @@ export function GoalsScreen() {
 function GoalCard({ goal, onEdit, onDelete, onContribute }) {
   const { colors } = useAppTheme();
   const { formatMoney } = useAppSettings();
-  const remaining = Math.max(0, goal.target - goal.current);
   return (
     <Pressable style={[styles.goalCard, { backgroundColor: colors.surface }]} onPress={onEdit}>
       <View style={styles.goalTop}>
@@ -274,20 +326,17 @@ function GoalCard({ goal, onEdit, onDelete, onContribute }) {
         </Pressable>
       </View>
       {goal.message ? <Text style={[styles.goalMessage, { color: colors.primary }]}>{goal.message}</Text> : null}
-      {remaining > 0 ? (
+      {goal.current < goal.target ? (
         <View style={styles.contributeRow}>
-          {[1000, 5000].map((amount) => (
-            <Pressable
-              key={amount}
-              onPress={(event) => {
-                event.stopPropagation();
-                onContribute(amount);
-              }}
-              style={[styles.contributeButton, { borderColor: colors.borderStrong }]}
-            >
-              <Text style={[styles.contributeText, { color: colors.primary }]}>+ {formatMoney(Math.min(amount, remaining))}</Text>
-            </Pressable>
-          ))}
+          <Pressable
+            onPress={(event) => {
+              event.stopPropagation();
+              onContribute();
+            }}
+            style={[styles.contributeButton, { borderColor: colors.borderStrong }]}
+          >
+            <Text style={[styles.contributeText, { color: colors.primary }]}>Пополнить</Text>
+          </Pressable>
         </View>
       ) : null}
     </Pressable>
@@ -368,12 +417,14 @@ const styles = StyleSheet.create({
   progressWrap: { width: 72, height: 72, alignItems: "center", justifyContent: "center" },
   progressText: { position: "absolute", fontSize: 13, fontFamily: "Inter_700Bold" },
   contributeRow: { flexDirection: "row", gap: 8 },
-  contributeButton: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
+  contributeButton: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 9 },
   contributeText: { fontSize: 13, fontFamily: "Inter_700Bold" },
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" },
   sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, paddingTop: 12, gap: 10 },
   handle: { width: 36, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 12 },
   sheetTitle: { fontSize: 22, fontFamily: "Inter_700Bold", marginBottom: 4 },
+  sheetSubtitle: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  sheetHint: { fontSize: 13, fontFamily: "Inter_500Medium", marginBottom: 2 },
   field: { gap: 6 },
   fieldLabel: { fontSize: 13, fontFamily: "Inter_500Medium" },
   input: { borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },

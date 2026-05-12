@@ -8,12 +8,69 @@ from app.utils.text import normalize_text
 
 
 CATEGORY_RULES = [
-    ("groceries", "Продукты", 0.94, ["пятерочка", "пятёрочка", "магнит", "продукты", "супермаркет"]),
-    ("transport", "Транспорт", 0.91, ["такси", "метро", "автобус"]),
-    ("subscriptions", "Подписки", 0.9, ["netflix", "spotify", "подписка"]),
-    ("health", "Здоровье", 0.89, ["аптека", "лекарства"]),
-    ("restaurants", "Кафе и рестораны", 0.88, ["кафе", "ресторан", "кофе"]),
-    ("salary", "Зарплата", 0.93, ["зарплата", "аванс"]),
+    ("groceries", "Продукты", 0.94, ["пятерочка", "пятёрочка", "магнит", "лента", "вкусвилл", "перекресток", "супермаркет", "продукты"]),
+    ("restaurants", "Кафе и рестораны", 0.9, ["кафе", "ресторан", "кофе", "пицца", "бургер", "доставка еды"]),
+    ("transport", "Транспорт", 0.91, ["такси", "метро", "автобус", "электричка", "бензин", "азс", "парковка"]),
+    ("subscriptions", "Подписки", 0.92, ["netflix", "spotify", "youtube premium", "яндекс плюс", "подписка", "ivi"]),
+    ("health", "Здоровье", 0.89, ["аптека", "лекарства", "клиника", "стоматология", "врач", "здоровье"]),
+    ("housing", "Жилье", 0.88, ["аренда", "ипотека", "квартира", "жилье"]),
+    ("utilities", "Коммунальные услуги", 0.87, ["жкх", "коммунал", "коммунальные", "электричество", "вода", "газ", "интернет"]),
+    ("education", "Образование", 0.87, ["курс", "обучение", "учеба", "университет", "школа", "репетитор"]),
+    ("shopping", "Покупки", 0.82, ["wildberries", "ozon", "marketplace", "покупка", "товары"]),
+    ("clothing", "Одежда и обувь", 0.86, ["одежда", "обувь", "кроссовки", "куртка", "футболка"]),
+    ("travel", "Путешествия", 0.88, ["авиабилет", "отель", "бронирование", "поездка", "отпуск", "путешествие"]),
+    ("family", "Семья и дети", 0.84, ["садик", "школа", "дети", "ребенок", "игрушки", "подгузники"]),
+    ("beauty", "Красота и уход", 0.83, ["салон", "маникюр", "косметика", "барбершоп", "уход"]),
+    ("sports", "Спорт", 0.84, ["фитнес", "зал", "спорт", "тренировка", "бассейн"]),
+    ("pets", "Питомцы", 0.84, ["зоомагазин", "ветеринар", "корм", "питомец", "кот", "собака"]),
+    ("electronics", "Электроника", 0.85, ["смартфон", "ноутбук", "наушники", "техника", "электроника", "dns"]),
+    ("gifts", "Подарки", 0.82, ["подарок", "цветы", "букет", "праздник"]),
+    ("fees", "Налоги и комиссии", 0.86, ["комиссия", "налог", "штраф", "пошлина", "сбор"]),
+    ("salary", "Зарплата", 0.93, ["зарплата", "аванс", "оклад"]),
+    ("freelance", "Фриланс", 0.88, ["фриланс", "заказ", "проект", "оплата за проект"]),
+    ("bonus", "Бонусы и премии", 0.86, ["премия", "бонус"]),
+    ("cashback", "Кэшбэк", 0.9, ["кэшбэк", "cashback"]),
+    ("gifts_income", "Подарки и переводы", 0.82, ["перевод от", "подарили", "подарок от"]),
+]
+
+NAME_TO_CODE = {
+    "продукты": "groceries",
+    "питание": "groceries",
+    "кафе и рестораны": "restaurants",
+    "транспорт": "transport",
+    "подписки": "subscriptions",
+    "здоровье": "health",
+    "жилье": "housing",
+    "коммунальные услуги": "utilities",
+    "коммунальные": "utilities",
+    "образование": "education",
+    "покупки": "shopping",
+    "одежда и обувь": "clothing",
+    "одежда": "clothing",
+    "путешествия": "travel",
+    "семья и дети": "family",
+    "красота и уход": "beauty",
+    "спорт": "sports",
+    "питомцы": "pets",
+    "электроника": "electronics",
+    "подарки": "gifts",
+    "налоги и комиссии": "fees",
+    "зарплата": "salary",
+    "доход": "salary",
+    "фриланс": "freelance",
+    "бонусы и премии": "bonus",
+    "кэшбэк": "cashback",
+    "подарки и переводы": "gifts_income",
+    "накопления": "savings",
+    "инвестиции": "investments",
+    "прочее": "other",
+    "другое": "other",
+}
+
+DEFAULT_ALTERNATIVES = [
+    CategoryAlternative(category_code="groceries", category_name="Продукты", confidence=0.14),
+    CategoryAlternative(category_code="transport", category_name="Транспорт", confidence=0.12),
+    CategoryAlternative(category_code="restaurants", category_name="Кафе и рестораны", confidence=0.1),
 ]
 
 
@@ -40,9 +97,10 @@ class CategorizationService:
                     model_version=self.model_version,
                     alternatives=self._alternatives(exclude=code),
                 )
+
         return CategorizeResponse(
             category_code="other",
-            category_name="Другое",
+            category_name="Прочее",
             confidence=0.55,
             model_version=self.model_version,
             alternatives=self._alternatives(exclude="other"),
@@ -59,6 +117,7 @@ class CategorizationService:
             })
         except Exception:
             return None
+
         if not prediction or not prediction.get("category") or float(prediction.get("confidence", 0) or 0) <= 0:
             return None
 
@@ -74,6 +133,7 @@ class CategorizationService:
             for name, confidence in sorted(probabilities.items(), key=lambda item: float(item[1]), reverse=True)
             if str(name) != category_name
         ][:2]
+
         return CategorizeResponse(
             category_code=category_code,
             category_name=category_name,
@@ -84,19 +144,7 @@ class CategorizationService:
 
     def _category_code(self, category_name: str) -> str:
         normalized = normalize_text(category_name).lower()
-        mapping = {
-            "продукты": "groceries",
-            "питание": "groceries",
-            "транспорт": "transport",
-            "подписки": "subscriptions",
-            "здоровье": "health",
-            "кафе и рестораны": "restaurants",
-            "зарплата": "salary",
-            "доход": "salary",
-            "прочее": "other",
-            "другое": "other",
-        }
-        return mapping.get(normalized, normalized.replace(" ", "_") or "other")
+        return NAME_TO_CODE.get(normalized, normalized.replace(" ", "_") or "other")
 
     def categorize_values(
         self,
@@ -115,9 +163,4 @@ class CategorizationService:
         )
 
     def _alternatives(self, exclude: str) -> list[CategoryAlternative]:
-        candidates = [
-            CategoryAlternative(category_code="household", category_name="Дом", confidence=0.12),
-            CategoryAlternative(category_code="restaurants", category_name="Кафе и рестораны", confidence=0.1),
-            CategoryAlternative(category_code="transport", category_name="Транспорт", confidence=0.08),
-        ]
-        return [candidate for candidate in candidates if candidate.category_code != exclude][:2]
+        return [candidate for candidate in DEFAULT_ALTERNATIVES if candidate.category_code != exclude][:2]
