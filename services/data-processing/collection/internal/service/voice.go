@@ -8,6 +8,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"strings"
 
 	"finapp/services/data-processing/collection/internal/model"
 	"finapp/services/data-processing/collection/internal/repository"
@@ -33,7 +34,7 @@ func NewVoiceService(repo *repository.VoiceRepo, mlBaseURL string) *VoiceService
 func (s *VoiceService) Upload(ctx context.Context, userID uuid.UUID, audioBody io.Reader, contentType string, audioURL *string) (*model.VoiceTranscription, error) {
 	var payload bytes.Buffer
 	writer := multipart.NewWriter(&payload)
-	part, err := writer.CreateFormFile("file", "voice-upload")
+	part, err := writer.CreateFormFile("file", voiceUploadFilename(contentType))
 	if err != nil {
 		return nil, err
 	}
@@ -77,6 +78,20 @@ func (s *VoiceService) Upload(ctx context.Context, userID uuid.UUID, audioBody i
 	})
 
 	return s.repo.Create(ctx, userID, audioURL, mlResp.Text, entities, model.VoicePending)
+}
+
+func voiceUploadFilename(contentType string) string {
+	lowered := strings.ToLower(contentType)
+	switch {
+	case strings.Contains(lowered, "wav"):
+		return "voice-upload.wav"
+	case strings.Contains(lowered, "mpeg"), strings.Contains(lowered, "mp3"):
+		return "voice-upload.mp3"
+	case strings.Contains(lowered, "ogg"), strings.Contains(lowered, "opus"):
+		return "voice-upload.ogg"
+	default:
+		return "voice-upload.m4a"
+	}
 }
 
 // UploadFromBytes is a multipart-friendly helper for handler uploads.

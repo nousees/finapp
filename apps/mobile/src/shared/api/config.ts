@@ -3,11 +3,14 @@ import { NativeModules } from "react-native";
 const DEFAULT_USER_ID = "11111111-1111-1111-1111-111111111111";
 
 function detectHost(): string {
+  const configuredHost = process.env.EXPO_PUBLIC_API_HOST?.trim();
+  if (configuredHost) return configuredHost;
+
   // Используем переменную окружения или IP адрес по умолчанию
   const scriptURL = NativeModules.SourceCode?.scriptURL;
   const metroHost = typeof scriptURL === "string" ? scriptURL.match(/https?:\/\/([^:/]+)/)?.[1] : undefined;
 
-  return metroHost || process.env.EXPO_PUBLIC_API_HOST || "192.168.0.3";
+  return metroHost || "192.168.0.3";
 }
 
 const host = detectHost();

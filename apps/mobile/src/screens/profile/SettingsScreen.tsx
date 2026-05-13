@@ -12,26 +12,28 @@ import { useAppTheme } from "@shared/theme/ThemeProvider";
 
 export function SettingsScreen() {
   const { colors, gradients, mode, toggleMode } = useAppTheme();
-  const { settings, setSetting } = useAppSettings();
+  const { settings, rates, languageLabel, setSetting, refreshRates, t } = useAppSettings();
   const insets = useSafeAreaInsets();
   const [passwordModal, setPasswordModal] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ current: "", next: "", confirm: "" });
   const [changingPassword, setChangingPassword] = useState(false);
 
-  const update = (key, value) => void setSetting(key, value);
-
-  const showLanguageInfo = () => {
-    Alert.alert(
-      "Язык интерфейса",
-      "Сейчас мобильный интерфейс работает на русском языке. Переключение языка скрыто, пока не будет переведен весь клиент целиком.",
-    );
+  const chooseCurrency = () => {
+    Alert.alert(t("chooseCurrency"), rateSubtitle(rates), [
+      { text: "RUB", onPress: () => setSetting("currency", "RUB") },
+      { text: "USD", onPress: () => setSetting("currency", "USD") },
+      { text: "EUR", onPress: () => setSetting("currency", "EUR") },
+      { text: "Обновить курс", onPress: () => refreshRates() },
+      { text: "Отмена", style: "cancel" },
+    ]);
   };
 
-  const showCurrencyInfo = () => {
-    Alert.alert(
-      "Валюта отображения",
-      "Смена валюты временно отключена. Следующий этап — подключение реального курса и корректный мультивалютный пересчет, а не фиктивная конвертация в интерфейсе.",
-    );
+  const chooseLanguage = () => {
+    Alert.alert(t("chooseLanguage"), "FinApp", [
+      { text: "Русский", onPress: () => setSetting("language", "ru") },
+      { text: "English", onPress: () => setSetting("language", "en") },
+      { text: "Отмена", style: "cancel" },
+    ]);
   };
 
   const toggleBiometric = async (value: boolean) => {
@@ -43,13 +45,13 @@ export function SettingsScreen() {
     const hasHardware = await LocalAuthentication.hasHardwareAsync();
     const enrolled = await LocalAuthentication.isEnrolledAsync();
     if (!hasHardware || !enrolled) {
-      Alert.alert("Биометрия недоступна", "На устройстве не настроена биометрическая проверка.");
+      Alert.alert(t("biometricsUnavailable"), t("biometricsUnavailableText"));
       return;
     }
 
     const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: "Включить биометрический вход FinApp",
-      cancelLabel: "Отмена",
+      promptMessage: "FinApp",
+      cancelLabel: "Cancel",
       disableDeviceFallback: false,
     });
     if (result.success) {
@@ -59,16 +61,16 @@ export function SettingsScreen() {
 
   const clearCache = async () => {
     await AsyncStorage.multiRemove(["transactions_cache", "insights_cache", "reports_cache"]);
-    Alert.alert("Кэш", "Локальный кэш очищен.");
+    Alert.alert(t("done"), t("cacheCleared"));
   };
 
   const submitPasswordChange = async () => {
     if (passwordForm.next.length < 8) {
-      Alert.alert("Ошибка", "Новый пароль должен содержать минимум 8 символов.");
+      Alert.alert(t("error"), t("passwordTooShort"));
       return;
     }
     if (passwordForm.next !== passwordForm.confirm) {
-      Alert.alert("Ошибка", "Подтверждение пароля не совпадает.");
+      Alert.alert(t("error"), t("passwordMismatch"));
       return;
     }
     try {
@@ -76,9 +78,9 @@ export function SettingsScreen() {
       await changePassword(passwordForm.current, passwordForm.next);
       setPasswordModal(false);
       setPasswordForm({ current: "", next: "", confirm: "" });
-      Alert.alert("Готово", "Пароль изменен.");
+      Alert.alert(t("done"), t("passwordChanged"));
     } catch (error) {
-      Alert.alert("Ошибка", error instanceof Error ? error.message : "Не удалось изменить пароль.");
+      Alert.alert(t("error"), error instanceof Error ? error.message : t("passwordFailed"));
     } finally {
       setChangingPassword(false);
     }
@@ -93,32 +95,32 @@ export function SettingsScreen() {
       >
         <LinearGradient colors={gradients.success} style={styles.hero}>
           <Text style={styles.heroLabel}>FinApp</Text>
-          <Text style={styles.heroTitle}>Настройки приложения</Text>
-          <Text style={styles.heroText}>Безопасность, поведение клиента и системные параметры, которые уже реально поддерживаются приложением.</Text>
+          <Text style={styles.heroTitle}>{t("settingsTitle")}</Text>
+          <Text style={styles.heroText}>{t("settingsText")}</Text>
         </LinearGradient>
 
-        <SettingsSection title="Основные">
-          <SettingsRow icon="dollar-sign" label="Валюта учета" value="RUB" onPress={showCurrencyInfo} />
-          <SettingsRow icon="globe" label="Язык интерфейса" value="Русский" onPress={showLanguageInfo} />
-          <SettingsRow icon="moon" label="Темная тема" toggle value={mode === "dark"} onToggle={toggleMode} />
+        <SettingsSection title={t("main")}>
+          <SettingsRow icon="dollar-sign" label={t("currency")} value={`${settings.currency} · ${rateSubtitle(rates)}`} onPress={chooseCurrency} />
+          <SettingsRow icon="globe" label={t("language")} value={languageLabel} onPress={chooseLanguage} />
+          <SettingsRow icon="moon" label={t("darkTheme")} toggle value={mode === "dark"} onToggle={toggleMode} />
         </SettingsSection>
 
-        <SettingsSection title="Уведомления и синхронизация">
-          <SettingsRow icon="bell" label="Push-уведомления" toggle value={settings.pushEnabled} onToggle={(value) => update("pushEnabled", value)} />
-          <SettingsRow icon="refresh-cw" label="Фоновая синхронизация" toggle value={settings.backgroundSync} onToggle={(value) => update("backgroundSync", value)} />
-          <SettingsRow icon="wifi" label="Pull-to-Refresh" toggle value={settings.pullToRefresh} onToggle={(value) => update("pullToRefresh", value)} />
+        <SettingsSection title={t("sync")}>
+          <SettingsRow icon="bell" label={t("push")} toggle value={settings.pushEnabled} onToggle={(value) => setSetting("pushEnabled", value)} />
+          <SettingsRow icon="refresh-cw" label={t("backgroundSync")} toggle value={settings.backgroundSync} onToggle={(value) => setSetting("backgroundSync", value)} />
+          <SettingsRow icon="wifi" label="Pull-to-Refresh" toggle value={settings.pullToRefresh} onToggle={(value) => setSetting("pullToRefresh", value)} />
         </SettingsSection>
 
-        <SettingsSection title="Безопасность">
-          <SettingsRow icon="shield" label="JWT + refresh tokens" value="Активно" onPress={() => Alert.alert("Безопасность", "Сессии работают через access token и refresh token.")} />
-          <SettingsRow icon="key" label="Сменить пароль" value="Открыть" onPress={() => setPasswordModal(true)} />
-          <SettingsRow icon="lock" label="Биометрический вход" toggle value={settings.biometricEnabled} onToggle={toggleBiometric} />
-          <SettingsRow icon="file-text" label="Аудит операций" toggle value={settings.auditEnabled} onToggle={(value) => update("auditEnabled", value)} />
+        <SettingsSection title={t("security")}>
+          <SettingsRow icon="shield" label="JWT + refresh tokens" value={t("active")} />
+          <SettingsRow icon="key" label={t("changePassword")} value={t("open")} onPress={() => setPasswordModal(true)} />
+          <SettingsRow icon="lock" label={t("biometric")} toggle value={settings.biometricEnabled} onToggle={toggleBiometric} />
+          <SettingsRow icon="file-text" label={t("audit")} toggle value={settings.auditEnabled} onToggle={(value) => setSetting("auditEnabled", value)} />
         </SettingsSection>
 
-        <SettingsSection title="Данные">
-          <SettingsRow icon="download" label="Экспорт данных" onPress={() => Alert.alert("Экспорт", "Откройте раздел отчетов и сформируйте отчет за нужный период.")} />
-          <SettingsRow icon="trash-2" label="Очистить локальный кэш" danger onPress={clearCache} />
+        <SettingsSection title={t("data")}>
+          <SettingsRow icon="download" label={t("exportData")} onPress={() => Alert.alert("FinApp", "Reports screen")} />
+          <SettingsRow icon="trash-2" label={t("clearCache")} danger onPress={clearCache} />
         </SettingsSection>
       </ScrollView>
 
@@ -126,13 +128,13 @@ export function SettingsScreen() {
         <Pressable style={styles.overlay} onPress={() => setPasswordModal(false)}>
           <Pressable style={[styles.sheet, { backgroundColor: colors.background, paddingBottom: 22 + insets.bottom }]} onPress={(event) => event.stopPropagation()}>
             <View style={[styles.handle, { backgroundColor: colors.border }]} />
-            <Text style={[styles.sheetTitle, { color: colors.text }]}>Смена пароля</Text>
-            <PasswordField label="Текущий пароль" value={passwordForm.current} onChangeText={(value) => setPasswordForm((current) => ({ ...current, current: value }))} />
-            <PasswordField label="Новый пароль" value={passwordForm.next} onChangeText={(value) => setPasswordForm((current) => ({ ...current, next: value }))} />
-            <PasswordField label="Повторите новый пароль" value={passwordForm.confirm} onChangeText={(value) => setPasswordForm((current) => ({ ...current, confirm: value }))} />
+            <Text style={[styles.sheetTitle, { color: colors.text }]}>{t("passwordTitle")}</Text>
+            <PasswordField label={t("currentPassword")} value={passwordForm.current} onChangeText={(value) => setPasswordForm((current) => ({ ...current, current: value }))} />
+            <PasswordField label={t("newPassword")} value={passwordForm.next} onChangeText={(value) => setPasswordForm((current) => ({ ...current, next: value }))} />
+            <PasswordField label={t("repeatPassword")} value={passwordForm.confirm} onChangeText={(value) => setPasswordForm((current) => ({ ...current, confirm: value }))} />
             <Pressable onPress={submitPasswordChange} disabled={changingPassword}>
               <LinearGradient colors={gradients.successDeep} style={[styles.savePassword, changingPassword ? { opacity: 0.7 } : null]}>
-                {changingPassword ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.savePasswordText}>Сохранить пароль</Text>}
+                {changingPassword ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.savePasswordText}>{t("savePassword")}</Text>}
               </LinearGradient>
             </Pressable>
           </Pressable>
@@ -140,6 +142,12 @@ export function SettingsScreen() {
       </Modal>
     </View>
   );
+}
+
+function rateSubtitle(rates) {
+  const usd = Number(rates?.rates?.USD || 0).toFixed(2);
+  const eur = Number(rates?.rates?.EUR || 0).toFixed(2);
+  return `USD ${usd} ₽ · EUR ${eur} ₽`;
 }
 
 function SettingsSection({ title, children }) {
@@ -164,7 +172,7 @@ function SettingsRow({ icon, label, value, toggle, onToggle, onPress, danger }) 
         <Switch value={value} onValueChange={onToggle} trackColor={{ false: colors.border, true: `${colors.primary}80` }} thumbColor={colors.white} />
       ) : (
         <View style={styles.rowValueWrap}>
-          <Text style={[styles.rowValue, { color: danger ? colors.danger : colors.textMuted }]}>{value || "Открыть"}</Text>
+          <Text style={[styles.rowValue, { color: danger ? colors.danger : colors.textMuted }]} numberOfLines={1}>{value || "Open"}</Text>
           <Feather name="chevron-right" size={17} color={colors.textMuted} />
         </View>
       )}
@@ -196,8 +204,8 @@ const styles = StyleSheet.create({
   row: { minHeight: 58, flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 14, borderBottomWidth: StyleSheet.hairlineWidth },
   rowIcon: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   rowLabel: { flex: 1, fontSize: 15, fontFamily: "Inter_600SemiBold" },
-  rowValueWrap: { flexDirection: "row", alignItems: "center", gap: 4 },
-  rowValue: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  rowValueWrap: { maxWidth: "48%", flexDirection: "row", alignItems: "center", gap: 4 },
+  rowValue: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "flex-end" },
   sheet: { borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, gap: 12 },
   handle: { width: 36, height: 4, borderRadius: 2, alignSelf: "center", marginBottom: 4 },

@@ -42,7 +42,7 @@ public class BudgetInsightModel {
 
     private BudgetInsight toInsight(Budget budget, LocalDate analysisDate) {
         BigDecimal limit = AnalysisMath.nullToZero(budget.getAmountLimit());
-        BigDecimal spent = AnalysisMath.nullToZero(budget.getSpentAmount());
+        BigDecimal spent = querySpentAmount(budget);
         BigDecimal progress = AnalysisMath.percent(spent, limit);
         BigDecimal remaining = limit.subtract(spent).max(BigDecimal.ZERO);
         long daysRemaining = Math.max(0, ChronoUnit.DAYS.between(analysisDate, budget.getPeriodEnd()));
@@ -104,5 +104,43 @@ public class BudgetInsightModel {
             categoryId
         );
         return names.isEmpty() ? "Категория" : names.get(0);
+    }
+
+    private BigDecimal querySpentAmount(Budget budget) {
+        BigDecimal value;
+        if (budget.getCategoryId() == null) {
+            value = jdbcTemplate.queryForObject(
+                """
+                SELECT COALESCE(SUM(amount), 0)
+                FROM transactions
+                WHERE user_id = ?
+                  AND UPPER(type) = 'EXPENSE'
+                  AND date >= ?
+                  AND date < ?
+                """,
+                BigDecimal.class,
+                budget.getUserId(),
+                budget.getPeriodStart().atStartOfDay(),
+                budget.getPeriodEnd().plusDays(1).atStartOfDay()
+            );
+        } else {
+            value = jdbcTemplate.queryForObject(
+                """
+                SELECT COALESCE(SUM(amount), 0)
+                FROM transactions
+                WHERE user_id = ?
+                  AND UPPER(type) = 'EXPENSE'
+                  AND COALESCE(category_id, ml_category_id) = ?
+                  AND date >= ?
+                  AND date < ?
+                """,
+                BigDecimal.class,
+                budget.getUserId(),
+                budget.getCategoryId(),
+                budget.getPeriodStart().atStartOfDay(),
+                budget.getPeriodEnd().plusDays(1).atStartOfDay()
+            );
+        }
+        return AnalysisMath.money(value);
     }
 }

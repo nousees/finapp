@@ -50,14 +50,14 @@ export async function transcribeAudioFile(file: { uri: string; name: string; mim
       };
     }
   } catch {
-    // Fallback to direct ML call below.
+    // Direct ML fallback below.
   }
 
   const formData = new FormData();
   formData.append("file", {
     uri: file.uri,
     name: file.name,
-    type: file.mimeType || "audio/mpeg",
+    type: file.mimeType || "audio/m4a",
   } as any);
 
   return requestJson<VoiceTranscription>({
@@ -73,7 +73,7 @@ export async function uploadVoiceFile(file: { uri: string; name: string; mimeTyp
   formData.append("file", {
     uri: file.uri,
     name: file.name,
-    type: file.mimeType || "audio/mpeg",
+    type: file.mimeType || "audio/m4a",
   } as any);
 
   return requestJson<CollectionVoiceResponse>({
@@ -86,12 +86,23 @@ export async function uploadVoiceFile(file: { uri: string; name: string; mimeTyp
 
 export async function enrichText(text: string): Promise<EnrichedVoiceTransaction> {
   try {
-    return await requestJson<EnrichedVoiceTransaction>({
+    const remote = await requestJson<EnrichedVoiceTransaction>({
       baseUrl: apiConfig.mlBaseUrl,
       path: "/api/v1/enrich",
       method: "POST",
       body: { text },
     });
+    const local = fallbackEnrichText(text);
+    if ((remote.needs_review || remote.transaction.category_code === "other") && local.transaction.category_code !== "other") {
+      return {
+        ...local,
+        confidence: {
+          ...local.confidence,
+          overall: Math.max(local.confidence.overall, remote.confidence.overall || 0),
+        },
+      };
+    }
+    return remote;
   } catch {
     return fallbackEnrichText(text);
   }
@@ -101,7 +112,7 @@ function fallbackEnrichText(text: string): EnrichedVoiceTransaction {
   const amountMatch = text.match(/\b(\d{1,9}(?:[ .,]\d{3})*(?:[,.]\d{1,2})?|\d{1,9})\b/);
   const amount = amountMatch ? Number(amountMatch[1].replace(/\s/g, "").replace(",", ".")) : undefined;
   const lowered = text.toLowerCase();
-  const isIncome = /(получил|получила|зачислили|зарплата|аванс|доход|премия|кэшбэк)/i.test(lowered);
+  const isIncome = /(получил|получила|зачислили|зарплата|аванс|доход|премия|кэшбэк|кешбэк)/i.test(lowered);
   const category = detectCategory(lowered, isIncome);
 
   return {
@@ -132,7 +143,7 @@ function detectCategory(text: string, isIncome: boolean) {
   if (isIncome) {
     if (/(фриланс|заказ|проект)/i.test(text)) return { code: "freelance", name: "Фриланс" };
     if (/(премия|бонус)/i.test(text)) return { code: "bonus", name: "Бонусы и премии" };
-    if (/(кэшбэк|cashback)/i.test(text)) return { code: "cashback", name: "Кэшбэк" };
+    if (/(кэшбэк|кешбэк|cashback)/i.test(text)) return { code: "cashback", name: "Кэшбэк" };
     if (/(перевод|подарили|подарок)/i.test(text)) return { code: "gifts_income", name: "Подарки и переводы" };
     return { code: "salary", name: "Зарплата" };
   }
@@ -142,13 +153,13 @@ function detectCategory(text: string, isIncome: boolean) {
   if (/(такси|метро|автобус|транспорт|бензин|азс|парковка)/i.test(text)) return { code: "transport", name: "Транспорт" };
   if (/(netflix|spotify|youtube premium|яндекс плюс|подписк|ivi)/i.test(text)) return { code: "subscriptions", name: "Подписки" };
   if (/(аптек|лекарств|клиник|стоматолог|врач|здоров)/i.test(text)) return { code: "health", name: "Здоровье" };
-  if (/(аренд|ипотек|квартир|жилье)/i.test(text)) return { code: "housing", name: "Жилье" };
+  if (/(аренд|ипотек|квартир|жилье|жильё)/i.test(text)) return { code: "housing", name: "Жилье" };
   if (/(жкх|коммунал|электрич|вода|газ|интернет)/i.test(text)) return { code: "utilities", name: "Коммунальные услуги" };
   if (/(курс|обучен|учеб|университет|школ|репетитор)/i.test(text)) return { code: "education", name: "Образование" };
   if (/(wildberries|ozon|marketplace|покупк|товар)/i.test(text)) return { code: "shopping", name: "Покупки" };
   if (/(одежд|обув|кроссовк|куртк|футболк)/i.test(text)) return { code: "clothing", name: "Одежда и обувь" };
   if (/(отель|авиабилет|поездк|отпуск|путешеств)/i.test(text)) return { code: "travel", name: "Путешествия" };
-  if (/(ребен|дети|садик|игрушк|подгузник)/i.test(text)) return { code: "family", name: "Семья и дети" };
+  if (/(ребен|ребён|дети|садик|игрушк|подгузник)/i.test(text)) return { code: "family", name: "Семья и дети" };
   if (/(маникюр|салон|косметик|барбершоп|уход)/i.test(text)) return { code: "beauty", name: "Красота и уход" };
   if (/(фитнес|зал|спорт|тренировк|бассейн)/i.test(text)) return { code: "sports", name: "Спорт" };
   if (/(зоомагазин|ветеринар|корм|кот|собак|питом)/i.test(text)) return { code: "pets", name: "Питомцы" };

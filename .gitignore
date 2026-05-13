@@ -61,3 +61,5 @@ venv/
 # Data
 data/
 datasets/
+!apps/mobile/src/screens/data/
+!apps/mobile/src/screens/data/**

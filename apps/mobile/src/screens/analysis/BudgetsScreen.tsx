@@ -6,6 +6,7 @@ import { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { createBudget, deleteBudget, getFinancialInsights, listBudgets, updateBudget } from "@shared/api/analysis";
+import { listTransactions } from "@shared/api/transactions";
 import { EXPENSE_CATEGORIES } from "@shared/constants/categories";
 import { useAppSettings } from "@shared/settings/AppSettingsContext";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
@@ -22,6 +23,7 @@ export function BudgetsScreen() {
   const insets = useSafeAreaInsets();
   const [budgets, setBudgets] = useState([]);
   const [insights, setInsights] = useState(null);
+  const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -30,9 +32,14 @@ export function BudgetsScreen() {
   const loadData = useCallback(async () => {
     try {
       setError(null);
-      const [budgetItems, insightData] = await Promise.all([listBudgets(), getFinancialInsights()]);
+      const [budgetItems, insightData, transactionItems] = await Promise.all([
+        listBudgets(),
+        getFinancialInsights(),
+        listTransactions({ type: "EXPENSE", limit: 500 }).catch(() => []),
+      ]);
       setBudgets(Array.isArray(budgetItems) ? budgetItems : []);
       setInsights(insightData);
+      setTransactions(Array.isArray(transactionItems) ? transactionItems : []);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить бюджеты");
     } finally {
@@ -51,12 +58,14 @@ export function BudgetsScreen() {
     const insightMap = new Map((Array.isArray(insights?.budgets) ? insights.budgets : []).map((item) => [item.budgetId, item]));
     return budgets.map((item, index) => {
       const insight = insightMap.get(item.id);
-      const category = EXPENSE_CATEGORIES.find((cat) => cat.id === item.categoryId) || EXPENSE_CATEGORIES[index % EXPENSE_CATEGORIES.length];
-      const spent = Number(insight?.spentAmount ?? item.spentAmount ?? 0);
+      const budgetCategoryId = item.categoryId || item.category_id;
+      const category = EXPENSE_CATEGORIES.find((cat) => cat.id === budgetCategoryId) || EXPENSE_CATEGORIES[index % EXPENSE_CATEGORIES.length];
+      const localSpent = sumBudgetTransactions(transactions, budgetCategoryId, item.periodStart, item.periodEnd);
+      const spent = localSpent > 0 ? localSpent : Number(insight?.spentAmount ?? item.spentAmount ?? 0);
       const limit = Number(insight?.amountLimit ?? item.amountLimit ?? 0);
-      return { ...item, name: insight?.categoryName || category.name, icon: category.icon, color: category.color, spent, limit, progress: limit > 0 ? spent / limit : 0 };
+      return { ...item, categoryId: budgetCategoryId, name: insight?.categoryName || category.name, icon: category.icon, color: category.color, spent, limit, progress: limit > 0 ? spent / limit : 0 };
     });
-  }, [budgets, insights]);
+  }, [budgets, insights, transactions]);
 
   const totalLimit = cards.reduce((sum, item) => sum + item.limit, 0);
   const totalSpent = cards.reduce((sum, item) => sum + item.spent, 0);
@@ -237,6 +246,19 @@ function Summary({ label, value, accent = false }) {
 
 function Divider() {
   return <View style={styles.summaryDivider} />;
+}
+
+function sumBudgetTransactions(transactions, categoryId?: string | null, periodStart?: string, periodEnd?: string) {
+  const from = periodStart ? new Date(`${periodStart}T00:00:00`).getTime() : Number.NEGATIVE_INFINITY;
+  const to = periodEnd ? new Date(`${periodEnd}T23:59:59`).getTime() : Number.POSITIVE_INFINITY;
+
+  return (Array.isArray(transactions) ? transactions : []).reduce((sum, transaction) => {
+    const transactionCategoryId = transaction.category_id || transaction.ml_category_id;
+    if (categoryId && transactionCategoryId !== categoryId) return sum;
+    const timestamp = new Date(transaction.date).getTime();
+    if (Number.isFinite(timestamp) && (timestamp < from || timestamp > to)) return sum;
+    return sum + Number(transaction.amount || 0);
+  }, 0);
 }
 
 const styles = StyleSheet.create({

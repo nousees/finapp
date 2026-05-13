@@ -12,7 +12,7 @@ class WhisperModel:
     real: bool = False
     engine: Any | None = None
 
-    def transcribe(self, content: bytes) -> dict:
+    def transcribe(self, content: bytes, suffix: str = ".wav") -> dict:
         if not self.real:
             return {
                 "text": "потратил 450 рублей на продукты в пятерочке вчера",
@@ -20,7 +20,7 @@ class WhisperModel:
                 "confidence": 0.92,
             }
 
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=True) as tmp:
             tmp.write(content)
             tmp.flush()
             result = self.engine.transcribe(tmp.name, language="ru")

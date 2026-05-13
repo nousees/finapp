@@ -1,4 +1,6 @@
 from fastapi import UploadFile
+from pathlib import Path
+from typing import Optional
 
 from app.core.config import Settings
 from app.core.errors import ModelUnavailableError
@@ -22,5 +24,17 @@ class SpeechService:
         )
         if not self.settings.enable_real_models and not self.settings.test_mode:
             raise ModelUnavailableError("Whisper")
-        result = self.model.transcribe(content)
+        suffix = Path(file.filename or "").suffix.lower() or suffix_from_content_type(file.content_type)
+        result = self.model.transcribe(content, suffix=suffix)
         return VoiceTranscriptionResponse(**result)
+
+
+def suffix_from_content_type(content_type: Optional[str]) -> str:
+    value = (content_type or "").lower()
+    if "mpeg" in value or "mp3" in value:
+        return ".mp3"
+    if "ogg" in value or "opus" in value:
+        return ".ogg"
+    if "mp4" in value or "m4a" in value or "aac" in value:
+        return ".m4a"
+    return ".wav"

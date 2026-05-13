@@ -7,6 +7,7 @@ export type ApiTransaction = {
   currency: string;
   type: "INCOME" | "EXPENSE" | "TRANSFER";
   category_id?: string | null;
+  ml_category_id?: string | null;
   description?: string | null;
   original_description?: string | null;
   date: string;

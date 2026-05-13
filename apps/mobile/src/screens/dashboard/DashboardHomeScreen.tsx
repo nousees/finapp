@@ -62,7 +62,12 @@ export function DashboardHomeScreen({ navigation }: Props) {
   const summary = insights?.summary;
   const income = Number(summary?.totalIncome || 0);
   const expense = Number(summary?.totalExpenses || 0);
-  const balance = Number(summary?.netSavings || income - expense || 0);
+  const grossBalance = Number(summary?.netSavings || income - expense || 0);
+  const reservedInGoals = (Array.isArray(insights?.goals) ? insights.goals : []).reduce(
+    (sum, goal) => sum + Number(goal.currentAmount || 0),
+    0,
+  );
+  const balance = grossBalance - reservedInGoals;
   const savingsRate = income > 0 ? Math.round(((income - expense) / income) * 100) : 0;
 
   const categories = useMemo(

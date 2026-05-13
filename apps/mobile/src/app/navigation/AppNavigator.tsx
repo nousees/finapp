@@ -19,10 +19,7 @@ const Tab = createBottomTabNavigator();
 
 export function AppNavigator({ onLogout }: { onLogout?: () => void }) {
   const { colors, gradients, isDark } = useAppTheme();
-  const { settings } = useAppSettings();
-  const labels = settings.language === "en"
-    ? { home: "Home", transactions: "Transactions", budgets: "Budgets", goals: "Goals", profile: "Profile" }
-    : { home: "Главная", transactions: "Транзакции", budgets: "Бюджеты", goals: "Цели", profile: "Профиль" };
+  const { t } = useAppSettings();
   const navigationTheme = useMemo(
     () => ({
       ...(isDark ? DarkTheme : DefaultTheme),
@@ -59,11 +56,11 @@ export function AppNavigator({ onLogout }: { onLogout?: () => void }) {
         })}
         tabBar={(props) => <FinAppTabBar {...props} />}
       >
-        <Tab.Screen name="Home" component={DashboardStackNavigator} options={{ title: labels.home }} />
-        <Tab.Screen name="Transactions" component={TransactionsStackNavigator} options={{ title: labels.transactions }} />
-        <Tab.Screen name="Budgets" component={BudgetsStackNavigator} options={{ title: labels.budgets }} />
-        <Tab.Screen name="Goals" component={GoalsStackNavigator} options={{ title: labels.goals }} />
-        <Tab.Screen name="Profile" options={{ title: labels.profile }}>
+        <Tab.Screen name="Home" component={DashboardStackNavigator} options={{ title: t("home") }} />
+        <Tab.Screen name="Transactions" component={TransactionsStackNavigator} options={{ title: t("transactions") }} />
+        <Tab.Screen name="Budgets" component={BudgetsStackNavigator} options={{ title: t("budgets") }} />
+        <Tab.Screen name="Goals" component={GoalsStackNavigator} options={{ title: t("goals") }} />
+        <Tab.Screen name="Profile" options={{ title: t("profile") }}>
           {() => <ProfileStackNavigator onLogout={onLogout} />}
         </Tab.Screen>
       </Tab.Navigator>
@@ -99,9 +96,11 @@ function FinAppTabBar({ state, descriptors, navigation }) {
         key={route.key}
         style={styles.tabItem}
         onPress={() => {
-          if (!isFocused) {
-            navigation.navigate(route.name);
+          if (route.name === "Transactions") {
+            navigation.navigate("Transactions", { screen: "TransactionsList" });
+            return;
           }
+          if (!isFocused) navigation.navigate(route.name);
         }}
       >
         <Feather name={iconName(route.name)} size={22} color={tint} />
@@ -149,10 +148,11 @@ function FinAppTabBar({ state, descriptors, navigation }) {
 
 function InputModeSheet({ visible, onClose, onSelect }) {
   const { colors, gradients } = useAppTheme();
+  const { t } = useAppSettings();
   const modes = [
-    { screen: "VoiceCapture", icon: "mic", label: "Голос", desc: "Сказать транзакцию" },
-    { screen: "TransactionCreate", icon: "edit-3", label: "Вручную", desc: "Ввести сумму и описание" },
-    { screen: "ImportCenter", icon: "file-text", label: "Файл", desc: "CSV или Excel" },
+    { screen: "VoiceCapture", icon: "mic", label: t("voice"), desc: t("voiceDesc") },
+    { screen: "TransactionCreate", icon: "edit-3", label: t("manual"), desc: t("manualDesc") },
+    { screen: "ImportCenter", icon: "file-text", label: t("file"), desc: t("fileDesc") },
   ];
 
   return (
@@ -160,8 +160,8 @@ function InputModeSheet({ visible, onClose, onSelect }) {
       <Pressable style={styles.overlay} onPress={onClose}>
         <Pressable style={[styles.sheet, { backgroundColor: colors.background }]} onPress={(event) => event.stopPropagation()}>
           <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
-          <Text style={[styles.sheetTitle, { color: colors.text }]}>Добавить транзакцию</Text>
-          <Text style={[styles.sheetSub, { color: colors.textMuted }]}>Выберите способ ввода данных в FinApp</Text>
+          <Text style={[styles.sheetTitle, { color: colors.text }]}>{t("addTransaction")}</Text>
+          <Text style={[styles.sheetSub, { color: colors.textMuted }]}>{t("inputMode")}</Text>
           <View style={styles.modeGrid}>
             {modes.map((mode) => (
               <Pressable
