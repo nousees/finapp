@@ -17,6 +17,8 @@ public interface RecommendationRepository extends JpaRepository<Recommendation, 
     List<Recommendation> findByUserId(UUID userId);
     
     List<Recommendation> findByUserIdAndIsAppliedFalse(UUID userId);
+
+    List<Recommendation> findByUserIdAndIsAppliedFalseOrderByPriorityAscCreatedAtDesc(UUID userId);
     
     List<Recommendation> findByUserIdAndType(UUID userId, String type);
     

@@ -183,7 +183,7 @@ services:
       context: ./services/ml-service
       dockerfile: Dockerfile
       args:
-        INSTALL_REAL_MODEL_DEPS: ${INSTALL_REAL_MODEL_DEPS:-false}
+        INSTALL_REAL_MODEL_DEPS: ${INSTALL_REAL_MODEL_DEPS:-true}
     container_name: finapp-ml-service
     environment:
       APP_ENV: local
@@ -192,7 +192,10 @@ services:
       MAX_AUDIO_SIZE_MB: "25"
       ENABLE_REAL_MODELS: ${ENABLE_REAL_MODELS:-true}
       TEST_MODE: "false"
-      WHISPER_MODEL_PATH: /app/ml_models/whisper-large-v3
+      ALLOW_DEMO_TRANSCRIPTION: "false"
+      WHISPER_MODEL_PATH: ${WHISPER_MODEL_PATH:-/app/ml_models/whisper-large-v3}
+      WHISPER_MODEL_NAME: ${WHISPER_MODEL_NAME:-large-v3}
+      WHISPER_DOWNLOAD_ROOT: ${WHISPER_DOWNLOAD_ROOT:-/tmp/whisper-cache}
       NER_MODEL_PATH: /app/ml_models/rubert_tiny_ner_finapp
       CATEGORY_MODEL_PATH: /app/ml_models
       DATABASE_URL: postgresql://finapp:finapp@postgres:5432/finapp
@@ -201,6 +204,7 @@ services:
       - "8000:8000"
     volumes:
       - ./services/ml-service/ml_models:/app/ml_models:ro
+      - finapp_whisper_cache:/tmp/whisper-cache
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 15s
@@ -242,3 +246,4 @@ services:
 
 volumes:
   finapp_pgdata:
+  finapp_whisper_cache:

@@ -14,6 +14,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const subscriptionCategoryID = "88888888-8888-8888-8888-888888888886"
+
 type Service struct {
 	repo *repository.Repository
 }
@@ -46,13 +48,17 @@ func (s *Service) Analyze(ctx context.Context, userID uuid.UUID) ([]*model.Subsc
 
 	for _, group := range groups {
 		recurrence, ok := detectRecurrence(group.transactions)
+		if !ok && isLikelySubscription(group) {
+			recurrence = "MONTHLY"
+			ok = true
+		}
 		if !ok {
 			continue
 		}
 
 		usageIndex := estimateUsageIndex(group.name)
 		var recommendation *string
-		if usageIndex < 0.30 {
+		if usageIndex < 30 {
 			text := "Низкий индекс использования. Проверьте, нужна ли эта подписка."
 			recommendation = &text
 		}
@@ -164,13 +170,34 @@ func detectRecurrence(items []*model.Transaction) (string, bool) {
 func estimateUsageIndex(name string) float64 {
 	text := strings.ToLower(name)
 	switch {
-	case strings.Contains(text, "spotify"), strings.Contains(text, "netflix"), strings.Contains(text, "yandex plus"), strings.Contains(text, "google one"), strings.Contains(text, "icloud"):
-		return 0.20
-	case strings.Contains(text, "fitness"), strings.Contains(text, "gym"), strings.Contains(text, "спорт"):
-		return 0.65
+	case containsAny(text, "spotify", "netflix", "youtube", "youtube premium", "яндекс", "яндекс плюс", "кинопоиск", "ivi", "google one", "icloud"):
+		return 20
+	case containsAny(text, "fitness", "gym", "фитнес", "спорт", "зал", "тренировка"):
+		return 65
 	default:
-		return 0.50
+		return 50
 	}
+}
+
+func isLikelySubscription(group groupedTransactions) bool {
+	if group.categoryID != nil && group.categoryID.String() == subscriptionCategoryID {
+		return true
+	}
+	text := strings.ToLower(group.name)
+	return containsAny(
+		text,
+		"подпис",
+		"subscription",
+		"premium",
+		"spotify",
+		"netflix",
+		"youtube",
+		"яндекс",
+		"кинопоиск",
+		"ivi",
+		"google one",
+		"icloud",
+	)
 }
 
 func normalizeName(values ...*string) string {
@@ -186,9 +213,11 @@ func normalizeName(values ...*string) string {
 	}
 
 	replacer := strings.NewReplacer(
-		"premium", "",
 		"оплата", "",
+		"платеж", "",
 		"подписка", "",
+		"подписки", "",
+		"premium", "",
 		"subscription", "",
 		"  ", " ",
 	)
@@ -197,6 +226,15 @@ func normalizeName(values ...*string) string {
 		return raw
 	}
 	return normalized
+}
+
+func containsAny(text string, needles ...string) bool {
+	for _, needle := range needles {
+		if strings.Contains(text, needle) {
+			return true
+		}
+	}
+	return false
 }
 
 func roundAmount(value float64) float64 {

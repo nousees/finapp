@@ -30,11 +30,11 @@ public class RecommendationService {
     private final NotificationService notificationService;
 
     public List<Recommendation> getUserRecommendations(UUID userId) {
-        return recommendationRepository.findByUserId(userId);
+        return recommendationRepository.findByUserIdAndIsAppliedFalseOrderByPriorityAscCreatedAtDesc(userId);
     }
 
     public List<Recommendation> getUnappliedRecommendations(UUID userId) {
-        return recommendationRepository.findByUserIdAndIsAppliedFalse(userId);
+        return recommendationRepository.findByUserIdAndIsAppliedFalseOrderByPriorityAscCreatedAtDesc(userId);
     }
 
     public List<Recommendation> getRecommendationsByPriority(UUID userId, Integer priority) {
@@ -42,9 +42,14 @@ public class RecommendationService {
     }
 
     @Transactional
-    public Recommendation createRecommendation(UUID userId, String type, String title,
-                                              String description, List<String> actionItems,
-                                              BigDecimal estimatedSavings, Integer priority) {
+    public Recommendation createRecommendation(
+            UUID userId,
+            String type,
+            String title,
+            String description,
+            List<String> actionItems,
+            BigDecimal estimatedSavings,
+            Integer priority) {
         Recommendation recommendation = new Recommendation();
         recommendation.setUserId(userId);
         recommendation.setType(type);
@@ -80,27 +85,21 @@ public class RecommendationService {
     }
 
     @Transactional
+    public void deleteRecommendation(UUID userId, UUID recommendationId) {
+        Recommendation recommendation = recommendationRepository.findById(recommendationId)
+            .filter(r -> r.getUserId().equals(userId))
+            .orElseThrow(() -> new RuntimeException("Recommendation not found"));
+        recommendationRepository.delete(recommendation);
+    }
+
+    @Transactional
     public List<Recommendation> generateRecommendations(UUID userId) {
         log.info("Generating financial insight recommendations for user: {}", userId);
 
         List<RecommendationCandidate> candidates = financialAnalysisFacade.analyzeCurrentMonth(userId).recommendations();
+        recommendationRepository.findByUserIdAndIsAppliedFalse(userId).forEach(recommendationRepository::delete);
         if (candidates.isEmpty()) {
-            candidates = List.of(new RecommendationCandidate(
-                "FINANCIAL_HEALTH",
-                "Финансы в стабильном состоянии",
-                "Критических рисков за текущий месяц не найдено. Продолжайте контролировать бюджеты и цели.",
-                List.of(
-                    "Проверьте бюджеты в конце недели",
-                    "Обновите цели, если изменился доход",
-                    "Подтвердите транзакции с низкой уверенностью ML"
-                ),
-                BigDecimal.ZERO,
-                1,
-                false,
-                null,
-                null,
-                "FinancialAnalysisFacade"
-            ));
+            return List.of();
         }
 
         List<Recommendation> recommendations = candidates.stream()
@@ -111,7 +110,6 @@ public class RecommendationService {
         createRecommendationNotifications(userId, candidates, savedRecommendations);
         return savedRecommendations;
     }
-
 
     private Recommendation toRecommendation(UUID userId, RecommendationCandidate candidate) {
         Recommendation recommendation = new Recommendation();
@@ -130,7 +128,6 @@ public class RecommendationService {
 
         return recommendation;
     }
-
 
     private void createRecommendationNotifications(
             UUID userId,
@@ -174,8 +171,7 @@ public class RecommendationService {
     }
 
     public List<Recommendation> getTopSavingsRecommendations(UUID userId, int limit) {
-        List<Recommendation> recommendations = recommendationRepository
-            .findTopRecommendationsBySavings(userId);
+        List<Recommendation> recommendations = recommendationRepository.findTopRecommendationsBySavings(userId);
 
         return recommendations.stream()
             .limit(limit)

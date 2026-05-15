@@ -34,10 +34,10 @@ func (r *Repository) EnsureCompatibility(ctx context.Context) error {
 
 func (r *Repository) ListExpenseTransactions(ctx context.Context, userID uuid.UUID, since time.Time) ([]*model.Transaction, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, user_id, amount, currency, category_id, description, original_description, date
+		SELECT id, user_id, amount, currency, COALESCE(category_id, ml_category_id) AS category_id, description, original_description, date
 		FROM transactions
 		WHERE user_id = $1
-			AND type = 'EXPENSE'
+			AND UPPER(type) = 'EXPENSE'
 			AND date >= $2
 		ORDER BY date ASC
 	`, userID, since)

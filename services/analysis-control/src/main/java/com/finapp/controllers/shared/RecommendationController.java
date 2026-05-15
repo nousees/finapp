@@ -78,6 +78,19 @@ public class RecommendationController {
         );
     }
 
+    @DeleteMapping("/{recommendationId}")
+    @PreAuthorize("hasAuthority('SCOPE_recommendations:write')")
+    @Operation(summary = "Delete recommendation")
+    public ResponseEntity<ApiResponse<?>> deleteRecommendation(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID recommendationId) {
+        UUID userId = extractUserId(jwt);
+        recommendationService.deleteRecommendation(userId, recommendationId);
+        return ResponseEntity.ok(
+            ApiResponse.success("Recommendation deleted", null)
+        );
+    }
+
     @GetMapping("/potential-savings")
     @PreAuthorize("hasAuthority('SCOPE_recommendations:read')")
     @Operation(summary = "Get total potential savings")

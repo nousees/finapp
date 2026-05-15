@@ -18,6 +18,8 @@ async def health(request: Request) -> dict[str, Any]:
             "whisper": {
                 "version": getattr(getattr(speech, "model", None), "version", "unknown"),
                 "real": bool(getattr(getattr(speech, "model", None), "real", False)),
+                "load_error": getattr(getattr(speech, "model", None), "load_error", None),
+                "allow_demo_transcription": bool(request.app.state.settings.allow_demo_transcription),
             },
             "ner": {
                 "version": getattr(getattr(ner, "model", None), "version", "unknown"),

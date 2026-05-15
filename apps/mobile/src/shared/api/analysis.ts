@@ -263,7 +263,7 @@ export async function getFinancialInsights(params?: {
 export async function listRecommendations(): Promise<Recommendation[]> {
   const response = await requestJson<ApiEnvelope<Recommendation[]>>({
     baseUrl: apiConfig.analysisBaseUrl,
-    path: "/api/v1/recommendations",
+    path: "/api/v1/recommendations/unapplied",
     method: "GET",
   });
   return response.data;
@@ -303,6 +303,14 @@ export async function createBudget(data: CreateBudgetRequest): Promise<Budget> {
     body: data,
   });
   return response.data;
+}
+
+export async function deleteRecommendation(recommendationId: string): Promise<void> {
+  await requestJson<ApiEnvelope<null>>({
+    baseUrl: apiConfig.analysisBaseUrl,
+    path: `/api/v1/recommendations/${recommendationId}`,
+    method: "DELETE",
+  });
 }
 
 export async function updateBudget(budgetId: string, data: CreateBudgetRequest): Promise<Budget> {

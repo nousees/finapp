@@ -4,10 +4,10 @@ import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DashboardStackParamList } from "@app/navigation/types";
-import { generateRecommendations, getFinancialInsights, listRecommendations, listReports } from "@shared/api/analysis";
+import { deleteRecommendation, generateRecommendations, getFinancialInsights, listRecommendations, listReports } from "@shared/api/analysis";
 import { useAppSettings } from "@shared/settings/AppSettingsContext";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
 
@@ -21,6 +21,7 @@ export function ReportsScreen({ navigation }: Props) {
   const [reports, setReports] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,6 +40,7 @@ export function ReportsScreen({ navigation }: Props) {
       setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить отчёты");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -62,8 +64,25 @@ export function ReportsScreen({ navigation }: Props) {
     }
   };
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+  };
+
+  const removeRecommendation = async (id: string) => {
+    try {
+      await deleteRecommendation(id);
+      setRecommendations((current) => current.filter((item) => item.id !== id));
+    } catch (deleteError) {
+      Alert.alert("Ошибка", deleteError instanceof Error ? deleteError.message : "Не удалось удалить рекомендацию");
+    }
+  };
+
   const categories = Array.isArray(insights?.categories) ? insights.categories : [];
   const budgets = Array.isArray(insights?.budgets) ? insights.budgets : [];
+  const goals = Array.isArray(insights?.goals) ? insights.goals : [];
+  const goalsSaved = goals.reduce((sum, item) => sum + Number(item.currentAmount || 0), 0);
+  const goalsTarget = goals.reduce((sum, item) => sum + Number(item.targetAmount || 0), 0);
   const topPt = Platform.OS === "web" ? 42 : insets.top;
 
   return (
@@ -73,12 +92,16 @@ export function ReportsScreen({ navigation }: Props) {
           <Feather name="arrow-left" size={20} color={colors.text} />
         </Pressable>
         <Text style={[styles.navTitle, { color: colors.text }]}>Отчёты</Text>
-        <Pressable onPress={() => void loadData()} style={[styles.iconButton, { backgroundColor: colors.backgroundAlt }]}>
+        <Pressable onPress={handleRefresh} style={[styles.iconButton, { backgroundColor: colors.backgroundAlt }]}>
           <Feather name="refresh-cw" size={18} color={colors.text} />
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: 120 + insets.bottom }]} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: 120 + insets.bottom }]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
+      >
         <LinearGradient colors={gradients.success} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.summaryCard}>
           <Text style={styles.summaryLabel}>Сводка периода</Text>
           <Text style={styles.summaryValue}>{formatMoney(insights?.summary?.netSavings)}</Text>
@@ -88,8 +111,11 @@ export function ReportsScreen({ navigation }: Props) {
           <View style={styles.summaryStats}>
             <MiniMetric label="Категорий" value={String(categories.length)} />
             <MiniMetric label="Бюджетов" value={String(budgets.length)} />
-            <MiniMetric label="Отчётов" value={String(reports.length)} />
+            <MiniMetric label="Целей" value={String(goals.length)} />
           </View>
+          <Text style={styles.summaryText}>
+            В целях: {formatMoney(goalsSaved)} из {formatMoney(goalsTarget)}
+          </Text>
         </LinearGradient>
 
         {loading ? <ActivityIndicator color={colors.primary} size="large" /> : null}
@@ -111,6 +137,21 @@ export function ReportsScreen({ navigation }: Props) {
           )}
         </Panel>
 
+        <Panel title="Цели">
+          {goals.length === 0 ? (
+            <EmptyText text="Цели пока не созданы." />
+          ) : (
+            goals.slice(0, 5).map((item) => (
+              <InfoCard
+                key={item.goalId}
+                icon="target"
+                title={item.name || "Цель"}
+                text={`${formatMoney(item.currentAmount)} из ${formatMoney(item.targetAmount)} · ${Math.round(Number(item.progressPercent || 0))}%`}
+              />
+            ))
+          )}
+        </Panel>
+
         <Panel title="Статус бюджетов">
           {budgets.length === 0 ? (
             <EmptyText text="Бюджеты ещё не созданы." />
@@ -125,7 +166,7 @@ export function ReportsScreen({ navigation }: Props) {
           {recommendations.length === 0 ? (
             <EmptyText text="Рекомендаций пока нет." />
           ) : (
-            recommendations.slice(0, 5).map((item) => <InfoCard key={item.id} icon="zap" title={item.title} text={item.description} />)
+            recommendations.slice(0, 5).map((item) => <InfoCard key={item.id} icon="zap" title={item.title} text={item.description} onDelete={() => removeRecommendation(item.id)} />)
           )}
           <Pressable onPress={handleGenerate} disabled={generating}>
             <LinearGradient colors={gradients.successDeep} style={styles.actionButton}>
@@ -183,7 +224,7 @@ function ProgressRow({ label, value, width, color }) {
   );
 }
 
-function InfoCard({ icon, title, text }) {
+function InfoCard({ icon, title, text, onDelete }) {
   const { colors } = useAppTheme();
   return (
     <View style={[styles.infoCard, { backgroundColor: colors.backgroundAlt }]}>
@@ -194,6 +235,11 @@ function InfoCard({ icon, title, text }) {
         <Text style={[styles.infoTitle, { color: colors.text }]} numberOfLines={1}>{title}</Text>
         <Text style={[styles.infoBody, { color: colors.textMuted }]} numberOfLines={3}>{text || "Нет описания"}</Text>
       </View>
+      {onDelete ? (
+        <Pressable onPress={onDelete} style={styles.deleteButton}>
+          <Feather name="x" size={16} color={colors.textMuted} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -230,6 +276,7 @@ const styles = StyleSheet.create({
   infoCard: { flexDirection: "row", gap: 12, borderRadius: 14, padding: 12 },
   infoIcon: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   infoText: { flex: 1, gap: 2 },
+  deleteButton: { width: 30, height: 30, borderRadius: 15, alignItems: "center", justifyContent: "center" },
   infoTitle: { fontSize: 14, fontFamily: "Inter_700Bold" },
   infoBody: { fontSize: 12, lineHeight: 18, fontFamily: "Inter_400Regular" },
   actionButton: { minHeight: 48, borderRadius: 16, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 8 },

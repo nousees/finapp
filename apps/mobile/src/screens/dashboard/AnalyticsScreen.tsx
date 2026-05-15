@@ -4,7 +4,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import Svg, { G, Rect, Text as SvgText } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DashboardStackParamList } from "@app/navigation/types";
@@ -31,6 +31,7 @@ export function AnalyticsScreen({ navigation }: Props) {
   const [transactions, setTransactions] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
@@ -48,6 +49,7 @@ export function AnalyticsScreen({ navigation }: Props) {
       setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить аналитику");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -67,6 +69,11 @@ export function AnalyticsScreen({ navigation }: Props) {
   const topExpenses = (Array.isArray(transactions) ? transactions : []).filter((item) => item.type === "EXPENSE").sort((a, b) => Number(b.amount) - Number(a.amount)).slice(0, 5);
   const topPt = Platform.OS === "web" ? 42 : insets.top;
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={[styles.nav, { paddingTop: topPt + 8 }]}>
@@ -74,12 +81,16 @@ export function AnalyticsScreen({ navigation }: Props) {
           <Feather name="arrow-left" size={20} color={colors.text} />
         </Pressable>
         <Text style={[styles.navTitle, { color: colors.text }]}>Аналитика</Text>
-        <Pressable onPress={() => void loadData()} style={[styles.backBtn, { backgroundColor: colors.backgroundAlt }]}>
+        <Pressable onPress={handleRefresh} style={[styles.backBtn, { backgroundColor: colors.backgroundAlt }]}>
           <Feather name="refresh-cw" size={18} color={colors.text} />
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={[styles.body, { paddingBottom: 120 + insets.bottom }]} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[styles.body, { paddingBottom: 120 + insets.bottom }]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
+      >
         <View style={styles.periodRow}>
           {PERIODS.map((item) => (
             <Pressable key={item.id} onPress={() => setPeriod(item.id)}>

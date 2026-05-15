@@ -193,18 +193,31 @@ export function DashboardHomeScreen({ navigation }: Props) {
         )}
 
         <SectionTitle title="Советы" />
-        {(topSignals.length ? topSignals : fallbackSignals).map((item) => (
-          <Pressable key={item.id} style={[styles.tipCard, { backgroundColor: colors.surfaceAlt }]} onPress={() => navigation.navigate("Analytics")}>
-            <LinearGradient colors={item.gradient} style={styles.tipIcon}>
-              <Feather name={item.icon} size={16} color="#FFFFFF" />
+        {topSignals.length === 0 ? (
+          <Pressable style={[styles.tipCard, { backgroundColor: colors.surfaceAlt }]} onPress={() => navigation.navigate("Reports")}>
+            <LinearGradient colors={["#059669", "#7ED9B6"]} style={styles.tipIcon}>
+              <Feather name="refresh-cw" size={16} color="#FFFFFF" />
             </LinearGradient>
             <View style={styles.tipText}>
-              <Text style={[styles.tipTitle, { color: colors.text }]}>{item.title}</Text>
-              <Text style={[styles.tipBody, { color: colors.textMuted }]} numberOfLines={2}>{item.text}</Text>
+              <Text style={[styles.tipTitle, { color: colors.text }]}>Рекомендаций пока нет</Text>
+              <Text style={[styles.tipBody, { color: colors.textMuted }]} numberOfLines={2}>Сформируйте рекомендации после добавления транзакций, бюджетов и целей.</Text>
             </View>
             <Feather name="chevron-right" size={16} color={colors.textMuted} />
           </Pressable>
-        ))}
+        ) : (
+          topSignals.map((item) => (
+            <Pressable key={item.id} style={[styles.tipCard, { backgroundColor: colors.surfaceAlt }]} onPress={() => navigation.navigate("Analytics")}>
+              <LinearGradient colors={item.gradient} style={styles.tipIcon}>
+                <Feather name={item.icon} size={16} color="#FFFFFF" />
+              </LinearGradient>
+              <View style={styles.tipText}>
+                <Text style={[styles.tipTitle, { color: colors.text }]}>{item.title}</Text>
+                <Text style={[styles.tipBody, { color: colors.textMuted }]} numberOfLines={2}>{item.text}</Text>
+              </View>
+              <Feather name="chevron-right" size={16} color={colors.textMuted} />
+            </Pressable>
+          ))
+        )}
       </View>
     </ScrollView>
   );

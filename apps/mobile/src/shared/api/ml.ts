@@ -15,6 +15,8 @@ type CollectionVoiceResponse = {
   confidence?: number | null;
 };
 
+const DEMO_TRANSCRIPTION_TEXT = "потратил 450 рублей на продукты в пятерочке вчера";
+
 export type EnrichedVoiceTransaction = {
   transaction: {
     amount?: number | null;
@@ -42,6 +44,7 @@ export async function transcribeAudioFile(file: { uri: string; name: string; mim
   try {
     const uploaded = await uploadVoiceFile(file);
     if (uploaded?.transcribed_text) {
+      assertNotDemoTranscription(uploaded.transcribed_text);
       const entityPayload = parseEntities(uploaded.entities);
       return {
         text: uploaded.transcribed_text,
@@ -60,12 +63,14 @@ export async function transcribeAudioFile(file: { uri: string; name: string; mim
     type: file.mimeType || "audio/m4a",
   } as any);
 
-  return requestJson<VoiceTranscription>({
+  const direct = await requestJson<VoiceTranscription>({
     baseUrl: apiConfig.mlBaseUrl,
     path: "/api/v1/voice/transcribe",
     method: "POST",
     body: formData,
   });
+  assertNotDemoTranscription(direct.text);
+  return direct;
 }
 
 export async function uploadVoiceFile(file: { uri: string; name: string; mimeType?: string | null }): Promise<CollectionVoiceResponse> {
@@ -190,6 +195,13 @@ function parseEntities(value: CollectionVoiceResponse["entities"]): Record<strin
     }
   }
   return value;
+}
+
+function assertNotDemoTranscription(text: string): void {
+  const normalized = text.trim().toLowerCase().replace(/\s+/g, " ");
+  if (normalized === DEMO_TRANSCRIPTION_TEXT) {
+    throw new Error("ML-сервис работает в демо-режиме. Пересоберите ml-service с ENABLE_REAL_MODELS=true и реальным Whisper.");
+  }
 }
 
 export async function importStatementFile(file: { uri: string; name: string; mimeType?: string | null }): Promise<{

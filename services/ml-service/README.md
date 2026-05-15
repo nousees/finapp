@@ -18,8 +18,11 @@ APP_VERSION=1.0.0
 LOG_LEVEL=INFO
 MAX_AUDIO_SIZE_MB=25
 ENABLE_REAL_MODELS=false
-TEST_MODE=true
+TEST_MODE=false
+ALLOW_DEMO_TRANSCRIPTION=false
 WHISPER_MODEL_PATH=/models/whisper-large-v3
+WHISPER_MODEL_NAME=large-v3
+WHISPER_DOWNLOAD_ROOT=/tmp/whisper-cache
 NER_MODEL_PATH=/models/rubert-tiny-ner
 CATEGORY_MODEL_PATH=/models/category-ensemble
 REDIS_URL=redis://redis:6379/0
@@ -28,7 +31,7 @@ DATABASE_URL=postgresql://finapp:finapp@postgres:5432/finapp
 
 When `ENABLE_REAL_MODELS=false`, the service uses deterministic fallbacks:
 
-- voice transcription returns demo Russian transaction text when `TEST_MODE=true`;
+- voice transcription returns HTTP 503 unless `ALLOW_DEMO_TRANSCRIPTION=true` is explicitly enabled for tests/demo runs;
 - NER extracts amount, currency, date, merchant, and operation type heuristically;
 - categorization uses rules for groceries, transport, subscriptions, health, restaurants, salary, and other.
 

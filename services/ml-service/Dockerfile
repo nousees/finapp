@@ -12,7 +12,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-ARG INSTALL_REAL_MODEL_DEPS=false
+ARG INSTALL_REAL_MODEL_DEPS=true
 COPY requirements.txt requirements-real.txt ./
 RUN pip install --no-cache-dir --upgrade "pip<26" "setuptools<81" wheel \
     && pip install --no-cache-dir --no-build-isolation -r requirements.txt \

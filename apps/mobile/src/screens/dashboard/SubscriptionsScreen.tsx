@@ -4,7 +4,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DashboardStackParamList } from "@app/navigation/types";
 import { analyzeSubscriptions, ApiSubscription, listSubscriptions } from "@shared/api/subscriptions";
@@ -19,6 +19,7 @@ export function SubscriptionsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const [subscriptions, setSubscriptions] = useState<ApiSubscription[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,6 +31,7 @@ export function SubscriptionsScreen({ navigation }: Props) {
       setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить подписки");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -49,7 +51,13 @@ export function SubscriptionsScreen({ navigation }: Props) {
       setError(analyzeError instanceof Error ? analyzeError.message : "Не удалось запустить анализ подписок");
     } finally {
       setAnalyzing(false);
+      setRefreshing(false);
     }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await runAnalyze();
   };
 
   const { totalMonthly, unusedCost, rareCost, unused, rare, active } = useMemo(() => {
@@ -81,7 +89,11 @@ export function SubscriptionsScreen({ navigation }: Props) {
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={[styles.body, { paddingBottom: 120 + insets.bottom }]} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[styles.body, { paddingBottom: 120 + insets.bottom }]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.primary} />}
+      >
         <LinearGradient colors={gradients.success} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.summaryCard}>
           <Text style={styles.summaryLabel}>Ежемесячные расходы</Text>
           <Text style={styles.summaryAmount}>{formatMoney(totalMonthly)}</Text>
