@@ -7,6 +7,7 @@ import (
 	"finapp/services/data-processing/auth-service/internal/repository"
 	"finapp/services/data-processing/auth-service/internal/usecases"
 	"finapp/services/data-processing/auth-service/pkg/jwt"
+	"finapp/services/data-processing/auth-service/pkg/supabase"
 	"log"
 	"net/http"
 	"strings"
@@ -33,7 +34,18 @@ func main() {
 	changePasswordUsecase := usecases.NewChangePasswordUsecase(users)
 
 	signInController := controllers.NewSignInController(*signInUsecase)
-	signUpController := controllers.NewSignUpController(*signUpUsecase, *signInUsecase)
+	var supabaseClient *supabase.Client
+	if cfg.Supabase.Enabled && cfg.Supabase.URL != "" && cfg.Supabase.AnonKey != "" {
+		supabaseClient = supabase.NewClient(cfg.Supabase.URL, cfg.Supabase.AnonKey)
+	}
+
+	var sendEmailOTP func(string) error
+	if supabaseClient != nil {
+		sendEmailOTP = supabaseClient.SendEmailOTP
+	}
+
+	signUpController := controllers.NewSignUpController(*signUpUsecase, *signInUsecase, supabaseClient != nil, sendEmailOTP)
+	verifyEmailCodeController := controllers.NewVerifyEmailCodeController(*signInUsecase, supabaseClient)
 	changePasswordController := controllers.NewChangePasswordController(*changePasswordUsecase)
 	refreshController := controllers.NewRefreshController(tokens)
 
@@ -56,6 +68,13 @@ func main() {
 
 	router.POST("/sign-up", signUpController.SignUp)
 	router.POST("/sign-in", signInController.SignIn)
+	router.POST("/verify-email-code", func(c *gin.Context) {
+		if supabaseClient == nil {
+			c.JSON(http.StatusNotImplemented, gin.H{"status": "error", "message": "supabase auth is not configured"})
+			return
+		}
+		verifyEmailCodeController.Verify(c)
+	})
 	router.POST("/refresh", refreshController.Refresh)
 	router.POST("/change-password", func(c *gin.Context) {
 		header := c.GetHeader("Authorization")

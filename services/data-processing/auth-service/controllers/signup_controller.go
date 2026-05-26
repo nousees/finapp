@@ -10,12 +10,14 @@ import (
 )
 
 type SignUpController struct {
-	SignUpUsecase usecases.SignUpUsecase
-	SignInUsecase usecases.SignInUsecase
+	SignUpUsecase   usecases.SignUpUsecase
+	SignInUsecase   usecases.SignInUsecase
+	SupabaseEnabled bool
+	SendEmailOTP    func(string) error
 }
 
-func NewSignUpController(sup usecases.SignUpUsecase, sin usecases.SignInUsecase) *SignUpController {
-	return &SignUpController{sup, sin}
+func NewSignUpController(sup usecases.SignUpUsecase, sin usecases.SignInUsecase, supabaseEnabled bool, sendEmailOTP func(string) error) *SignUpController {
+	return &SignUpController{SignUpUsecase: sup, SignInUsecase: sin, SupabaseEnabled: supabaseEnabled, SendEmailOTP: sendEmailOTP}
 }
 
 func (sc *SignUpController) SignUp(c *gin.Context) {
@@ -34,6 +36,19 @@ func (sc *SignUpController) SignUp(c *gin.Context) {
 	err := sc.SignUpUsecase.SignUp(user)
 	if err != nil {
 		c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "registration error", "error": err.Error()})
+		return
+	}
+
+	if sc.SupabaseEnabled && sc.SendEmailOTP != nil {
+		if err := sc.SendEmailOTP(user.Email); err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"status": "error", "message": "email verification send failed", "error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"status":                      "success",
+			"message":                     "registration successfully, verify email",
+			"requires_email_verification": true,
+		})
 		return
 	}
 
