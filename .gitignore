@@ -49,6 +49,12 @@ __pycache__/
 checkpoint-*/
 
 # Training artifacts
+services/ml-service/catboost_info/
+services/ml-service/training_data/*.csv
+services/ml-service/training_data/*.jsonl
+services/ml-service/training_data/*_report.json
+services/ml-service/training_data/*.parquet
+services/ml-service/training_data/*.xlsx
 optimizer.pt
 scheduler.pt
 trainer_state.json

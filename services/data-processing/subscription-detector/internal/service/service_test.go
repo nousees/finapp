@@ -13,6 +13,22 @@ func stringPtr(value string) *string {
 	return &value
 }
 
+func TestGroupTransactionsAllowsSmallAmountChanges(t *testing.T) {
+	description := stringPtr("Yandex Plus subscription")
+	items := []*model.Transaction{
+		{ID: uuid.New(), Amount: 299, Currency: "RUB", Description: description, Date: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)},
+		{ID: uuid.New(), Amount: 399, Currency: "RUB", Description: description, Date: time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)},
+	}
+
+	groups := groupTransactions(items)
+	if len(groups) != 1 {
+		t.Fatalf("expected 1 group, got %d", len(groups))
+	}
+	if groups[0].amount != 349 {
+		t.Fatalf("expected average amount 349, got %.2f", groups[0].amount)
+	}
+}
+
 func TestDetectRecurrenceMonthly(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	items := []*model.Transaction{

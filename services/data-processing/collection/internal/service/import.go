@@ -2,7 +2,10 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/csv"
+	"encoding/hex"
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
@@ -16,12 +19,13 @@ import (
 )
 
 type ImportService struct {
-	importRepo *repository.ImportRepo
-	transRepo  *repository.TransactionRepo
+	importRepo       *repository.ImportRepo
+	transRepo        *repository.TransactionRepo
+	processingClient *ProcessingClient
 }
 
-func NewImportService(importRepo *repository.ImportRepo, transRepo *repository.TransactionRepo) *ImportService {
-	return &ImportService{importRepo: importRepo, transRepo: transRepo}
+func NewImportService(importRepo *repository.ImportRepo, transRepo *repository.TransactionRepo, processingClient *ProcessingClient) *ImportService {
+	return &ImportService{importRepo: importRepo, transRepo: transRepo, processingClient: processingClient}
 }
 
 func (s *ImportService) StartImport(ctx context.Context, userID uuid.UUID, fileName string, fileType model.ImportFileType) (*model.Import, error) {
@@ -41,7 +45,7 @@ func parseImportDate(s string) (time.Time, error) {
 	return time.Now().UTC(), nil
 }
 
-func (s *ImportService) ProcessCSV(ctx context.Context, userID uuid.UUID, importID uuid.UUID, body io.Reader) (processed int, errs []map[string]interface{}, err error) {
+func (s *ImportService) ProcessCSV(ctx context.Context, userID uuid.UUID, importID uuid.UUID, body io.Reader, authorization string) (processed int, errs []map[string]interface{}, err error) {
 	_ = s.importRepo.UpdateStatus(ctx, importID, model.ImportProcessing, 0, 0, nil)
 	reader := csv.NewReader(body)
 	reader.Comma = ';'
@@ -59,7 +63,8 @@ func (s *ImportService) ProcessCSV(ctx context.Context, userID uuid.UUID, import
 	headers := rows[0]
 	dateIdx, amountIdx, typeIdx, descIdx := findColumnIndices(headers)
 	if dateIdx < 0 || amountIdx < 0 {
-		_ = s.importRepo.UpdateStatus(ctx, importID, model.ImportFailed, 0, 0, []map[string]interface{}{{"error": "required columns (date, amount) not found"}})
+		err := fmt.Errorf("required columns (date, amount) not found")
+		_ = s.importRepo.UpdateStatus(ctx, importID, model.ImportFailed, 0, 0, []map[string]interface{}{{"error": err.Error()}})
 		return 0, nil, err
 	}
 	var processedCount int
@@ -96,13 +101,18 @@ func (s *ImportService) ProcessCSV(ctx context.Context, userID uuid.UUID, import
 			Type:        model.TransactionType(typeStr),
 			Description: &descStr,
 			Date:        &dateStr,
+			RawHash:     rawHashPtr("csv", row),
 		}
 		if descStr == "" {
 			in.Description = nil
 		}
-		_, createErr := s.transRepo.Create(ctx, userID, in, txDate)
+		duplicate, createErr := s.createImportedTransaction(ctx, userID, in, txDate, authorization)
 		if createErr != nil {
 			errs = append(errs, map[string]interface{}{"row": i + 1, "error": createErr.Error()})
+			continue
+		}
+		if duplicate {
+			errs = append(errs, map[string]interface{}{"row": i + 1, "warning": "duplicate transaction skipped"})
 			continue
 		}
 		processedCount++
@@ -129,7 +139,7 @@ func findColumnIndices(headers []string) (dateIdx, amountIdx, typeIdx, descIdx i
 	return dateIdx, amountIdx, typeIdx, descIdx
 }
 
-func (s *ImportService) ProcessExcel(ctx context.Context, userID uuid.UUID, importID uuid.UUID, body io.Reader) (processed int, errs []map[string]interface{}, err error) {
+func (s *ImportService) ProcessExcel(ctx context.Context, userID uuid.UUID, importID uuid.UUID, body io.Reader, authorization string) (processed int, errs []map[string]interface{}, err error) {
 	_ = s.importRepo.UpdateStatus(ctx, importID, model.ImportProcessing, 0, 0, nil)
 	f, err := excelize.OpenReader(body)
 	if err != nil {
@@ -154,7 +164,8 @@ func (s *ImportService) ProcessExcel(ctx context.Context, userID uuid.UUID, impo
 	headers := rows[0]
 	dateIdx, amountIdx, typeIdx, descIdx := findColumnIndices(headers)
 	if dateIdx < 0 || amountIdx < 0 {
-		_ = s.importRepo.UpdateStatus(ctx, importID, model.ImportFailed, 0, 0, []map[string]interface{}{{"error": "required columns (date, amount) not found"}})
+		err := fmt.Errorf("required columns (date, amount) not found")
+		_ = s.importRepo.UpdateStatus(ctx, importID, model.ImportFailed, 0, 0, []map[string]interface{}{{"error": err.Error()}})
 		return 0, nil, err
 	}
 	total := len(rows) - 1
@@ -192,17 +203,51 @@ func (s *ImportService) ProcessExcel(ctx context.Context, userID uuid.UUID, impo
 			Type:        model.TransactionType(typeStr),
 			Description: &descStr,
 			Date:        &dateStr,
+			RawHash:     rawHashPtr("excel", row),
 		}
 		if descStr == "" {
 			in.Description = nil
 		}
-		_, createErr := s.transRepo.Create(ctx, userID, in, txDate)
+		duplicate, createErr := s.createImportedTransaction(ctx, userID, in, txDate, authorization)
 		if createErr != nil {
 			errs = append(errs, map[string]interface{}{"row": i + 1, "error": createErr.Error()})
+			continue
+		}
+		if duplicate {
+			errs = append(errs, map[string]interface{}{"row": i + 1, "warning": "duplicate transaction skipped"})
 			continue
 		}
 		processedCount++
 	}
 	_ = s.importRepo.UpdateStatus(ctx, importID, model.ImportCompleted, total, processedCount, errs)
 	return processedCount, errs, nil
+}
+
+func (s *ImportService) createImportedTransaction(ctx context.Context, userID uuid.UUID, in model.CreateTransactionInput, txDate time.Time, authorization string) (bool, error) {
+	if in.RawHash != nil {
+		exists, err := s.transRepo.ExistsByRawHash(ctx, userID, *in.RawHash)
+		if err != nil {
+			return false, err
+		}
+		if exists {
+			return true, nil
+		}
+	}
+
+	tx, err := s.transRepo.Create(ctx, userID, in, txDate)
+	if err != nil {
+		return false, err
+	}
+	if s.processingClient != nil {
+		if err := s.processingClient.ProcessTransaction(ctx, tx.ID, authorization); err != nil {
+			return false, fmt.Errorf("created transaction %s, but processing failed: %w", tx.ID, err)
+		}
+	}
+	return false, nil
+}
+
+func rawHashPtr(source string, row []string) *string {
+	hash := sha256.Sum256([]byte(source + "|" + strings.Join(row, "|")))
+	value := hex.EncodeToString(hash[:])
+	return &value
 }

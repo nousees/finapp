@@ -105,6 +105,7 @@ CREATE TABLE transactions (
     is_habit_related BOOLEAN DEFAULT FALSE,
     habit_pattern_id UUID REFERENCES habits(id) ON DELETE SET NULL, -- ссылка на habits.id
     tags JSONB, -- пользовательские теги
+    raw_hash TEXT, -- хэш исходной строки импорта для дедупликации
     is_essential BOOLEAN DEFAULT FALSE, -- обязательный расход
     is_verified BOOLEAN DEFAULT TRUE, -- подтверждена пользователем
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -136,7 +137,7 @@ CREATE TABLE subscriptions (
     next_billing_date DATE NOT NULL,
     is_active BOOLEAN DEFAULT TRUE,
     ml_detected BOOLEAN DEFAULT FALSE, -- обнаружено ML
-    usage_index DECIMAL(5,4), -- индекс использования (0-1)
+    usage_index DECIMAL(5,2), -- индекс использования (0-100)
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -380,6 +381,8 @@ CHECK (confidence IS NULL OR (confidence >= 0 AND confidence <= 1));
 -- Основные индексы для производительности
 CREATE INDEX idx_transactions_user_date ON transactions(user_id, date DESC);
 CREATE INDEX idx_transactions_user_category ON transactions(user_id, category_id);
+CREATE UNIQUE INDEX idx_transactions_user_raw_hash ON transactions(user_id, raw_hash)
+WHERE raw_hash IS NOT NULL;
 CREATE INDEX idx_budgets_user_period ON budgets(user_id, period_start, period_end);
 CREATE INDEX idx_goals_user_status ON goals(user_id, status, deadline);
 CREATE INDEX idx_notifications_user_read ON notifications(user_id, is_read, created_at DESC);

@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from app.main import create_app
+from app.ml.category_loader import load_category_model
 
 
 def test_categorize_groceries() -> None:
@@ -35,4 +36,20 @@ def test_categorize_other_fallback() -> None:
     assert response.status_code == 200
     assert payload["category_code"] == "other"
     assert payload["confidence"] < 0.8
+
+
+def test_real_category_model_prefers_catboost_artifact() -> None:
+    model = load_category_model(True, "ml_models")
+    assert model.real is True
+    assert model.version == "catboost-finapp-v2"
+
+    prediction = model.predict({
+        "description": "Пятерочка продукты молоко хлеб",
+        "amount": 450,
+        "merchant": "Пятерочка",
+    })
+
+    assert prediction
+    assert prediction["category"] == "groceries"
+    assert prediction["confidence"] > 0.5
 

@@ -8,7 +8,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { TransactionsStackParamList } from "@app/navigation/types";
-import { enrichText, EnrichedVoiceTransaction, transcribeAudioFile } from "@shared/api/ml";
+import { enrichText, EnrichedVoiceTransaction, recognizeVoiceTransaction } from "@shared/api/ml";
 import { processTransaction } from "@shared/api/processing";
 import { createTransaction, updateTransaction } from "@shared/api/transactions";
 import { getCategoryByCode, getCategoryByName } from "@shared/constants/categories";
@@ -78,13 +78,18 @@ export function VoiceCaptureScreen({ navigation }: Props) {
       const uri = recording.getURI();
       setRecording(null);
       if (!uri) throw new Error("Не удалось получить файл записи.");
-      const transcription = await transcribeAudioFile({
+      const result = await recognizeVoiceTransaction({
         uri,
         name: "finapp-voice.m4a",
         mimeType: "audio/m4a",
       });
-      const phrase = transcription.text || text;
+      const phrase = result.text || text;
       setText(phrase);
+      if (result.enriched) {
+        setParsed(result.enriched);
+        setStep("confirm");
+        return;
+      }
       await processPhrase(phrase);
     } catch (recordError) {
       setRecording(null);

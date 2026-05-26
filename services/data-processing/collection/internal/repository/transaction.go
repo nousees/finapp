@@ -17,7 +17,21 @@ type TransactionRepo struct {
 }
 
 func NewTransactionRepo(pool *pgxpool.Pool) *TransactionRepo {
-	return &TransactionRepo{pool: pool}
+	repo := &TransactionRepo{pool: pool}
+	_ = repo.ensureSchema(context.Background())
+	return repo
+}
+
+func (r *TransactionRepo) ensureSchema(ctx context.Context) error {
+	if _, err := r.pool.Exec(ctx, `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS raw_hash TEXT`); err != nil {
+		return err
+	}
+	_, err := r.pool.Exec(ctx, `
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_user_raw_hash
+		ON transactions(user_id, raw_hash)
+		WHERE raw_hash IS NOT NULL
+	`)
+	return err
 }
 
 func (r *TransactionRepo) Create(ctx context.Context, userID uuid.UUID, in model.CreateTransactionInput, txDate time.Time) (*model.Transaction, error) {
@@ -39,12 +53,12 @@ func (r *TransactionRepo) Create(ctx context.Context, userID uuid.UUID, in model
 	err := r.pool.QueryRow(ctx, `
 		INSERT INTO transactions (
 			id, user_id, amount, currency, type, category_id, description, original_description,
-			date, payment_method, bank_account_id, is_verified, is_recurring
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, false)
+			date, payment_method, bank_account_id, is_verified, is_recurring, raw_hash
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, false, $13)
 		RETURNING id, user_id, amount, currency, type, category_id, ml_category_id, ml_confidence,
 			description, original_description, date, payment_method, bank_account_id, is_verified,
 			is_recurring, created_at, updated_at
-	`, id, userID, in.Amount, currency, in.Type, catID, desc, desc, txDate, pm, bankID, isVerified).Scan(
+	`, id, userID, in.Amount, currency, in.Type, catID, desc, desc, txDate, pm, bankID, isVerified, in.RawHash).Scan(
 		&t.ID, &t.UserID, &t.Amount, &t.Currency, &t.Type, &t.CategoryID, &t.MLCategoryID, &t.MLConfidence,
 		&t.Description, &t.OriginalDescription, &t.Date, &t.PaymentMethod, &t.BankAccountID, &t.IsVerified,
 		&t.IsRecurring, &t.CreatedAt, &t.UpdatedAt,
@@ -53,6 +67,19 @@ func (r *TransactionRepo) Create(ctx context.Context, userID uuid.UUID, in model
 		return nil, err
 	}
 	return &t, nil
+}
+
+func (r *TransactionRepo) ExistsByRawHash(ctx context.Context, userID uuid.UUID, rawHash string) (bool, error) {
+	if strings.TrimSpace(rawHash) == "" {
+		return false, nil
+	}
+	var exists bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM transactions WHERE user_id = $1 AND raw_hash = $2
+		)
+	`, userID, rawHash).Scan(&exists)
+	return exists, err
 }
 
 func (r *TransactionRepo) CreateBatch(ctx context.Context, userID uuid.UUID, inputs []model.CreateTransactionInput, parseDate func(string) (time.Time, error)) ([]*model.Transaction, error) {

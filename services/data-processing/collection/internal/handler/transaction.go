@@ -32,7 +32,7 @@ func (h *TransactionHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	t, err := h.svc.Create(c.Request.Context(), userID, in)
+	t, err := h.svc.Create(c.Request.Context(), userID, in, c.GetHeader("Authorization"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -53,7 +53,7 @@ func (h *TransactionHandler) CreateBatch(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	list, err := h.svc.CreateBatch(c.Request.Context(), userID, in)
+	list, err := h.svc.CreateBatch(c.Request.Context(), userID, in, c.GetHeader("Authorization"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

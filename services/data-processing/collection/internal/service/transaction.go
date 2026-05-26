@@ -20,11 +20,15 @@ var defaultDateFormats = []string{
 }
 
 type TransactionService struct {
-	repo *repository.TransactionRepo
+	repo             *repository.TransactionRepo
+	processingClient *ProcessingClient
 }
 
-func NewTransactionService(repo *repository.TransactionRepo) *TransactionService {
-	return &TransactionService{repo: repo}
+func NewTransactionService(repo *repository.TransactionRepo, processingClient *ProcessingClient) *TransactionService {
+	return &TransactionService{
+		repo:             repo,
+		processingClient: processingClient,
+	}
 }
 
 func (s *TransactionService) parseDate(spec string) (time.Time, error) {
@@ -40,7 +44,7 @@ func (s *TransactionService) parseDate(spec string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("unsupported date format: %q", spec)
 }
 
-func (s *TransactionService) Create(ctx context.Context, userID uuid.UUID, in model.CreateTransactionInput) (*model.Transaction, error) {
+func (s *TransactionService) Create(ctx context.Context, userID uuid.UUID, in model.CreateTransactionInput, authorization string) (*model.Transaction, error) {
 	txDate := time.Now().UTC()
 	if in.Date != nil && *in.Date != "" {
 		parsed, err := s.parseDate(*in.Date)
@@ -49,11 +53,30 @@ func (s *TransactionService) Create(ctx context.Context, userID uuid.UUID, in mo
 		}
 		txDate = parsed
 	}
-	return s.repo.Create(ctx, userID, in, txDate)
+	item, err := s.repo.Create(ctx, userID, in, txDate)
+	if err != nil {
+		return nil, err
+	}
+	if in.CategoryID != nil {
+		return item, nil
+	}
+	return item, s.processIfNeeded(ctx, item.ID, authorization)
 }
 
-func (s *TransactionService) CreateBatch(ctx context.Context, userID uuid.UUID, in model.CreateTransactionBatchInput) ([]*model.Transaction, error) {
-	return s.repo.CreateBatch(ctx, userID, in.Transactions, s.parseDate)
+func (s *TransactionService) CreateBatch(ctx context.Context, userID uuid.UUID, in model.CreateTransactionBatchInput, authorization string) ([]*model.Transaction, error) {
+	items, err := s.repo.CreateBatch(ctx, userID, in.Transactions, s.parseDate)
+	if err != nil {
+		return items, err
+	}
+	for index, item := range items {
+		if index < len(in.Transactions) && in.Transactions[index].CategoryID != nil {
+			continue
+		}
+		if err := s.processIfNeeded(ctx, item.ID, authorization); err != nil {
+			return items, err
+		}
+	}
+	return items, nil
 }
 
 func (s *TransactionService) List(ctx context.Context, userID uuid.UUID, filter model.ListTransactionsFilter) ([]*model.Transaction, error) {
@@ -70,4 +93,11 @@ func (s *TransactionService) Update(ctx context.Context, userID, transactionID u
 		txDate = &parsed
 	}
 	return s.repo.Update(ctx, userID, transactionID, in, txDate)
+}
+
+func (s *TransactionService) processIfNeeded(ctx context.Context, transactionID uuid.UUID, authorization string) error {
+	if s.processingClient == nil {
+		return nil
+	}
+	return s.processingClient.ProcessTransaction(ctx, transactionID, authorization)
 }

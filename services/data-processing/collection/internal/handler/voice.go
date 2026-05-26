@@ -57,3 +57,52 @@ func (h *VoiceHandler) Upload(c *gin.Context) {
 	}
 	c.JSON(http.StatusCreated, vt)
 }
+
+// Transaction принимает аудио, распознаёт речь, извлекает сущности и
+// опционально создаёт транзакцию, если form поле auto_create=true.
+func (h *VoiceHandler) Transaction(c *gin.Context) {
+	userID, ok := userIDFromContext(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user id required"})
+		return
+	}
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file required: " + err.Error()})
+		return
+	}
+	contentType := file.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "audio/webm"
+	}
+	f, err := file.Open()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "open file: " + err.Error()})
+		return
+	}
+	defer f.Close()
+	data, err := io.ReadAll(f)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "read file: " + err.Error()})
+		return
+	}
+	var audioURL *string
+	if u := c.PostForm("audio_url"); u != "" {
+		audioURL = &u
+	}
+	autoCreate := c.PostForm("auto_create") == "true"
+	result, err := h.svc.BuildTransactionFromBytes(
+		c.Request.Context(),
+		userID,
+		data,
+		contentType,
+		audioURL,
+		autoCreate,
+		c.GetHeader("Authorization"),
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, result)
+}

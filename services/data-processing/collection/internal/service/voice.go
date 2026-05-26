@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"strings"
+	"time"
 
 	"finapp/services/data-processing/collection/internal/model"
 	"finapp/services/data-processing/collection/internal/repository"
@@ -17,16 +18,20 @@ import (
 )
 
 type VoiceService struct {
-	repo      *repository.VoiceRepo
-	mlBaseURL string
-	client    *http.Client
+	repo             *repository.VoiceRepo
+	transRepo        *repository.TransactionRepo
+	processingClient *ProcessingClient
+	mlBaseURL        string
+	client           *http.Client
 }
 
-func NewVoiceService(repo *repository.VoiceRepo, mlBaseURL string) *VoiceService {
+func NewVoiceService(repo *repository.VoiceRepo, transRepo *repository.TransactionRepo, processingClient *ProcessingClient, mlBaseURL string) *VoiceService {
 	return &VoiceService{
-		repo:      repo,
-		mlBaseURL: mlBaseURL,
-		client:    &http.Client{},
+		repo:             repo,
+		transRepo:        transRepo,
+		processingClient: processingClient,
+		mlBaseURL:        mlBaseURL,
+		client:           &http.Client{},
 	}
 }
 
@@ -97,4 +102,88 @@ func voiceUploadFilename(contentType string) string {
 // UploadFromBytes is a multipart-friendly helper for handler uploads.
 func (s *VoiceService) UploadFromBytes(ctx context.Context, userID uuid.UUID, audioData []byte, contentType string, audioURL *string) (*model.VoiceTranscription, error) {
 	return s.Upload(ctx, userID, bytes.NewReader(audioData), contentType, audioURL)
+}
+
+func (s *VoiceService) BuildTransactionFromBytes(ctx context.Context, userID uuid.UUID, audioData []byte, contentType string, audioURL *string, autoCreate bool, authorization string) (*model.VoiceTransactionResponse, error) {
+	voice, err := s.UploadFromBytes(ctx, userID, audioData, contentType, audioURL)
+	if err != nil {
+		return nil, err
+	}
+	if voice.Status == model.VoiceFailed {
+		return &model.VoiceTransactionResponse{Voice: voice}, nil
+	}
+
+	enriched, err := s.enrichText(ctx, voice.TranscribedText)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &model.VoiceTransactionResponse{
+		Voice:    voice,
+		Enriched: enriched,
+	}
+	if !autoCreate || enriched.Transaction.Amount == nil {
+		return response, nil
+	}
+
+	txDate := time.Now().UTC()
+	if enriched.Transaction.Date != nil && *enriched.Transaction.Date != "" {
+		if parsed, err := time.Parse("2006-01-02", *enriched.Transaction.Date); err == nil {
+			txDate = parsed.UTC()
+		}
+	}
+	txType := model.TypeExpense
+	switch strings.ToLower(string(enriched.Transaction.OperationType)) {
+	case "income":
+		txType = model.TypeIncome
+	case "transfer":
+		txType = model.TypeTransfer
+	}
+	description := enriched.Transaction.Description
+	input := model.CreateTransactionInput{
+		Amount:      *enriched.Transaction.Amount,
+		Currency:    enriched.Transaction.Currency,
+		Type:        txType,
+		Description: &description,
+	}
+	if input.Currency == "" {
+		input.Currency = "RUB"
+	}
+	tx, err := s.transRepo.Create(ctx, userID, input, txDate)
+	if err != nil {
+		return nil, err
+	}
+	_ = s.repo.UpdateTransactionID(ctx, voice.ID, tx.ID)
+	if s.processingClient != nil {
+		_ = s.processingClient.ProcessTransaction(ctx, tx.ID, authorization)
+	}
+	response.Transaction = tx
+	return response, nil
+}
+
+func (s *VoiceService) enrichText(ctx context.Context, text string) (*model.MLEnrichResponse, error) {
+	body, err := json.Marshal(map[string]string{"text": text})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.mlBaseURL+"/api/v1/enrich", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		payload, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("ML enrich failed: status %d: %s", resp.StatusCode, strings.TrimSpace(string(payload)))
+	}
+	var decoded model.MLEnrichResponse
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		return nil, err
+	}
+	return &decoded, nil
 }

@@ -158,7 +158,7 @@ public class BudgetController {
         return ResponseEntity.ok(
             ApiResponse.success(
                 "Current budgets retrieved",
-                budgetService.getActiveBudgets(userId)
+                budgetService.getCurrentBudgetViews(userId)
             )
         );
     }

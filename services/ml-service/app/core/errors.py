@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette import status
+from typing import Optional
 
 
 class AppError(Exception):
@@ -30,10 +31,13 @@ class AudioTooLargeError(AppError):
 
 
 class ModelUnavailableError(AppError):
-    def __init__(self, model_name: str) -> None:
+    def __init__(self, model_name: str, detail: Optional[str] = None) -> None:
+        message = f"{model_name} model is unavailable in current configuration."
+        if detail:
+            message = f"{message} {detail}"
         super().__init__(
             code="model_unavailable",
-            message=f"{model_name} model is unavailable in current configuration.",
+            message=message,
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 

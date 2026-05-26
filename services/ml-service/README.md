@@ -21,8 +21,9 @@ ENABLE_REAL_MODELS=false
 TEST_MODE=false
 ALLOW_DEMO_TRANSCRIPTION=false
 WHISPER_MODEL_PATH=/models/whisper-large-v3
-WHISPER_MODEL_NAME=large-v3
-WHISPER_DOWNLOAD_ROOT=/tmp/whisper-cache
+WHISPER_MODEL_ID=openai/whisper-large-v3
+WHISPER_DOWNLOAD_ROOT=/tmp/huggingface
+HF_HOME=/tmp/huggingface
 NER_MODEL_PATH=/models/rubert-tiny-ner
 CATEGORY_MODEL_PATH=/models/category-ensemble
 REDIS_URL=redis://redis:6379/0
@@ -231,6 +232,18 @@ pytest
 ```bash
 cd services/ml-service
 python examples/train_for_finapp.py
+```
+
+Для локального дообучения сначала поставьте training-зависимости:
+
+```bash
+python -m pip install -r requirements-training.txt
+```
+
+Быстрый вариант для проверки категоризации без тяжелого BERT fine-tuning:
+
+```bash
+python examples/train_for_finapp.py --skip-bert
 ```
 
 После обучения артефакты будут сохранены в `ml_models/`.

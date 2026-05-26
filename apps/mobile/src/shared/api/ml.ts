@@ -15,6 +15,11 @@ type CollectionVoiceResponse = {
   confidence?: number | null;
 };
 
+type CollectionVoiceTransactionResponse = {
+  voice?: CollectionVoiceResponse;
+  enriched?: EnrichedVoiceTransaction;
+};
+
 const DEMO_TRANSCRIPTION_TEXT = "потратил 450 рублей на продукты в пятерочке вчера";
 
 export type EnrichedVoiceTransaction = {
@@ -71,6 +76,30 @@ export async function transcribeAudioFile(file: { uri: string; name: string; mim
   });
   assertNotDemoTranscription(direct.text);
   return direct;
+}
+
+export async function recognizeVoiceTransaction(file: { uri: string; name: string; mimeType?: string | null }): Promise<{
+  text: string;
+  enriched?: EnrichedVoiceTransaction;
+}> {
+  const formData = new FormData();
+  formData.append("file", {
+    uri: file.uri,
+    name: file.name,
+    type: file.mimeType || "audio/m4a",
+  } as any);
+  formData.append("auto_create", "false");
+
+  const response = await requestJson<CollectionVoiceTransactionResponse>({
+    baseUrl: apiConfig.collectionBaseUrl,
+    path: "/api/v1/voice/transaction",
+    method: "POST",
+    body: formData,
+  });
+
+  const text = response.voice?.transcribed_text || response.enriched?.transaction.description || "";
+  assertNotDemoTranscription(text);
+  return { text, enriched: response.enriched };
 }
 
 export async function uploadVoiceFile(file: { uri: string; name: string; mimeType?: string | null }): Promise<CollectionVoiceResponse> {

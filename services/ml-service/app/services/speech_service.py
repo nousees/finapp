@@ -14,8 +14,8 @@ class SpeechService:
         self.settings = settings
         self.model: WhisperModel = load_whisper_model(
             enable_real_models=settings.enable_real_models,
+            model_id=settings.whisper_model_id,
             model_path=settings.whisper_model_path,
-            model_name=settings.whisper_model_name,
             download_root=settings.whisper_download_root,
         )
 
@@ -31,7 +31,7 @@ class SpeechService:
             return VoiceTranscriptionResponse(**demo_transcription())
         if not self.model.real:
             detail = self.model.load_error or "Whisper real model is disabled"
-            raise ModelUnavailableError(f"Whisper: {detail}")
+            raise ModelUnavailableError("Whisper", detail)
         suffix = Path(file.filename or "").suffix.lower() or suffix_from_content_type(file.content_type)
         result = self.model.transcribe(content, suffix=suffix)
         return VoiceTranscriptionResponse(**result)

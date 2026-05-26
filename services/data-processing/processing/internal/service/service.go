@@ -12,12 +12,14 @@ import (
 type Service struct {
 	repo       *repository.Repository
 	classifier Classifier
+	mlClient   *MLClient
 }
 
-func New(repo *repository.Repository) *Service {
+func New(repo *repository.Repository, mlClient *MLClient) *Service {
 	return &Service{
 		repo:       repo,
 		classifier: NewRuleBasedClassifier(),
+		mlClient:   mlClient,
 	}
 }
 
@@ -27,7 +29,10 @@ func (s *Service) ProcessOne(ctx context.Context, userID, transactionID uuid.UUI
 		return nil, err
 	}
 
-	categoryName, confidence, recurring := s.classifier.Classify(tx)
+	categoryName, confidence, recurring, err := s.categorize(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
 	category, err := s.repo.EnsureCategory(ctx, userID, categoryName, tx.Type)
 	if err != nil {
 		return nil, err
@@ -47,6 +52,17 @@ func (s *Service) ProcessOne(ctx context.Context, userID, transactionID uuid.UUI
 		Category:    category.Name,
 		Confidence:  confidence,
 	}, nil
+}
+
+func (s *Service) categorize(ctx context.Context, tx *model.Transaction) (string, float64, bool, error) {
+	if s.mlClient != nil {
+		categoryName, confidence, recurring, err := s.mlClient.Categorize(ctx, tx)
+		if err == nil {
+			return categoryName, confidence, recurring, nil
+		}
+	}
+	categoryName, confidence, recurring := s.classifier.Classify(tx)
+	return categoryName, confidence, recurring, nil
 }
 
 func (s *Service) ProcessBatch(ctx context.Context, userID uuid.UUID, ids []uuid.UUID, limit int) ([]*model.ProcessResponse, error) {

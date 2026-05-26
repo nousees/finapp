@@ -38,9 +38,10 @@ func main() {
 	voiceRepo := repository.NewVoiceRepo(pool)
 
 	// Services
-	transSvc := service.NewTransactionService(transRepo)
-	importSvc := service.NewImportService(importRepo, transRepo)
-	voiceSvc := service.NewVoiceService(voiceRepo, cfg.ML.BaseURL)
+	processingClient := service.NewProcessingClient(cfg.Processing.BaseURL)
+	transSvc := service.NewTransactionService(transRepo, processingClient)
+	importSvc := service.NewImportService(importRepo, transRepo, processingClient)
+	voiceSvc := service.NewVoiceService(voiceRepo, transRepo, processingClient, cfg.ML.BaseURL)
 
 	// Handlers
 	transHandler := handler.NewTransactionHandler(transSvc)
@@ -58,6 +59,7 @@ func main() {
 		api.PATCH("/transactions/:id", transHandler.Update)
 		api.POST("/import", importHandler.Import)
 		api.POST("/voice/upload", voiceHandler.Upload)
+		api.POST("/voice/transaction", voiceHandler.Transaction)
 	}
 
 	router.GET("/health", func(c *gin.Context) {

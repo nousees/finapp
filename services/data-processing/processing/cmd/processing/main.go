@@ -34,7 +34,8 @@ func main() {
 	}
 
 	repo := repository.New(pool)
-	svc := service.New(repo)
+	mlClient := service.NewMLClient(cfg.ML.BaseURL)
+	svc := service.New(repo, mlClient)
 	handler := api.NewHandler(svc)
 
 	router := gin.Default()

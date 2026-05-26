@@ -152,8 +152,11 @@ export type Budget = {
   id: string;
   userId: string;
   categoryId?: string | null;
+  categoryName?: string | null;
   amountLimit: number;
   spentAmount: number;
+  remainingAmount?: number;
+  progressPercent?: number;
   period: string;
   periodStart: string;
   periodEnd: string;

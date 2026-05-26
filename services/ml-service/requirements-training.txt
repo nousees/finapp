@@ -1,0 +1,16 @@
+# Local training dependencies.
+#
+# Do not include requirements.txt here: the Docker/runtime service is pinned to
+# Python 3.11 packages like numpy==2.2.1, while local diploma training often
+# runs on Python 3.9/3.10.
+joblib==1.4.2
+numpy>=1.24,<2.1
+pandas>=2.0,<2.3
+scikit-learn>=1.3,<1.6
+catboost==1.2.7
+
+# Optional for BERT fine-tuning. CatBoost training works without torch.
+transformers==4.48.0
+accelerate==1.2.1
+datasets==3.2.0
+safetensors==0.4.5

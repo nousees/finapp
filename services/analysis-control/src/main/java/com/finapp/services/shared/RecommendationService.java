@@ -24,6 +24,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class RecommendationService {
 
+    private static final String SUBSCRIPTION_RECOMMENDATION_TYPE = "subscription";
+
     private final RecommendationRepository recommendationRepository;
     private final ObjectMapper objectMapper;
     private final FinancialAnalysisFacade financialAnalysisFacade;
@@ -97,7 +99,9 @@ public class RecommendationService {
         log.info("Generating financial insight recommendations for user: {}", userId);
 
         List<RecommendationCandidate> candidates = financialAnalysisFacade.analyzeCurrentMonth(userId).recommendations();
-        recommendationRepository.findByUserIdAndIsAppliedFalse(userId).forEach(recommendationRepository::delete);
+        recommendationRepository.findByUserIdAndIsAppliedFalse(userId).stream()
+            .filter(recommendation -> !SUBSCRIPTION_RECOMMENDATION_TYPE.equalsIgnoreCase(recommendation.getType()))
+            .forEach(recommendationRepository::delete);
         if (candidates.isEmpty()) {
             return List.of();
         }

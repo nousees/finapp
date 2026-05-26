@@ -15,16 +15,16 @@ const (
 )
 
 type VoiceTranscription struct {
-	ID             uuid.UUID    `json:"id"`
-	UserID         uuid.UUID    `json:"user_id"`
-	AudioFileURL   *string      `json:"audio_file_url,omitempty"`
+	ID              uuid.UUID   `json:"id"`
+	UserID          uuid.UUID   `json:"user_id"`
+	AudioFileURL    *string     `json:"audio_file_url,omitempty"`
 	TranscribedText string      `json:"transcribed_text"`
-	Entities       []byte      `json:"entities,omitempty"` // JSONB: сумма, категория, место
-	MLCategoryID   *uuid.UUID   `json:"ml_category_id,omitempty"`
-	Confidence     *float64     `json:"confidence,omitempty"`
-	Status         VoiceStatus  `json:"status"`
-	TransactionID  *uuid.UUID   `json:"transaction_id,omitempty"`
-	CreatedAt      time.Time   `json:"created_at"`
+	Entities        []byte      `json:"entities,omitempty"` // JSONB: сумма, категория, место
+	MLCategoryID    *uuid.UUID  `json:"ml_category_id,omitempty"`
+	Confidence      *float64    `json:"confidence,omitempty"`
+	Status          VoiceStatus `json:"status"`
+	TransactionID   *uuid.UUID  `json:"transaction_id,omitempty"`
+	CreatedAt       time.Time   `json:"created_at"`
 }
 
 // MLTranscribeResponse — ответ ML-сервиса POST /transcribe
@@ -33,4 +33,33 @@ type MLTranscribeResponse struct {
 	Language   string                 `json:"language,omitempty"`
 	Confidence float64                `json:"confidence,omitempty"`
 	Entities   map[string]interface{} `json:"entities,omitempty"`
+}
+
+type MLEnrichResponse struct {
+	Transaction MLEnrichedTransaction `json:"transaction"`
+	Confidence  MLConfidenceBreakdown `json:"confidence"`
+	NeedsReview bool                  `json:"needs_review"`
+}
+
+type MLEnrichedTransaction struct {
+	Amount        *float64 `json:"amount"`
+	Currency      string   `json:"currency"`
+	Merchant      *string  `json:"merchant"`
+	Date          *string  `json:"date"`
+	OperationType string   `json:"operation_type"`
+	Description   string   `json:"description"`
+	CategoryCode  string   `json:"category_code"`
+	CategoryName  string   `json:"category_name"`
+}
+
+type MLConfidenceBreakdown struct {
+	NER            float64 `json:"ner"`
+	Categorization float64 `json:"categorization"`
+	Overall        float64 `json:"overall"`
+}
+
+type VoiceTransactionResponse struct {
+	Voice       *VoiceTranscription `json:"voice"`
+	Enriched    *MLEnrichResponse   `json:"enriched,omitempty"`
+	Transaction *Transaction        `json:"transaction,omitempty"`
 }

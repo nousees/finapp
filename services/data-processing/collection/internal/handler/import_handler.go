@@ -50,11 +50,12 @@ func (h *ImportHandler) Import(c *gin.Context) {
 	defer f.Close()
 	var processed int
 	var errs []map[string]interface{}
+	authorization := c.GetHeader("Authorization")
 	switch fileType {
 	case model.ImportExcel:
-		processed, errs, err = h.svc.ProcessExcel(c.Request.Context(), userID, imp.ID, f)
+		processed, errs, err = h.svc.ProcessExcel(c.Request.Context(), userID, imp.ID, f, authorization)
 	default:
-		processed, errs, err = h.svc.ProcessCSV(c.Request.Context(), userID, imp.ID, f)
+		processed, errs, err = h.svc.ProcessCSV(c.Request.Context(), userID, imp.ID, f, authorization)
 	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error(), "import_id": imp.ID})

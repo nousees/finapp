@@ -10,6 +10,21 @@ func strptr(value string) *string {
 	return &value
 }
 
+func TestOperationTypeMapping(t *testing.T) {
+	cases := map[string]string{
+		"EXPENSE":  "expense",
+		"INCOME":   "income",
+		"TRANSFER": "transfer",
+		"":         "unknown",
+	}
+
+	for input, expected := range cases {
+		if actual := operationType(input); actual != expected {
+			t.Fatalf("expected %s for %s, got %s", expected, input, actual)
+		}
+	}
+}
+
 func TestCategorizeExpense(t *testing.T) {
 	classifier := NewRuleBasedClassifier()
 	tx := &model.Transaction{

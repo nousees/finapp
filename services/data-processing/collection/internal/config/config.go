@@ -6,10 +6,11 @@ import (
 )
 
 type Config struct {
-	Server   Server
-	Database Database
-	ML       ML
-	JWT      JWT
+	Server     Server
+	Database   Database
+	ML         ML
+	Processing Processing
+	JWT        JWT
 }
 
 type Server struct {
@@ -21,6 +22,10 @@ type Database struct {
 }
 
 type ML struct {
+	BaseURL string
+}
+
+type Processing struct {
 	BaseURL string
 }
 
@@ -38,6 +43,9 @@ func Load() *Config {
 		},
 		ML: ML{
 			BaseURL: getEnv("ML_SERVICE_URL", "http://localhost:8000"),
+		},
+		Processing: Processing{
+			BaseURL: getEnv("PROCESSING_SERVICE_URL", "http://localhost:8081"),
 		},
 		JWT: JWT{
 			Secret: getEnv("JWT_SECRET", "finapp-collection-secret-change-in-prod"),

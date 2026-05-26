@@ -6,6 +6,7 @@ type Config struct {
 	Server   Server
 	Database Database
 	JWT      JWT
+	ML       ML
 }
 
 type Server struct {
@@ -20,6 +21,10 @@ type JWT struct {
 	Secret string
 }
 
+type ML struct {
+	BaseURL string
+}
+
 func Load() *Config {
 	return &Config{
 		Server: Server{
@@ -30,6 +35,9 @@ func Load() *Config {
 		},
 		JWT: JWT{
 			Secret: getEnv("JWT_SECRET", "finapp-processing-secret-change-in-prod"),
+		},
+		ML: ML{
+			BaseURL: getEnv("ML_SERVICE_URL", "http://localhost:8000"),
 		},
 	}
 }

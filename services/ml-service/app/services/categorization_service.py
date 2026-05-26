@@ -73,6 +73,13 @@ DEFAULT_ALTERNATIVES = [
     CategoryAlternative(category_code="restaurants", category_name="Кафе и рестораны", confidence=0.1),
 ]
 
+CODE_TO_NAME = {code: name for code, name, _, _ in CATEGORY_RULES}
+CODE_TO_NAME.update({
+    "other": "Прочее",
+    "savings": "Накопления",
+    "investments": "Инвестиции",
+})
+
 
 class CategorizationService:
     def __init__(self, settings: Settings) -> None:
@@ -121,17 +128,18 @@ class CategorizationService:
         if not prediction or not prediction.get("category") or float(prediction.get("confidence", 0) or 0) <= 0:
             return None
 
-        category_name = str(prediction["category"])
-        category_code = self._category_code(category_name)
+        raw_category = str(prediction["category"])
+        category_code = self._category_code(raw_category)
+        category_name = self._category_name(category_code, raw_category)
         probabilities = prediction.get("probabilities") or {}
         alternatives = [
             CategoryAlternative(
                 category_code=self._category_code(str(name)),
-                category_name=str(name),
+                category_name=self._category_name(self._category_code(str(name)), str(name)),
                 confidence=float(confidence),
             )
             for name, confidence in sorted(probabilities.items(), key=lambda item: float(item[1]), reverse=True)
-            if str(name) != category_name
+            if str(name) != raw_category
         ][:2]
 
         return CategorizeResponse(
@@ -145,6 +153,9 @@ class CategorizationService:
     def _category_code(self, category_name: str) -> str:
         normalized = normalize_text(category_name).lower()
         return NAME_TO_CODE.get(normalized, normalized.replace(" ", "_") or "other")
+
+    def _category_name(self, category_code: str, fallback: str) -> str:
+        return CODE_TO_NAME.get(category_code, fallback)
 
     def categorize_values(
         self,

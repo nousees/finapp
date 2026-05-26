@@ -94,6 +94,7 @@ services:
       DATABASE_DSN: postgres://finapp:finapp@postgres:5432/finapp?sslmode=disable
       JWT_SECRET: finapp-dev-secret
       ML_SERVICE_URL: http://ml-service:8000
+      PROCESSING_SERVICE_URL: http://processing:8081
     ports:
       - "8086:8080"
     healthcheck:
@@ -106,6 +107,8 @@ services:
         condition: service_healthy
       auth:
         condition: service_healthy
+      processing:
+        condition: service_healthy
 
   processing:
     build:
@@ -116,6 +119,7 @@ services:
       PORT: "8081"
       DATABASE_DSN: postgres://finapp:finapp@postgres:5432/finapp?sslmode=disable
       JWT_SECRET: finapp-dev-secret
+      ML_SERVICE_URL: http://ml-service:8000
     ports:
       - "8087:8081"
     healthcheck:
@@ -127,6 +131,8 @@ services:
       postgres:
         condition: service_healthy
       auth:
+        condition: service_healthy
+      ml-service:
         condition: service_healthy
 
   subscription-detector:
@@ -194,8 +200,9 @@ services:
       TEST_MODE: "false"
       ALLOW_DEMO_TRANSCRIPTION: "false"
       WHISPER_MODEL_PATH: ${WHISPER_MODEL_PATH:-/app/ml_models/whisper-large-v3}
-      WHISPER_MODEL_NAME: ${WHISPER_MODEL_NAME:-large-v3}
-      WHISPER_DOWNLOAD_ROOT: ${WHISPER_DOWNLOAD_ROOT:-/tmp/whisper-cache}
+      WHISPER_MODEL_ID: ${WHISPER_MODEL_ID:-openai/whisper-large-v3}
+      WHISPER_DOWNLOAD_ROOT: ${WHISPER_DOWNLOAD_ROOT:-/tmp/huggingface}
+      HF_HOME: ${HF_HOME:-/tmp/huggingface}
       NER_MODEL_PATH: /app/ml_models/rubert_tiny_ner_finapp
       CATEGORY_MODEL_PATH: /app/ml_models
       DATABASE_URL: postgresql://finapp:finapp@postgres:5432/finapp
@@ -204,13 +211,13 @@ services:
       - "8000:8000"
     volumes:
       - ./services/ml-service/ml_models:/app/ml_models:ro
-      - finapp_whisper_cache:/tmp/whisper-cache
+      - finapp_whisper_cache:/tmp/huggingface
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
       interval: 15s
-      timeout: 10s
+      timeout: 15s
       retries: 20
-      start_period: 180s
+      start_period: 600s
     depends_on:
       postgres:
         condition: service_healthy

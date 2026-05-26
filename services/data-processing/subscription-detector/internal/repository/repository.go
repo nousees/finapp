@@ -29,6 +29,11 @@ func (r *Repository) EnsureCompatibility(ctx context.Context) error {
 	`); err != nil {
 		return err
 	}
+	if _, err := r.pool.Exec(ctx, `
+		ALTER TABLE subscriptions ALTER COLUMN usage_index TYPE DECIMAL(5,2)
+	`); err != nil {
+		return err
+	}
 	return nil
 }
 

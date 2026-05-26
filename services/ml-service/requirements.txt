@@ -12,6 +12,7 @@ joblib==1.4.2
 numpy==2.2.1
 pandas==2.2.3
 scikit-learn==1.6.0
+catboost==1.2.7
 
 # Heavy speech/NER dependencies are optional for local Docker builds.
 # See requirements-real.txt and Dockerfile ARG INSTALL_REAL_MODEL_DEPS=true.

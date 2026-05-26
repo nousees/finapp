@@ -125,18 +125,22 @@ def train_catboost_categorizer(df, model_path: str):
     from sklearn.model_selection import train_test_split
 
     feature_cols = ["amount", "description", "merchant"]
+    df = df.copy()
+    df["description"] = df["description"].fillna("").astype(str).str.lower()
+    df["merchant"] = df["merchant"].fillna("").astype(str).str.lower()
+
     X_train, X_valid, y_train, y_valid = train_test_split(
         df[feature_cols], df["category"], test_size=0.2, random_state=42, stratify=df["category"]
     )
     model = CatBoostClassifier(
         depth=6,
         learning_rate=0.08,
-        iterations=500,
+        iterations=300,
         eval_metric="Accuracy",
-        cat_features=[1, 2],
+        allow_writing_files=False,
         verbose=100,
     )
-    model.fit(X_train, y_train, eval_set=(X_valid, y_valid), use_best_model=True)
+    model.fit(X_train, y_train, eval_set=(X_valid, y_valid), text_features=[1, 2], use_best_model=True)
     model.save_model(model_path)
     return model
 

@@ -32,6 +32,7 @@ type Transaction struct {
 	IsRecurring         bool            `json:"is_recurring"`
 	CreatedAt           time.Time       `json:"created_at"`
 	UpdatedAt           time.Time       `json:"updated_at"`
+	RawHash             *string         `json:"raw_hash,omitempty"`
 }
 
 type CreateTransactionInput struct {
@@ -40,9 +41,10 @@ type CreateTransactionInput struct {
 	Type          TransactionType `json:"type" binding:"required,oneof=INCOME EXPENSE TRANSFER"`
 	CategoryID    *uuid.UUID      `json:"category_id"`
 	Description   *string         `json:"description"`
-	Date         *string         `json:"date"` // ISO8601 или DD.MM.YYYY
+	Date          *string         `json:"date"` // ISO8601 или DD.MM.YYYY
 	PaymentMethod *string         `json:"payment_method"`
 	BankAccountID *uuid.UUID      `json:"bank_account_id"`
+	RawHash       *string         `json:"raw_hash,omitempty"`
 }
 
 type CreateTransactionBatchInput struct {

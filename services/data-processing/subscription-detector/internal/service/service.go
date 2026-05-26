@@ -116,13 +116,11 @@ func groupTransactions(items []*model.Transaction) []groupedTransactions {
 			continue
 		}
 
-		amount := roundAmount(item.Amount)
-		key := name + "|" + item.Currency + "|" + strconv.FormatFloat(amount, 'f', 2, 64)
+		key := name + "|" + item.Currency
 		group, ok := buckets[key]
 		if !ok {
 			group = &groupedTransactions{
 				name:       name,
-				amount:     amount,
 				currency:   item.Currency,
 				categoryID: item.CategoryID,
 			}
@@ -136,6 +134,7 @@ func groupTransactions(items []*model.Transaction) []groupedTransactions {
 		sort.Slice(group.transactions, func(i, j int) bool {
 			return group.transactions[i].Date.Before(group.transactions[j].Date)
 		})
+		group.amount = averageAmount(group.transactions)
 		result = append(result, *group)
 	}
 
@@ -244,4 +243,15 @@ func roundAmount(value float64) float64 {
 		return value
 	}
 	return result
+}
+
+func averageAmount(items []*model.Transaction) float64 {
+	if len(items) == 0 {
+		return 0
+	}
+	total := 0.0
+	for _, item := range items {
+		total += item.Amount
+	}
+	return roundAmount(total / float64(len(items)))
 }

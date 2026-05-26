@@ -3,6 +3,7 @@ package com.finapp.services.budget;
 import com.finapp.models.budget.Budget;
 import com.finapp.repositories.budget.BudgetRepository;
 import com.finapp.services.dtos.BudgetDTO;
+import com.finapp.services.dtos.BudgetViewDTO;
 import com.finapp.services.exceptions.ValidationException;
 import com.finapp.services.exceptions.NotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,15 @@ public class BudgetService {
     public List<Budget> getActiveBudgets(UUID userId) {
         log.info("Getting active budgets for user: {}", userId);
         return budgetRepository.findByUserIdAndIsActiveTrue(userId);
+    }
+
+    public List<BudgetViewDTO> getCurrentBudgetViews(UUID userId) {
+        log.info("Getting current budget views for user: {}", userId);
+        return budgetRepository.findByUserIdAndIsActiveTrue(userId).stream()
+            .filter(budget -> !budget.getPeriodStart().isAfter(java.time.LocalDate.now())
+                && !budget.getPeriodEnd().isBefore(java.time.LocalDate.now()))
+            .map(this::toView)
+            .toList();
     }
 
     public Budget getBudget(UUID userId, UUID budgetId) {
@@ -116,9 +126,91 @@ public class BudgetService {
             return BigDecimal.ZERO;
         }
 
-        return budget.getSpentAmount()
+        return calculateSpentAmount(budget)
             .divide(budget.getAmountLimit(), 2, java.math.RoundingMode.HALF_UP)
             .multiply(BigDecimal.valueOf(100));
+    }
+
+    private BudgetViewDTO toView(Budget budget) {
+        BigDecimal limit = nullToZero(budget.getAmountLimit());
+        BigDecimal spent = calculateSpentAmount(budget);
+        BigDecimal remaining = limit.subtract(spent).max(BigDecimal.ZERO);
+        BigDecimal progress = limit.compareTo(BigDecimal.ZERO) == 0
+            ? BigDecimal.ZERO
+            : spent.multiply(BigDecimal.valueOf(100)).divide(limit, 2, java.math.RoundingMode.HALF_UP);
+
+        return new BudgetViewDTO(
+            budget.getId(),
+            budget.getUserId(),
+            budget.getCategoryId(),
+            resolveCategoryName(budget.getCategoryId()),
+            limit,
+            spent,
+            remaining,
+            progress,
+            budget.getPeriod(),
+            budget.getPeriodStart(),
+            budget.getPeriodEnd(),
+            budget.getCurrency(),
+            budget.getAlertThresholds(),
+            budget.getIsActive(),
+            budget.getCreatedAt(),
+            budget.getUpdatedAt()
+        );
+    }
+
+    private BigDecimal calculateSpentAmount(Budget budget) {
+        BigDecimal value;
+        if (budget.getCategoryId() == null) {
+            value = jdbcTemplate.queryForObject(
+                """
+                SELECT COALESCE(SUM(amount), 0)
+                FROM transactions
+                WHERE user_id = ?
+                  AND UPPER(type) = 'EXPENSE'
+                  AND date >= ?
+                  AND date < ?
+                """,
+                BigDecimal.class,
+                budget.getUserId(),
+                budget.getPeriodStart().atStartOfDay(),
+                budget.getPeriodEnd().plusDays(1).atStartOfDay()
+            );
+        } else {
+            value = jdbcTemplate.queryForObject(
+                """
+                SELECT COALESCE(SUM(amount), 0)
+                FROM transactions
+                WHERE user_id = ?
+                  AND UPPER(type) = 'EXPENSE'
+                  AND COALESCE(category_id, ml_category_id) = ?
+                  AND date >= ?
+                  AND date < ?
+                """,
+                BigDecimal.class,
+                budget.getUserId(),
+                budget.getCategoryId(),
+                budget.getPeriodStart().atStartOfDay(),
+                budget.getPeriodEnd().plusDays(1).atStartOfDay()
+            );
+        }
+        return nullToZero(value);
+    }
+
+    private String resolveCategoryName(UUID categoryId) {
+        if (categoryId == null) {
+            return "Общий бюджет";
+        }
+        List<String> names = jdbcTemplate.queryForList(
+            "SELECT name FROM categories WHERE id = ? LIMIT 1",
+            String.class,
+            categoryId
+        );
+        return names.isEmpty() ? "Категория" : names.get(0);
+    }
+
+    private BigDecimal nullToZero(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 
     private void checkBudgetThresholds(Budget budget) {
