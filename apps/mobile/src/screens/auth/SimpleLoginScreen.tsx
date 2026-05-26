@@ -46,6 +46,7 @@ export const SimpleLoginScreen = ({ onLogin }) => {
   const [slideIndex, setSlideIndex] = useState(0);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [city, setCity] = useState("");
@@ -83,7 +84,7 @@ export const SimpleLoginScreen = ({ onLogin }) => {
   };
 
   const handleSubmit = async () => {
-    if (!email || !password || (!isLogin && !fullName)) {
+    if (!email || !password || (!isLogin && (!fullName || !confirmPassword))) {
       Alert.alert("Ошибка", "Заполните обязательные поля");
       return;
     }
@@ -93,6 +94,10 @@ export const SimpleLoginScreen = ({ onLogin }) => {
     }
     if (password.length < 8) {
       Alert.alert("Ошибка", "Пароль должен содержать минимум 8 символов");
+      return;
+    }
+    if (!isLogin && password !== confirmPassword) {
+      Alert.alert("Ошибка", "Пароли не совпадают");
       return;
     }
 
@@ -189,10 +194,10 @@ export const SimpleLoginScreen = ({ onLogin }) => {
               </View>
 
               <View style={styles.segment}>
-                <Pressable onPress={() => setIsLogin(true)} style={[styles.segmentItem, isLogin ? styles.segmentActive : null]}>
+                <Pressable onPress={() => { setIsLogin(true); setConfirmPassword(""); }} style={[styles.segmentItem, isLogin ? styles.segmentActive : null]}>
                   <Text style={[styles.segmentText, isLogin ? styles.segmentTextActive : null]}>Войти</Text>
                 </Pressable>
-                <Pressable onPress={() => setIsLogin(false)} style={[styles.segmentItem, !isLogin ? styles.segmentActive : null]}>
+                <Pressable onPress={() => { setIsLogin(false); setConfirmPassword(""); }} style={[styles.segmentItem, !isLogin ? styles.segmentActive : null]}>
                   <Text style={[styles.segmentText, !isLogin ? styles.segmentTextActive : null]}>Регистрация</Text>
                 </Pressable>
               </View>
@@ -206,6 +211,7 @@ export const SimpleLoginScreen = ({ onLogin }) => {
               ) : null}
               <AuthInput icon="mail" placeholder="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
               <AuthInput icon="lock" placeholder="Пароль минимум 8 символов" value={password} onChangeText={setPassword} secureTextEntry />
+              {!isLogin ? <AuthInput icon="lock" placeholder="Повторите пароль" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry /> : null}
 
               <Pressable onPress={handleSubmit} disabled={isLoading}>
                 <LinearGradient colors={["#6B46C1", "#8B5CF6", "#7ED9B6"]} style={[styles.submit, isLoading ? { opacity: 0.72 } : null]}>
