@@ -7,9 +7,10 @@ import (
 
 type (
 	Config struct {
-		DB     Postgres
-		Server Server
-		JWT    JWT
+		DB       Postgres
+		Server   Server
+		JWT      JWT
+		Supabase Supabase
 	}
 
 	Server struct {
@@ -32,6 +33,12 @@ type (
 		RefreshTTL time.Duration
 		Issuer     string
 	}
+
+	Supabase struct {
+		URL     string
+		AnonKey string
+		Enabled bool
+	}
 )
 
 func LoadConfig() Config {
@@ -53,6 +60,11 @@ func LoadConfig() Config {
 			AccessTTL:  durationEnv("JWT_ACCESS_TTL", 15*time.Minute),
 			RefreshTTL: durationEnv("JWT_REFRESH_TTL", 30*24*time.Hour),
 			Issuer:     env("JWT_ISSUER", "finapp-auth"),
+		},
+		Supabase: Supabase{
+			URL:     env("SUPABASE_URL", ""),
+			AnonKey: env("SUPABASE_ANON_KEY", ""),
+			Enabled: env("SUPABASE_ENABLED", "false") == "true",
 		},
 	}
 }
