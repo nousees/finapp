@@ -53,11 +53,17 @@ export function getCategoryByCode(code?: string | null): FinAppCategory | undefi
 
   const aliases: Record<string, string> = {
     food: "groceries",
+    groceries_food: "groceries",
+    grocery: "groceries",
     household: "housing",
     home: "housing",
     medicine: "health",
+    medical: "health",
     subscriptions_services: "subscriptions",
     utilities_bills: "utilities",
+    fun: "entertainment",
+    leisure: "entertainment",
+    gifts_and_donations: "gifts",
   };
 
   const resolvedCode = aliases[code] || code;
@@ -79,4 +85,18 @@ export function getCategoryByName(name?: string | null): FinAppCategory | undefi
 
     return (category.aliases || []).some((alias) => normalized.includes(alias.toLowerCase()));
   });
+}
+
+
+export function resolveExpenseCategory(input?: { id?: string | null; code?: string | null; name?: string | null }): FinAppCategory {
+  const byId = getCategoryById(input?.id);
+  if (byId && byId.type === "EXPENSE") return byId;
+
+  const byCode = getCategoryByCode(input?.code);
+  if (byCode && byCode.type === "EXPENSE") return byCode;
+
+  const byName = getCategoryByName(input?.name);
+  if (byName && byName.type === "EXPENSE") return byName;
+
+  return getCategoryByCode("other") as FinAppCategory;
 }

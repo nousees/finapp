@@ -47,8 +47,15 @@ func (s *Service) Analyze(ctx context.Context, userID uuid.UUID) ([]*model.Subsc
 	recurringIDs := make([]uuid.UUID, 0)
 
 	for _, group := range groups {
+		if len(group.transactions) < 2 {
+			continue
+		}
+
 		recurrence, ok := detectRecurrence(group.transactions)
 		if !ok && isLikelySubscription(group) {
+			if !hasStableAmount(group.transactions) {
+				continue
+			}
 			recurrence = "MONTHLY"
 			ok = true
 		}
@@ -145,6 +152,9 @@ func detectRecurrence(items []*model.Transaction) (string, bool) {
 	if len(items) < 2 {
 		return "", false
 	}
+	if !hasStableAmount(items) {
+		return "", false
+	}
 
 	totalDays := 0.0
 	count := 0.0
@@ -164,6 +174,30 @@ func detectRecurrence(items []*model.Transaction) (string, bool) {
 	default:
 		return "", false
 	}
+}
+
+func hasStableAmount(items []*model.Transaction) bool {
+	if len(items) < 2 {
+		return false
+	}
+	minAmount := items[0].Amount
+	maxAmount := items[0].Amount
+	total := 0.0
+	for _, item := range items {
+		if item.Amount < minAmount {
+			minAmount = item.Amount
+		}
+		if item.Amount > maxAmount {
+			maxAmount = item.Amount
+		}
+		total += item.Amount
+	}
+	avg := total / float64(len(items))
+	if avg <= 0 {
+		return false
+	}
+	variance := (maxAmount - minAmount) / avg
+	return variance <= 0.25
 }
 
 func estimateUsageIndex(name string) float64 {
@@ -214,17 +248,41 @@ func normalizeName(values ...*string) string {
 	replacer := strings.NewReplacer(
 		"оплата", "",
 		"платеж", "",
+		"покупка", "",
+		"перевод", "",
 		"подписка", "",
 		"подписки", "",
 		"premium", "",
 		"subscription", "",
+		"card", "",
+		"visa", "",
+		"mastercard", "",
+		"mir", "",
+		"rur", "",
+		"rub", "",
 		"  ", " ",
 	)
 	normalized := strings.TrimSpace(replacer.Replace(raw))
+	normalized = stripDigitsAndPunctuation(normalized)
 	if normalized == "" {
 		return raw
 	}
 	return normalized
+}
+
+func stripDigitsAndPunctuation(value string) string {
+	parts := strings.FieldsFunc(value, func(r rune) bool {
+		if r >= '0' && r <= '9' {
+			return true
+		}
+		switch r {
+		case ',', '.', ';', ':', '#', '/', '\\', '_', '-', '*', '(', ')':
+			return true
+		default:
+			return false
+		}
+	})
+	return strings.Join(parts, " ")
 }
 
 func containsAny(text string, needles ...string) bool {

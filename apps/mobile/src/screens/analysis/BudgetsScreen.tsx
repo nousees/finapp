@@ -7,7 +7,7 @@ import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, Text
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { createBudget, deleteBudget, getFinancialInsights, listBudgets, updateBudget } from "@shared/api/analysis";
 import { listTransactions } from "@shared/api/transactions";
-import { EXPENSE_CATEGORIES } from "@shared/constants/categories";
+import { EXPENSE_CATEGORIES, resolveExpenseCategory } from "@shared/constants/categories";
 import { useAppSettings } from "@shared/settings/AppSettingsContext";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
 
@@ -58,12 +58,25 @@ export function BudgetsScreen() {
     const insightMap = new Map((Array.isArray(insights?.budgets) ? insights.budgets : []).map((item) => [item.budgetId, item]));
     return budgets.map((item, index) => {
       const insight = insightMap.get(item.id);
-      const budgetCategoryId = item.categoryId || item.category_id;
-      const category = EXPENSE_CATEGORIES.find((cat) => cat.id === budgetCategoryId) || EXPENSE_CATEGORIES[index % EXPENSE_CATEGORIES.length];
+      const rawCategoryId = item.categoryId || item.category_id;
+      const category = resolveExpenseCategory({
+        id: rawCategoryId,
+        name: insight?.categoryName || item.categoryName || item.category_name,
+      }) || EXPENSE_CATEGORIES[index % EXPENSE_CATEGORIES.length];
+      const budgetCategoryId = category.id;
       const localSpent = sumBudgetTransactions(transactions, budgetCategoryId, item.periodStart, item.periodEnd);
       const spent = localSpent > 0 ? localSpent : Number(insight?.spentAmount ?? item.spentAmount ?? 0);
       const limit = Number(insight?.amountLimit ?? item.amountLimit ?? 0);
-      return { ...item, categoryId: budgetCategoryId, name: insight?.categoryName || category.name, icon: category.icon, color: category.color, spent, limit, progress: limit > 0 ? spent / limit : 0 };
+      return {
+        ...item,
+        categoryId: budgetCategoryId,
+        name: insight?.categoryName || category.name,
+        icon: category.icon,
+        color: category.color,
+        spent,
+        limit,
+        progress: limit > 0 ? spent / limit : 0,
+      };
     });
   }, [budgets, insights, transactions]);
 
@@ -78,7 +91,7 @@ export function BudgetsScreen() {
   };
 
   const openEdit = (item) => {
-    setForm({ id: item.id, categoryId: item.categoryId, amountLimit: String(Number(item.amountLimit || item.limit || 0)) });
+    setForm({ id: item.id, categoryId: resolveExpenseCategory({ id: item.categoryId, name: item.name }).id, amountLimit: String(Number(item.amountLimit || item.limit || 0)) });
     setShowForm(true);
   };
 

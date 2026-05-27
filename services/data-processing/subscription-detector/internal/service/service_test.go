@@ -52,3 +52,24 @@ func TestNormalizeName(t *testing.T) {
 		t.Fatalf("expected spotify, got %s", value)
 	}
 }
+
+func TestNormalizeNameStripsNoise(t *testing.T) {
+	value := normalizeName(stringPtr("VISA 1234 Оплата Yandex Plus 299.00 RUR"))
+	if value != "yandex plus" {
+		t.Fatalf("expected yandex plus, got %s", value)
+	}
+}
+
+func TestDetectRecurrenceRejectsUnstableAmount(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	items := []*model.Transaction{
+		{ID: uuid.New(), Amount: 300, Date: base},
+		{ID: uuid.New(), Amount: 980, Date: base.AddDate(0, 1, 0)},
+		{ID: uuid.New(), Amount: 310, Date: base.AddDate(0, 2, 0)},
+	}
+
+	_, ok := detectRecurrence(items)
+	if ok {
+		t.Fatalf("expected recurrence false for unstable amount series")
+	}
+}
