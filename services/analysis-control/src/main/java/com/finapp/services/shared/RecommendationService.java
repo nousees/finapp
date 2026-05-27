@@ -3,6 +3,8 @@ package com.finapp.services.shared;
 import com.finapp.analysis.dto.RecommendationCandidate;
 import com.finapp.analysis.model.FinancialAnalysisFacade;
 import com.finapp.models.shared.Recommendation;
+import com.finapp.models.shared.RecommendationEvent;
+import com.finapp.repositories.shared.RecommendationEventRepository;
 import com.finapp.repositories.shared.RecommendationRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,10 +14,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -25,18 +29,20 @@ import java.util.stream.Collectors;
 public class RecommendationService {
 
     private static final String SUBSCRIPTION_RECOMMENDATION_TYPE = "subscription";
+    private static final Set<String> ALLOWED_EVENT_TYPES = Set.of("SHOWN", "CLICKED", "APPLIED", "DISMISSED");
 
     private final RecommendationRepository recommendationRepository;
+    private final RecommendationEventRepository recommendationEventRepository;
     private final ObjectMapper objectMapper;
     private final FinancialAnalysisFacade financialAnalysisFacade;
     private final NotificationService notificationService;
 
     public List<Recommendation> getUserRecommendations(UUID userId) {
-        return recommendationRepository.findByUserIdAndIsAppliedFalseOrderByPriorityAscCreatedAtDesc(userId);
+        return rerank(recommendationRepository.findByUserIdAndIsAppliedFalse(userId));
     }
 
     public List<Recommendation> getUnappliedRecommendations(UUID userId) {
-        return recommendationRepository.findByUserIdAndIsAppliedFalseOrderByPriorityAscCreatedAtDesc(userId);
+        return rerank(recommendationRepository.findByUserIdAndIsAppliedFalse(userId));
     }
 
     public List<Recommendation> getRecommendationsByPriority(UUID userId, Integer priority) {
@@ -82,6 +88,7 @@ public class RecommendationService {
             recommendation.setIsApplied(true);
             recommendation.setAppliedAt(new Date().toInstant().atOffset(java.time.ZoneOffset.UTC));
             recommendationRepository.save(recommendation);
+            saveEvent(userId, recommendationId, "APPLIED");
             log.info("Recommendation {} marked as applied", recommendationId);
         }
     }
@@ -91,7 +98,17 @@ public class RecommendationService {
         Recommendation recommendation = recommendationRepository.findById(recommendationId)
             .filter(r -> r.getUserId().equals(userId))
             .orElseThrow(() -> new RuntimeException("Recommendation not found"));
+        saveEvent(userId, recommendationId, "DISMISSED");
         recommendationRepository.delete(recommendation);
+    }
+
+    @Transactional
+    public RecommendationEvent recordEvent(UUID userId, UUID recommendationId, String eventType) {
+        recommendationRepository.findById(recommendationId)
+            .filter(r -> r.getUserId().equals(userId))
+            .orElseThrow(() -> new RuntimeException("Recommendation not found"));
+
+        return saveEvent(userId, recommendationId, normalizeEventType(eventType));
     }
 
     @Transactional
@@ -180,6 +197,61 @@ public class RecommendationService {
         return recommendations.stream()
             .limit(limit)
             .collect(Collectors.toList());
+    }
+
+    private RecommendationEvent saveEvent(UUID userId, UUID recommendationId, String eventType) {
+        String normalizedType = normalizeEventType(eventType);
+        RecommendationEvent event = new RecommendationEvent();
+        event.setUserId(userId);
+        event.setRecommendationId(recommendationId);
+        event.setEventType(normalizedType);
+        return recommendationEventRepository.save(event);
+    }
+
+    private String normalizeEventType(String eventType) {
+        String normalizedType = eventType == null ? "" : eventType.trim().toUpperCase();
+        if (!ALLOWED_EVENT_TYPES.contains(normalizedType)) {
+            throw new RuntimeException("Unsupported recommendation event type: " + eventType);
+        }
+        return normalizedType;
+    }
+
+    private List<Recommendation> rerank(List<Recommendation> recommendations) {
+        if (recommendations.isEmpty()) {
+            return recommendations;
+        }
+
+        List<UUID> ids = recommendations.stream().map(Recommendation::getId).toList();
+        Map<UUID, List<RecommendationEvent>> eventsByRecommendation = recommendationEventRepository
+            .findByRecommendationIdIn(ids)
+            .stream()
+            .collect(Collectors.groupingBy(RecommendationEvent::getRecommendationId));
+
+        return recommendations.stream()
+            .sorted(Comparator
+                .comparingDouble((Recommendation recommendation) -> scoreRecommendation(recommendation, eventsByRecommendation.getOrDefault(recommendation.getId(), List.of())))
+                .reversed()
+                .thenComparing(Recommendation::getCreatedAt, Comparator.nullsLast(Comparator.reverseOrder())))
+            .toList();
+    }
+
+    private double scoreRecommendation(Recommendation recommendation, List<RecommendationEvent> events) {
+        double score = (recommendation.getPriority() != null ? recommendation.getPriority() : 1) * 10.0;
+        if (recommendation.getEstimatedSavings() != null) {
+            score += Math.min(5.0, recommendation.getEstimatedSavings().doubleValue() / 1000.0);
+        }
+
+        for (RecommendationEvent event : events) {
+            switch (event.getEventType()) {
+                case "CLICKED" -> score += 3.0;
+                case "APPLIED" -> score += 6.0;
+                case "DISMISSED" -> score -= 8.0;
+                case "SHOWN" -> score -= 0.2;
+                default -> {
+                }
+            }
+        }
+        return score;
     }
 
     @Transactional

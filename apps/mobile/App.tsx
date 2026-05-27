@@ -3,6 +3,7 @@ import React from "react";
 import "react-native-gesture-handler";
 import "react-native-reanimated";
 import { StyleSheet, Text, View } from "react-native";
+import { useFonts } from "expo-font";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import * as LocalAuthentication from "expo-local-authentication";
@@ -16,10 +17,23 @@ import { apiConfig } from "./src/shared/api/config";
 import { ErrorBoundary } from "./src/shared/ui/ErrorBoundary";
 
 const AUTH_KEYS = ["access_token", "refresh_token", "user_data"];
+const AUTH_REFRESH_TIMEOUT_MS = 7000;
+
+function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timeoutId));
+}
 
 function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = React.useState(false);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [fontsLoaded, fontsError] = useFonts({
+    Inter_400Regular: require("./assets/fonts/TTNormsPro-Regular.otf"),
+    Inter_500Medium: require("./assets/fonts/TTNormsPro-Medium.otf"),
+    Inter_600SemiBold: require("./assets/fonts/TTNormsPro-DemiBold.otf"),
+    Inter_700Bold: require("./assets/fonts/TTNormsPro-Bold.otf"),
+  });
 
   React.useEffect(() => {
     void checkAuthStatus();
@@ -31,14 +45,18 @@ function AppContent() {
 
   const refreshSession = async (refreshToken: string): Promise<boolean> => {
     try {
-      const response = await fetch(`${apiConfig.authBaseUrl}/api/v1/auth/refresh`, {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
+      const response = await fetchWithTimeout(
+        `${apiConfig.authBaseUrl}/api/v1/auth/refresh`,
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ refresh_token: refreshToken }),
         },
-        body: JSON.stringify({ refresh_token: refreshToken }),
-      });
+        AUTH_REFRESH_TIMEOUT_MS,
+      );
       const payload = await response.json().catch(() => null);
 
       if (!response.ok || !payload?.access_token) {
@@ -122,7 +140,7 @@ function AppContent() {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || (!fontsLoaded && !fontsError)) {
     return (
       <View style={styles.loadingContainer}>
         <Text>Загрузка...</Text>

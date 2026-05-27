@@ -1,0 +1,8 @@
+{"id":"tx-001","text":"Pyaterochka supermarket purchase","expected_category_code":"groceries","predicted_category_code":"groceries","used_fallback":false}
+{"id":"tx-002","text":"Taxi to office","expected_category_code":"transport","predicted_category_code":"transport","used_fallback":false}
+{"id":"tx-003","text":"Yandex Plus monthly payment","expected_category_code":"subscriptions","predicted_category_code":"subscriptions","used_fallback":false}
+{"id":"tx-004","text":"Freelance project payment","expected_category_code":"freelance","predicted_category_code":"freelance","used_fallback":false}
+{"id":"tx-005","text":"DNS headphones purchase","expected_category_code":"electronics","predicted_category_code":"electronics","used_fallback":false}
+{"id":"tx-006","text":"Cafe lunch","expected_category_code":"restaurants","predicted_category_code":"restaurants","used_fallback":false}
+{"id":"tx-007","text":"Apartment rent","expected_category_code":"housing","predicted_category_code":"housing","used_fallback":false}
+{"id":"tx-008","text":"Fitness club monthly pass","expected_category_code":"sports","predicted_category_code":"sports","used_fallback":false}

@@ -263,7 +263,7 @@ func normalizeName(values ...*string) string {
 		"  ", " ",
 	)
 	normalized := strings.TrimSpace(replacer.Replace(raw))
-	normalized = stripDigitsAndPunctuation(normalized)
+	normalized = strings.TrimSpace(stripDigitsAndPunctuation(normalized))
 	if normalized == "" {
 		return raw
 	}

@@ -17,6 +17,13 @@ const emptyForm = {
   amountLimit: "",
 };
 
+const BUDGET_FILTERS = [
+  { id: "all", label: "Все" },
+  { id: "safe", label: "В норме" },
+  { id: "warning", label: "Близко к лимиту" },
+  { id: "over", label: "Превышены" },
+];
+
 export function BudgetsScreen() {
   const { colors, gradients } = useAppTheme();
   const { settings, formatMoney } = useAppSettings();
@@ -27,6 +34,7 @@ export function BudgetsScreen() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
+  const [statusFilter, setStatusFilter] = useState("all");
   const [error, setError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
@@ -84,6 +92,14 @@ export function BudgetsScreen() {
   const totalSpent = cards.reduce((sum, item) => sum + item.spent, 0);
   const remaining = totalLimit - totalSpent;
   const totalProgress = totalLimit > 0 ? Math.round((totalSpent / totalLimit) * 100) : 0;
+  const visibleCards = useMemo(() => {
+    return cards.filter((item) => {
+      if (statusFilter === "safe") return item.progress < 0.85;
+      if (statusFilter === "warning") return item.progress >= 0.85 && item.progress < 1;
+      if (statusFilter === "over") return item.progress >= 1;
+      return true;
+    });
+  }, [cards, statusFilter]);
 
   const openCreate = () => {
     setForm(emptyForm);
@@ -172,6 +188,24 @@ export function BudgetsScreen() {
         <Text style={styles.summaryHint}>{totalProgress}% месячного бюджета использовано</Text>
       </LinearGradient>
 
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statusFilters}>
+        {BUDGET_FILTERS.map((item) => (
+          <Pressable
+            key={item.id}
+            onPress={() => setStatusFilter(item.id)}
+            style={[
+              styles.statusChip,
+              {
+                backgroundColor: statusFilter === item.id ? colors.primary : colors.surface,
+                borderColor: statusFilter === item.id ? colors.primary : colors.border,
+              },
+            ]}
+          >
+            <Text style={[styles.statusChipText, { color: statusFilter === item.id ? "#FFFFFF" : colors.textMuted }]}>{item.label}</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+
       {showForm ? (
         <View style={[styles.formCard, { backgroundColor: colors.surface }]}>
           <View style={styles.formHeader}>
@@ -210,7 +244,8 @@ export function BudgetsScreen() {
 
       <Text style={[styles.sectionTitle, { color: colors.text }]}>По категориям</Text>
       {cards.length === 0 && !loading ? <Text style={[styles.empty, { color: colors.textMuted }]}>Бюджетов пока нет. Создайте первый лимит по категории.</Text> : null}
-      {cards.map((item) => <BudgetCard key={item.id} item={item} onEdit={() => openEdit(item)} onDelete={() => removeBudget(item.id)} />)}
+      {cards.length > 0 && visibleCards.length === 0 ? <Text style={[styles.empty, { color: colors.textMuted }]}>По этому фильтру бюджетов нет.</Text> : null}
+      {visibleCards.map((item) => <BudgetCard key={item.id} item={item} onEdit={() => openEdit(item)} onDelete={() => removeBudget(item.id)} />)}
     </ScrollView>
   );
 }
@@ -290,6 +325,9 @@ const styles = StyleSheet.create({
   track: { height: 8, backgroundColor: "rgba(255,255,255,0.25)", borderRadius: 4, overflow: "hidden", marginBottom: 8 },
   fill: { height: "100%", borderRadius: 4 },
   summaryHint: { fontSize: 12, color: "rgba(255,255,255,0.75)", fontFamily: "Inter_400Regular" },
+  statusFilters: { gap: 8, paddingBottom: 16, paddingRight: 20 },
+  statusChip: { minHeight: 34, borderRadius: 17, borderWidth: 1, paddingHorizontal: 14, alignItems: "center", justifyContent: "center" },
+  statusChipText: { fontSize: 13, fontFamily: "Inter_700Bold" },
   formCard: { borderRadius: 18, padding: 16, gap: 12, marginBottom: 16 },
   formHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   categoryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },

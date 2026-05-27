@@ -1,0 +1,26 @@
+[
+  {
+    "type": "BUDGET_OPTIMIZATION",
+    "title": "Reduce transport overspend",
+    "description": "Transport expenses are above the monthly plan.",
+    "actionItems": ["Review taxi trips", "Set a weekly transport limit"],
+    "estimatedSavings": 1200,
+    "priority": 3
+  },
+  {
+    "type": "RECURRING_PAYMENT_REVIEW",
+    "title": "Review subscriptions",
+    "description": "Recurring payments reached 20 percent of expenses.",
+    "actionItems": ["Open subscriptions", "Dismiss unused services"],
+    "estimatedSavings": 850,
+    "priority": 2
+  },
+  {
+    "type": "GOAL_ACCELERATION",
+    "title": "Accelerate emergency fund",
+    "description": "Goal progress is behind the planned pace.",
+    "actionItems": ["Increase monthly contribution", "Use free cashflow"],
+    "estimatedSavings": 2000,
+    "priority": 2
+  }
+]

@@ -16,6 +16,12 @@ const goalColors = ["#10B981", "#8B5CF6", "#3B82F6", "#F97316", "#EC4899", "#F59
 const goalIcons = ["shield", "map-pin", "monitor", "trending-up", "star", "gift"];
 const emptyForm = { id: null, name: "", targetAmount: "", deadline: formatISODate(tomorrow()), icon: goalIcons[0], color: goalColors[0] };
 const emptyContribution = { goalId: null, goalName: "", amount: "" };
+const GOAL_FILTERS = [
+  { id: "all", label: "Все" },
+  { id: "active", label: "Активные" },
+  { id: "risk", label: "В риске" },
+  { id: "completed", label: "Выполнены" },
+];
 
 export function GoalsScreen() {
   const { colors, gradients } = useAppTheme();
@@ -29,6 +35,7 @@ export function GoalsScreen() {
   const [contributeVisible, setContributeVisible] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [contribution, setContribution] = useState(emptyContribution);
+  const [goalFilter, setGoalFilter] = useState("all");
   const [error, setError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
@@ -68,6 +75,7 @@ export function GoalsScreen() {
         current,
         deadline: goal.deadline,
         message: insight?.message,
+        riskLevel: insight?.riskLevel,
         percent: Number(insight?.progressPercent ?? (target > 0 ? (current / target) * 100 : 0)),
         color: goal.color || goalColors[index % goalColors.length],
         icon: goal.icon || goalIcons[index % goalIcons.length],
@@ -77,6 +85,13 @@ export function GoalsScreen() {
 
   const completed = cards.filter((item) => item.current >= item.target);
   const active = cards.filter((item) => item.current < item.target);
+  const risk = cards.filter((item) => item.current < item.target && (item.riskLevel === "HIGH" || item.riskLevel === "MEDIUM"));
+  const visibleGoals = useMemo(() => {
+    if (goalFilter === "active") return active;
+    if (goalFilter === "completed") return completed;
+    if (goalFilter === "risk") return risk;
+    return cards;
+  }, [active, cards, completed, goalFilter, risk]);
   const totalSaved = cards.reduce((sum, item) => sum + item.current, 0);
   const totalTarget = cards.reduce((sum, item) => sum + item.target, 0);
   const totalProgress = totalTarget > 0 ? Math.round((totalSaved / totalTarget) * 100) : 0;
@@ -241,13 +256,30 @@ export function GoalsScreen() {
           </View>
         </LinearGradient>
 
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.goalFilters}>
+          {GOAL_FILTERS.map((item) => (
+            <Pressable
+              key={item.id}
+              onPress={() => setGoalFilter(item.id)}
+              style={[
+                styles.goalFilterChip,
+                {
+                  backgroundColor: goalFilter === item.id ? colors.primary : colors.surface,
+                  borderColor: goalFilter === item.id ? colors.primary : colors.border,
+                },
+              ]}
+            >
+              <Text style={[styles.goalFilterText, { color: goalFilter === item.id ? "#FFFFFF" : colors.textMuted }]}>{item.label}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
         {error ? <Text style={[styles.error, { color: colors.danger }]}>{error}</Text> : null}
         {loading ? <ActivityIndicator color={colors.primary} size="large" style={styles.loader} /> : null}
 
-        {active.length > 0 ? <Text style={[styles.sectionTitle, { color: colors.text }]}>В процессе</Text> : null}
-        {active.map((goal) => <GoalCard key={goal.id} goal={goal} onEdit={() => openEdit(goal)} onDelete={() => removeGoal(goal.id)} onContribute={() => openContribute(goal)} />)}
-        {completed.length > 0 ? <Text style={[styles.sectionTitle, { color: colors.text }]}>Выполненные</Text> : null}
-        {completed.map((goal) => <GoalCard key={goal.id} goal={goal} onEdit={() => openEdit(goal)} onDelete={() => removeGoal(goal.id)} onContribute={() => openContribute(goal)} />)}
+        {visibleGoals.length > 0 ? <Text style={[styles.sectionTitle, { color: colors.text }]}>{GOAL_FILTERS.find((item) => item.id === goalFilter)?.label || "Цели"}</Text> : null}
+        {visibleGoals.map((goal) => <GoalCard key={goal.id} goal={goal} onEdit={() => openEdit(goal)} onDelete={() => removeGoal(goal.id)} onContribute={() => openContribute(goal)} />)}
+        {cards.length > 0 && visibleGoals.length === 0 ? <Text style={[styles.empty, { color: colors.textMuted }]}>По этому фильтру целей нет.</Text> : null}
         {cards.length === 0 && !loading ? <Text style={[styles.empty, { color: colors.textMuted }]}>Целей пока нет. Создайте первую финансовую цель.</Text> : null}
       </ScrollView>
 
@@ -412,6 +444,9 @@ const styles = StyleSheet.create({
   overviewStat: { alignItems: "center", gap: 2 },
   overviewStatValue: { fontSize: 20, color: "#FFFFFF", fontFamily: "Inter_700Bold" },
   overviewStatLabel: { fontSize: 11, color: "rgba(255,255,255,0.72)", fontFamily: "Inter_400Regular" },
+  goalFilters: { gap: 8, paddingBottom: 16, paddingRight: 20 },
+  goalFilterChip: { minHeight: 34, borderRadius: 17, borderWidth: 1, paddingHorizontal: 14, alignItems: "center", justifyContent: "center" },
+  goalFilterText: { fontSize: 13, fontFamily: "Inter_700Bold" },
   error: { fontSize: 13, fontFamily: "Inter_500Medium", marginBottom: 12 },
   loader: { marginVertical: 20 },
   sectionTitle: { fontSize: 18, fontFamily: "Inter_700Bold", marginBottom: 12 },

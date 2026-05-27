@@ -1,0 +1,37 @@
+[
+  {
+    "id": "sub-001",
+    "expected_is_subscription": true,
+    "transactions": [
+      { "merchant": "Yandex Plus", "amount": 299, "date": "2026-01-10" },
+      { "merchant": "Yandex Plus", "amount": 299, "date": "2026-02-10" },
+      { "merchant": "Yandex Plus", "amount": 299, "date": "2026-03-10" }
+    ]
+  },
+  {
+    "id": "sub-002",
+    "expected_is_subscription": true,
+    "transactions": [
+      { "merchant": "Ivi", "amount": 399, "date": "2026-01-05" },
+      { "merchant": "Ivi", "amount": 399, "date": "2026-02-05" },
+      { "merchant": "Ivi", "amount": 399, "date": "2026-03-05" }
+    ]
+  },
+  {
+    "id": "sub-003",
+    "expected_is_subscription": false,
+    "transactions": [
+      { "merchant": "Pyaterochka", "amount": 730, "date": "2026-03-01" },
+      { "merchant": "Pyaterochka", "amount": 1120, "date": "2026-03-08" },
+      { "merchant": "Pyaterochka", "amount": 560, "date": "2026-03-14" }
+    ]
+  },
+  {
+    "id": "sub-004",
+    "expected_is_subscription": false,
+    "transactions": [
+      { "merchant": "DNS", "amount": 4990, "date": "2026-01-20" },
+      { "merchant": "DNS", "amount": 19990, "date": "2026-02-14" }
+    ]
+  }
+]

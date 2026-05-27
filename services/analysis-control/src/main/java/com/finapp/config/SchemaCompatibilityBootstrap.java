@@ -18,6 +18,19 @@ public class SchemaCompatibilityBootstrap {
     @PostConstruct
     public void ensureCompatibilityColumns() {
         jdbcTemplate.execute("ALTER TABLE recommendations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP");
+        jdbcTemplate.execute(
+            """
+            CREATE TABLE IF NOT EXISTS recommendation_events (
+                id UUID PRIMARY KEY,
+                user_id UUID NOT NULL,
+                recommendation_id UUID NOT NULL,
+                event_type VARCHAR(32) NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        );
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_events_recommendation_id ON recommendation_events(recommendation_id)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_events_user_id ON recommendation_events(user_id)");
         log.info("Ensured compatibility columns are present");
     }
 }

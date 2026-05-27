@@ -148,6 +148,8 @@ export type Recommendation = {
   updatedAt?: string;
 };
 
+export type RecommendationEventType = "shown" | "clicked" | "applied" | "dismissed";
+
 export type Budget = {
   id: string;
   userId: string;
@@ -269,7 +271,11 @@ export async function listRecommendations(): Promise<Recommendation[]> {
     path: "/api/v1/recommendations/unapplied",
     method: "GET",
   });
-  return response.data;
+  const recommendations = response.data || [];
+  void Promise.allSettled(
+    recommendations.map((item) => recordRecommendationEvent(item.id, "shown"))
+  );
+  return recommendations;
 }
 
 export async function generateRecommendations(): Promise<Recommendation[]> {
@@ -286,6 +292,15 @@ export async function applyRecommendation(recommendationId: string): Promise<voi
     baseUrl: apiConfig.analysisBaseUrl,
     path: `/api/v1/recommendations/${recommendationId}/apply`,
     method: "POST",
+  });
+}
+
+export async function recordRecommendationEvent(recommendationId: string, eventType: RecommendationEventType): Promise<void> {
+  await requestJson<ApiEnvelope<unknown>>({
+    baseUrl: apiConfig.analysisBaseUrl,
+    path: `/api/v1/recommendations/${recommendationId}/events`,
+    method: "POST",
+    body: { eventType },
   });
 }
 

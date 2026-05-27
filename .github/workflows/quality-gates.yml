@@ -1,0 +1,151 @@
+name: FinApp quality gates
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      run_e2e:
+        description: "Run Docker-backed auth/voice E2E gates"
+        required: false
+        default: "false"
+
+jobs:
+  static-quality-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Category governance
+        run: python tests/quality_gates/check_category_registry.py
+
+      - name: ML dataset quality gate
+        run: python tests/quality_gates/eval_ml_quality.py
+
+      - name: Subscription precision/recall benchmark
+        run: python tests/quality_gates/eval_subscriptions.py
+
+      - name: Recommendation sanity checks
+        run: python tests/quality_gates/eval_recommendations.py
+
+      - name: Docker compose config
+        run: docker compose config --quiet
+
+  go-services:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: collection tests
+        working-directory: services/data-processing/collection
+        run: go test ./...
+
+      - name: processing tests
+        working-directory: services/data-processing/processing
+        run: go test ./...
+
+      - name: subscription detector tests
+        working-directory: services/data-processing/subscription-detector
+        run: go test ./...
+
+      - name: auth tests
+        working-directory: services/data-processing/auth-service
+        run: go test ./...
+
+  ml-service:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ML test dependencies
+        working-directory: services/ml-service
+        run: |
+          python -m pip install --upgrade "pip<26" "setuptools<81" wheel
+          python -m pip install -r requirements.txt
+
+      - name: ML unit tests
+        working-directory: services/ml-service
+        run: python -m pytest -q
+
+  analysis-control:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Java tests
+        working-directory: services/analysis-control
+        run: ./mvnw test
+
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - name: Install mobile dependencies
+        working-directory: apps/mobile
+        run: npm ci
+
+      - name: Mobile typecheck
+        working-directory: apps/mobile
+        run: npm run typecheck
+
+  docker-e2e:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_e2e == 'true'
+    runs-on: ubuntu-latest
+    needs:
+      - static-quality-gates
+      - go-services
+      - ml-service
+      - analysis-control
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and start core stack
+        env:
+          INSTALL_REAL_MODEL_DEPS: "false"
+          ENABLE_REAL_MODELS: "false"
+        run: |
+          docker compose up -d --build postgres redis auth collection processing subscription-detector analysis-control ml-service gateway
+          docker compose ps
+
+      - name: Auth E2E
+        shell: pwsh
+        run: ./tests/auth-e2e.ps1 -GatewayUrl http://localhost:8080
+
+      - name: Full smoke without audio fixture
+        shell: pwsh
+        run: ./tests/e2e-smoke.ps1 -GatewayUrl http://localhost:8080 -MlUrl http://localhost:8000
+
+      - name: Docker logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=200
+
+      - name: Stop stack
+        if: always()
+        run: docker compose down -v

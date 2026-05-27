@@ -1,0 +1,5 @@
+{"id":"voice-001","reference_text":"potratil 850 rubley na produkty v pyaterochke","predicted_text":"potratil 850 rubley na produkty v pyaterochke","expected_category_code":"groceries","predicted_category_code":"groceries","used_fallback":false}
+{"id":"voice-002","reference_text":"zapishi taksi vchera na 430 rubley","predicted_text":"zapishi taksi vchera na 430 rubley","expected_category_code":"transport","predicted_category_code":"transport","used_fallback":false}
+{"id":"voice-003","reference_text":"oplata yandeks plyus 299 rubley","predicted_text":"oplata yandeks plyus 299 rubley","expected_category_code":"subscriptions","predicted_category_code":"subscriptions","used_fallback":false}
+{"id":"voice-004","reference_text":"zarplata sto dvadtsat tysyach rubley","predicted_text":"zarplata sto dvadtsat tysyach rubley","expected_category_code":"salary","predicted_category_code":"salary","used_fallback":false}
+{"id":"voice-005","reference_text":"kupil lekarstva v apteke na 1200 rubley","predicted_text":"kupil lekarstva v apteke na 1200 rubley","expected_category_code":"health","predicted_category_code":"health","used_fallback":false}

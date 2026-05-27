@@ -3,15 +3,15 @@ import { NativeModules } from "react-native";
 const DEFAULT_USER_ID = "11111111-1111-1111-1111-111111111111";
 
 function detectHost(): string {
+  const configuredHost = process.env.EXPO_PUBLIC_API_HOST?.trim();
+  if (configuredHost) return configuredHost;
+
   // In Expo development, Metro already exposes the host reachable by the device.
   const scriptURL = NativeModules.SourceCode?.scriptURL;
   const metroHost = typeof scriptURL === "string" ? scriptURL.match(/https?:\/\/([^:/]+)/)?.[1] : undefined;
   if (metroHost) return metroHost;
 
-  const configuredHost = process.env.EXPO_PUBLIC_API_HOST?.trim();
-  if (configuredHost) return configuredHost;
-
-  return "192.168.0.5";
+  return "192.168.0.3";
 }
 
 const host = detectHost();

@@ -2,9 +2,11 @@ package com.finapp.controllers.shared;
 
 import com.finapp.controllers.ApiResponse;
 import com.finapp.security.JwtUserIdExtractor;
+import com.finapp.services.dtos.RecommendationEventDTO;
 import com.finapp.services.shared.RecommendationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -75,6 +77,22 @@ public class RecommendationController {
         recommendationService.markAsApplied(userId, recommendationId);
         return ResponseEntity.ok(
             ApiResponse.success("Recommendation applied", null)
+        );
+    }
+
+    @PostMapping("/{recommendationId}/events")
+    @PreAuthorize("hasAuthority('SCOPE_recommendations:write')")
+    @Operation(summary = "Record recommendation feedback event")
+    public ResponseEntity<ApiResponse<?>> recordEvent(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable UUID recommendationId,
+            @Valid @RequestBody RecommendationEventDTO request) {
+        UUID userId = extractUserId(jwt);
+        return ResponseEntity.ok(
+            ApiResponse.success(
+                "Recommendation event recorded",
+                recommendationService.recordEvent(userId, recommendationId, request.getEventType())
+            )
         );
     }
 

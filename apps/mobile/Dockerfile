@@ -11,4 +11,4 @@ EXPOSE 8081 19000 19001 19002
 
 ENV CI=1
 
-CMD ["npx", "expo", "start", "--host", "lan"]
+CMD ["npx", "expo", "start", "--host", "lan", "--port", "8081"]

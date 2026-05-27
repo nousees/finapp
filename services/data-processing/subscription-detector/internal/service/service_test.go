@@ -32,9 +32,9 @@ func TestGroupTransactionsAllowsSmallAmountChanges(t *testing.T) {
 func TestDetectRecurrenceMonthly(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	items := []*model.Transaction{
-		{ID: uuid.New(), Date: base},
-		{ID: uuid.New(), Date: base.AddDate(0, 1, 0)},
-		{ID: uuid.New(), Date: base.AddDate(0, 2, 0)},
+		{ID: uuid.New(), Amount: 299, Date: base},
+		{ID: uuid.New(), Amount: 299, Date: base.AddDate(0, 1, 0)},
+		{ID: uuid.New(), Amount: 299, Date: base.AddDate(0, 2, 0)},
 	}
 
 	recurrence, ok := detectRecurrence(items)

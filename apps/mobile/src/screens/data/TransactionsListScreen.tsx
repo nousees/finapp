@@ -20,12 +20,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { TransactionsStackParamList } from "@app/navigation/types";
 import { processPendingTransactions } from "@shared/api/processing";
 import { ApiTransaction, listTransactions, updateTransaction } from "@shared/api/transactions";
-import { getCategoryById } from "@shared/constants/categories";
+import { FINAPP_CATEGORIES, getCategoryById } from "@shared/constants/categories";
 import { useAppSettings } from "@shared/settings/AppSettingsContext";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
 
 type Props = NativeStackScreenProps<TransactionsStackParamList, "TransactionsList">;
 type Filter = "all" | "income" | "expense" | "review";
+type CategoryFilter = "all" | string;
 
 const FILTERS: Array<{ id: Filter; label: string }> = [
   { id: "all", label: "Все" },
@@ -40,6 +41,8 @@ export function TransactionsListScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
+  const [categorySearch, setCategorySearch] = useState("");
   const [transactions, setTransactions] = useState<ApiTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -70,12 +73,34 @@ export function TransactionsListScreen({ navigation }: Props) {
   const filtered = useMemo(() => {
     let items = Array.isArray(transactions) ? [...transactions] : [];
     if (filter === "review") items = items.filter((item) => !item.is_verified);
+    if (categoryFilter !== "all") {
+      items = items.filter((item) => (item.category_id || item.ml_category_id) === categoryFilter);
+    }
     const q = search.trim().toLowerCase();
     if (q) {
       items = items.filter((item) => `${item.description || ""} ${item.original_description || ""}`.toLowerCase().includes(q));
     }
     return items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [filter, search, transactions]);
+  }, [categoryFilter, filter, search, transactions]);
+
+  const categoryOptions = useMemo(() => {
+    const source =
+      filter === "income"
+        ? FINAPP_CATEGORIES.filter((category) => category.type === "INCOME")
+        : filter === "expense" || filter === "review"
+          ? FINAPP_CATEGORIES.filter((category) => category.type === "EXPENSE")
+          : FINAPP_CATEGORIES.filter((category) => category.type !== "TRANSFER");
+    const usedIds = new Set((Array.isArray(transactions) ? transactions : []).map((item) => item.category_id || item.ml_category_id).filter(Boolean));
+    const usedFirst = source.filter((category) => usedIds.has(category.id));
+    const rest = source.filter((category) => !usedIds.has(category.id));
+    const query = categorySearch.trim().toLowerCase();
+    const options = [...usedFirst, ...rest];
+    if (!query) return options;
+    return options.filter((category) => {
+      const haystack = [category.name, category.code, ...(category.aliases || [])].join(" ").toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [categorySearch, filter, transactions]);
 
   const groups = useMemo(() => groupByDay(filtered), [filtered]);
   const monthIncome = filtered.filter((item) => item.type === "INCOME").reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -146,7 +171,15 @@ export function TransactionsListScreen({ navigation }: Props) {
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
           {FILTERS.map((item) => (
-            <TouchableOpacity key={item.id} onPress={() => setFilter(item.id)} activeOpacity={0.75}>
+            <TouchableOpacity
+              key={item.id}
+              onPress={() => {
+                setFilter(item.id);
+                setCategoryFilter("all");
+                setCategorySearch("");
+              }}
+              activeOpacity={0.75}
+            >
               {filter === item.id ? (
                 <LinearGradient colors={gradients.successDeep} style={styles.filterChip}>
                   <Text style={styles.filterActiveText}>{item.label}</Text>
@@ -163,6 +196,59 @@ export function TransactionsListScreen({ navigation }: Props) {
             <Text style={[styles.summaryDivider, { color: colors.border }]}>/</Text>
             <Text style={[styles.summaryText, { color: colors.danger }]}>-{formatCompact(monthExpense, formatMoney)}</Text>
           </View>
+        </ScrollView>
+
+        <View style={[styles.categorySearchWrap, { backgroundColor: colors.backgroundAlt }]}>
+          <Feather name="tag" size={15} color={colors.textMuted} />
+          <TextInput
+            style={[styles.categorySearchInput, { color: colors.text }]}
+            placeholder="Найти категорию..."
+            placeholderTextColor={colors.textMuted}
+            value={categorySearch}
+            onChangeText={setCategorySearch}
+          />
+          {categorySearch.length > 0 ? (
+            <Pressable onPress={() => setCategorySearch("")}>
+              <Feather name="x" size={15} color={colors.textMuted} />
+            </Pressable>
+          ) : null}
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryFilterRow}>
+          <TouchableOpacity onPress={() => setCategoryFilter("all")} activeOpacity={0.75}>
+            <View style={[styles.categoryFilterChip, { backgroundColor: categoryFilter === "all" ? colors.primary : colors.backgroundAlt }]}>
+              <Feather name="grid" size={14} color={categoryFilter === "all" ? "#FFFFFF" : colors.textMuted} />
+              <Text style={[styles.categoryFilterText, { color: categoryFilter === "all" ? "#FFFFFF" : colors.textMuted }]}>Все категории</Text>
+            </View>
+          </TouchableOpacity>
+          {categoryOptions.map((category) => (
+            <TouchableOpacity
+              key={category.id}
+              onPress={() => {
+                setCategoryFilter(category.id);
+                setCategorySearch("");
+              }}
+              activeOpacity={0.75}
+            >
+              <View
+                style={[
+                  styles.categoryFilterChip,
+                  {
+                    backgroundColor: categoryFilter === category.id ? `${category.color}24` : colors.backgroundAlt,
+                    borderColor: categoryFilter === category.id ? category.color : "transparent",
+                  },
+                ]}
+              >
+                <Feather name={category.icon as any} size={14} color={categoryFilter === category.id ? category.color : colors.textMuted} />
+                <Text style={[styles.categoryFilterText, { color: categoryFilter === category.id ? category.color : colors.textMuted }]}>{category.name}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+          {categoryOptions.length === 0 ? (
+            <View style={[styles.noCategoryResult, { backgroundColor: colors.backgroundAlt }]}>
+              <Text style={[styles.noCategoryText, { color: colors.textMuted }]}>Совпадений нет</Text>
+            </View>
+          ) : null}
         </ScrollView>
 
         {error ? (
@@ -333,6 +419,50 @@ const styles = StyleSheet.create({
     gap: 8,
     alignItems: "center",
     paddingRight: 20,
+  },
+  categorySearchWrap: {
+    minHeight: 40,
+    borderRadius: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+  },
+  categorySearchInput: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: "Inter_400Regular",
+    paddingVertical: 0,
+  },
+  categoryFilterRow: {
+    gap: 8,
+    alignItems: "center",
+    paddingRight: 20,
+    paddingTop: 2,
+  },
+  categoryFilterChip: {
+    minHeight: 34,
+    paddingHorizontal: 12,
+    borderRadius: 17,
+    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  categoryFilterText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+  noCategoryResult: {
+    minHeight: 34,
+    borderRadius: 17,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  noCategoryText: {
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
   },
   filterChip: {
     minHeight: 34,
