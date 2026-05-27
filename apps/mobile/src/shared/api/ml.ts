@@ -90,16 +90,24 @@ export async function recognizeVoiceTransaction(file: { uri: string; name: strin
   } as any);
   formData.append("auto_create", "false");
 
-  const response = await requestJson<CollectionVoiceTransactionResponse>({
-    baseUrl: apiConfig.collectionBaseUrl,
-    path: "/api/v1/voice/transaction",
-    method: "POST",
-    body: formData,
-  });
+  try {
+    const response = await requestJson<CollectionVoiceTransactionResponse>({
+      baseUrl: apiConfig.collectionBaseUrl,
+      path: "/api/v1/voice/transaction",
+      method: "POST",
+      body: formData,
+    });
 
-  const text = response.voice?.transcribed_text || response.enriched?.transaction.description || "";
-  assertNotDemoTranscription(text);
-  return { text, enriched: response.enriched };
+    const text = response.voice?.transcribed_text || response.enriched?.transaction.description || "";
+    assertNotDemoTranscription(text);
+    return { text, enriched: response.enriched };
+  } catch {
+    // Gateway/collection route may be unavailable in some environments.
+    // Fall back to direct ML transcription and enrichment.
+    const transcribed = await transcribeAudioFile(file);
+    const enriched = await enrichText(transcribed.text);
+    return { text: transcribed.text, enriched };
+  }
 }
 
 export async function uploadVoiceFile(file: { uri: string; name: string; mimeType?: string | null }): Promise<CollectionVoiceResponse> {

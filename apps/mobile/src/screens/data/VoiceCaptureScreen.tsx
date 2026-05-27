@@ -18,6 +18,23 @@ import { useAppTheme } from "@shared/theme/ThemeProvider";
 type Props = NativeStackScreenProps<TransactionsStackParamList, "VoiceCapture">;
 type Step = "idle" | "recording" | "processing" | "confirm" | "saved";
 
+
+function mapVoiceErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    if (message.includes("demo-режиме") || message.includes("demo mode")) {
+      return "Голосовой сервис сейчас в демо-режиме. Включите реальные ML-модели на сервере.";
+    }
+    if (message.includes("http 503")) {
+      return "Сервис распознавания временно недоступен (503). Попробуйте чуть позже.";
+    }
+    if (message.includes("network request failed") || message.includes("failed to fetch")) {
+      return "Нет связи с сервером распознавания. Проверьте API URL и доступность gateway.";
+    }
+    return error.message;
+  }
+  return "Не удалось распознать голос. Можно распознать текст из поля ниже.";
+}
 export function VoiceCaptureScreen({ navigation }: Props) {
   const { gradients } = useAppTheme();
   const { formatMoney } = useAppSettings();
@@ -93,7 +110,7 @@ export function VoiceCaptureScreen({ navigation }: Props) {
       await processPhrase(phrase);
     } catch (recordError) {
       setRecording(null);
-      setError(recordError instanceof Error ? recordError.message : "Не удалось распознать голос. Можно распознать текст из поля ниже.");
+      setError(mapVoiceErrorMessage(recordError));
       setStep("idle");
     }
   };

@@ -300,6 +300,13 @@ export function GoalsScreen() {
   );
 }
 
+function formatGoalDeadline(value) {
+  if (!value) return "—";
+  const date = new Date(String(value));
+  if (!Number.isFinite(date.getTime())) return String(value);
+  return date.toLocaleDateString("ru-RU", { day: "2-digit", month: "short", year: "numeric" });
+}
+
 function GoalCard({ goal, onEdit, onDelete, onContribute }) {
   const { colors } = useAppTheme();
   const { formatMoney } = useAppSettings();
@@ -312,7 +319,7 @@ function GoalCard({ goal, onEdit, onDelete, onContribute }) {
         <View style={styles.goalInfo}>
           <Text style={[styles.goalName, { color: colors.text }]}>{goal.name}</Text>
           <Text style={[styles.goalNumbers, { color: colors.textMuted }]}>{formatMoney(goal.current)} из {formatMoney(goal.target)}</Text>
-          <Text style={[styles.goalNumbers, { color: colors.textMuted }]}>{goal.deadline}</Text>
+          <Text style={[styles.goalNumbers, { color: colors.textMuted }]}>До {formatGoalDeadline(goal.deadline)}</Text>
         </View>
         <Progress value={goal.percent} color={goal.color} />
         <Pressable
@@ -326,6 +333,9 @@ function GoalCard({ goal, onEdit, onDelete, onContribute }) {
         </Pressable>
       </View>
       {goal.message ? <Text style={[styles.goalMessage, { color: colors.primary }]}>{goal.message}</Text> : null}
+      <View style={[styles.goalMetaRow, { borderColor: colors.border }]}>
+        <Text style={[styles.goalMetaText, { color: colors.textMuted }]}>Осталось: {formatMoney(Math.max(goal.target - goal.current, 0))}</Text>
+      </View>
       {goal.current < goal.target ? (
         <View style={styles.contributeRow}>
           <Pressable
