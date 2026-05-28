@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -18,10 +17,14 @@ import Svg, { Circle, G, Rect, Text as SvgText } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DashboardStackParamList } from "@app/navigation/types";
 import {
+  CashflowPoint,
+  CategoryInsight,
+  FinancialInsight,
   getFinancialInsights,
   listRecommendations,
+  Recommendation,
 } from "@shared/api/analysis";
-import { listTransactions } from "@shared/api/transactions";
+import { ApiTransaction, listTransactions } from "@shared/api/transactions";
 import { useAppSettings } from "@shared/settings/AppSettingsContext";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
 
@@ -39,9 +42,9 @@ export function AnalyticsScreen({ navigation }: Props) {
   const { formatMoney } = useAppSettings();
   const insets = useSafeAreaInsets();
   const [period, setPeriod] = useState<Period>("month");
-  const [insights, setInsights] = useState(null);
-  const [transactions, setTransactions] = useState([]);
-  const [recommendations, setRecommendations] = useState([]);
+  const [insights, setInsights] = useState<FinancialInsight | null>(null);
+  const [transactions, setTransactions] = useState<ApiTransaction[]>([]);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +106,10 @@ export function AnalyticsScreen({ navigation }: Props) {
         period,
       }),
     [expense, income, period, savingsRate, transactions],
+  );
+  const monthlyForecast = useMemo(
+    () => buildMonthlyForecast({ income, expense, transactions }),
+    [expense, income, transactions],
   );
   const topExpenses = (Array.isArray(transactions) ? transactions : [])
     .filter((item) => item.type === "EXPENSE")
@@ -213,6 +220,11 @@ export function AnalyticsScreen({ navigation }: Props) {
 
         <FinancialHealthCard
           health={financialHealth}
+          formatMoney={formatMoney}
+        />
+
+        <MonthlyForecastCard
+          forecast={monthlyForecast}
           formatMoney={formatMoney}
         />
 
@@ -463,6 +475,132 @@ function ScoreRing({ score, color }) {
   );
 }
 
+function MonthlyForecastCard({
+  forecast,
+  formatMoney,
+}: {
+  forecast: MonthlyForecast;
+  formatMoney: (value: number) => string;
+}) {
+  const { colors } = useAppTheme();
+  const riskColor =
+    forecast.risk === "green"
+      ? colors.success
+      : forecast.risk === "yellow"
+        ? colors.warning
+        : colors.danger;
+  const riskLabel =
+    forecast.risk === "green"
+      ? "В норме"
+      : forecast.risk === "yellow"
+        ? "Следить"
+        : "Риск перерасхода";
+
+  return (
+    <View style={[styles.forecastCard, { backgroundColor: colors.surface }]}>
+      <View style={styles.forecastHeader}>
+        <View style={styles.forecastTitleWrap}>
+          <Text style={[styles.forecastEyebrow, { color: colors.textMuted }]}>
+            Прогноз до конца месяца
+          </Text>
+          <Text style={[styles.forecastTitle, { color: colors.text }]}>
+            Что будет, если темп сохранится
+          </Text>
+        </View>
+        <View
+          style={[
+            styles.forecastRiskBadge,
+            { backgroundColor: `${riskColor}18` },
+          ]}
+        >
+          <View
+            style={[styles.forecastRiskDot, { backgroundColor: riskColor }]}
+          />
+          <Text style={[styles.forecastRiskText, { color: riskColor }]}>
+            {riskLabel}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.forecastMetrics}>
+        <ForecastMetric
+          icon="trending-up"
+          label="Прогноз расходов"
+          value={formatMoney(forecast.projectedExpense)}
+          color={colors.danger}
+        />
+        <ForecastMetric
+          icon="credit-card"
+          label="Ожидаемый остаток"
+          value={formatMoney(forecast.expectedBalance)}
+          color={forecast.expectedBalance >= 0 ? colors.success : colors.danger}
+        />
+      </View>
+
+      <View
+        style={[
+          styles.forecastPaceCard,
+          { backgroundColor: colors.backgroundAlt },
+        ]}
+      >
+        <View
+          style={[
+            styles.forecastPaceIcon,
+            { backgroundColor: `${riskColor}18` },
+          ]}
+        >
+          <Feather
+            name={forecast.paceDeltaPercent > 0 ? "activity" : "check-circle"}
+            size={16}
+            color={riskColor}
+          />
+        </View>
+        <View style={styles.forecastPaceCopy}>
+          <Text style={[styles.forecastPaceTitle, { color: colors.text }]}>
+            {forecast.paceText}
+          </Text>
+          <Text
+            style={[styles.forecastPaceDetail, { color: colors.textMuted }]}
+          >
+            {forecast.detail}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function ForecastMetric({
+  icon,
+  label,
+  value,
+  color,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+  color: string;
+}) {
+  const { colors } = useAppTheme();
+  return (
+    <View
+      style={[styles.forecastMetric, { backgroundColor: colors.backgroundAlt }]}
+    >
+      <View
+        style={[styles.forecastMetricIcon, { backgroundColor: `${color}18` }]}
+      >
+        <Feather name={icon as any} size={15} color={color} />
+      </View>
+      <Text style={[styles.forecastMetricLabel, { color: colors.textMuted }]}>
+        {label}
+      </Text>
+      <Text style={[styles.forecastMetricValue, { color }]} numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
 function BarChart({ data }) {
   const { colors } = useAppTheme();
   const chartW = 300;
@@ -515,6 +653,134 @@ function BarChart({ data }) {
       </G>
     </Svg>
   );
+}
+
+type FinancialHealthFactor = {
+  id: string;
+  icon: string;
+  label: string;
+  value: string;
+  detail: string;
+  color: string;
+};
+
+type FinancialHealth = {
+  score: number;
+  status: string;
+  summary: string;
+  projectedExpense: number;
+  factors: FinancialHealthFactor[];
+};
+
+type MonthlyForecast = {
+  projectedExpense: number;
+  expectedBalance: number;
+  paceDeltaPercent: number;
+  paceText: string;
+  detail: string;
+  risk: "green" | "yellow" | "red";
+};
+
+function buildMonthlyForecast({
+  income,
+  expense,
+  transactions,
+}: {
+  income: number;
+  expense: number;
+  transactions: ApiTransaction[];
+}): MonthlyForecast {
+  const items = Array.isArray(transactions) ? transactions : [];
+  const currentRange = getPeriodRange("month", 0);
+  const previousRange = getPeriodRange("month", -1);
+  const currentItems = filterTransactionsByDate(items, currentRange);
+  const previousItems = filterTransactionsByDate(items, previousRange);
+  const currentIncome = totalByType(currentItems, "INCOME") || income;
+  const currentExpense = totalByType(currentItems, "EXPENSE") || expense;
+  const previousExpense = totalByType(previousItems, "EXPENSE");
+  const projectedExpense =
+    currentItems.length > 0
+      ? projectExpense(currentExpense, currentRange, "month")
+      : currentExpense;
+  const expectedBalance = currentIncome - projectedExpense;
+  const elapsedDays = getElapsedDaysInRange(currentRange);
+  const currentDailyExpense = currentExpense / elapsedDays;
+  const baselineDailyExpense = getForecastBaselineDailyExpense({
+    currentIncome,
+    previousExpense,
+    range: currentRange,
+  });
+  const paceDeltaPercent =
+    baselineDailyExpense > 0
+      ? Math.round(
+          ((currentDailyExpense - baselineDailyExpense) /
+            baselineDailyExpense) *
+            100,
+        )
+      : 0;
+  const risk =
+    expectedBalance < 0 || paceDeltaPercent > 25
+      ? "red"
+      : expectedBalance < currentIncome * 0.1 || paceDeltaPercent > 10
+        ? "yellow"
+        : "green";
+  const paceText =
+    paceDeltaPercent > 0
+      ? `Темп расходов выше нормы на ${paceDeltaPercent}%`
+      : paceDeltaPercent < 0
+        ? `Темп расходов ниже нормы на ${Math.abs(paceDeltaPercent)}%`
+        : "Темп расходов в пределах нормы";
+  const detail =
+    previousExpense > 0
+      ? "Норма рассчитана по прошлому месяцу."
+      : "Норма рассчитана от безопасного уровня расходов — до 80% доходов.";
+
+  return {
+    projectedExpense,
+    expectedBalance,
+    paceDeltaPercent,
+    paceText,
+    detail,
+    risk,
+  };
+}
+
+function getElapsedDaysInRange(range: { start: Date; end: Date }) {
+  const now = new Date();
+  if (now < range.start) return 1;
+  if (now > range.end)
+    return Math.max(
+      1,
+      Math.ceil((range.end.getTime() - range.start.getTime()) / 86400000) + 1,
+    );
+  return Math.max(
+    1,
+    Math.ceil((startOfDay(now).getTime() - range.start.getTime()) / 86400000) +
+      1,
+  );
+}
+
+function getForecastBaselineDailyExpense({
+  currentIncome,
+  previousExpense,
+  range,
+}: {
+  currentIncome: number;
+  previousExpense: number;
+  range: { start: Date; end: Date };
+}) {
+  if (previousExpense > 0) {
+    const previousMonthDays = Math.max(
+      1,
+      new Date(range.start.getFullYear(), range.start.getMonth(), 0).getDate(),
+    );
+    return previousExpense / previousMonthDays;
+  }
+  const daysInMonth = Math.max(
+    1,
+    Math.ceil((range.end.getTime() - range.start.getTime()) / 86400000) + 1,
+  );
+  return currentIncome > 0 ? (currentIncome * 0.8) / daysInMonth : 0;
 }
 
 function buildFinancialHealth({
@@ -996,6 +1262,63 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     fontFamily: "Inter_600SemiBold",
+  },
+  forecastCard: { borderRadius: 22, padding: 18, gap: 14 },
+  forecastHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  forecastTitleWrap: { flex: 1, gap: 4 },
+  forecastEyebrow: {
+    fontSize: 11,
+    fontFamily: "Inter_700Bold",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  forecastTitle: { fontSize: 17, lineHeight: 22, fontFamily: "Inter_700Bold" },
+  forecastRiskBadge: {
+    minHeight: 30,
+    borderRadius: 15,
+    paddingHorizontal: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  forecastRiskDot: { width: 7, height: 7, borderRadius: 4 },
+  forecastRiskText: { fontSize: 12, fontFamily: "Inter_700Bold" },
+  forecastMetrics: { flexDirection: "row", gap: 10 },
+  forecastMetric: { flex: 1, borderRadius: 16, padding: 12, gap: 6 },
+  forecastMetricIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  forecastMetricLabel: { fontSize: 11, fontFamily: "Inter_500Medium" },
+  forecastMetricValue: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  forecastPaceCard: {
+    borderRadius: 16,
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  forecastPaceIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  forecastPaceCopy: { flex: 1, gap: 2 },
+  forecastPaceTitle: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  forecastPaceDetail: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: "Inter_400Regular",
   },
   chartCard: { borderRadius: 18, padding: 18, gap: 14 },
   chartTitle: { fontSize: 16, fontFamily: "Inter_700Bold" },

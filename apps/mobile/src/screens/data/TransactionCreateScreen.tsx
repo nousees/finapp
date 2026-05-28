@@ -349,11 +349,7 @@ export function TransactionCreateScreen({ navigation }: Props) {
             })}
           </ScrollView>
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoryRow}
-          >
+          <View style={styles.categoryGrid}>
             {visibleCategories.map((item) => {
               const active = category === item.id;
               return (
@@ -419,7 +415,7 @@ export function TransactionCreateScreen({ navigation }: Props) {
                 </Pressable>
               </View>
             ) : null}
-          </ScrollView>
+          </View>
 
           <Input
             label="Получатель / источник"
@@ -641,7 +637,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   quickFilterText: { fontSize: 12, fontFamily: "Inter_700Bold" },
-  categoryRow: { gap: 8, paddingRight: 8, paddingBottom: 20 },
+  categoryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    paddingBottom: 20,
+  },
   categoryEmpty: {
     minHeight: 40,
     borderRadius: 14,
@@ -658,6 +659,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
+    minHeight: 36,
     borderRadius: 12,
     borderWidth: 1.5,
   },
