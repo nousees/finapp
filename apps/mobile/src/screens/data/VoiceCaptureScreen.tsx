@@ -1,23 +1,44 @@
-// @ts-nocheck
 import { useEffect, useMemo, useState } from "react";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import { Audio } from "expo-av";
 import { LinearGradient } from "expo-linear-gradient";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from "react-native-reanimated";
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { TransactionsStackParamList } from "@app/navigation/types";
-import { enrichText, EnrichedVoiceTransaction, recognizeVoiceTransaction } from "@shared/api/ml";
+import {
+  enrichText,
+  EnrichedVoiceTransaction,
+  recognizeVoiceTransaction,
+} from "@shared/api/ml";
 import { processTransaction } from "@shared/api/processing";
 import { createTransaction, updateTransaction } from "@shared/api/transactions";
-import { getCategoryByCode, getCategoryByName } from "@shared/constants/categories";
+import {
+  FinAppCategory,
+  getCategoryByCode,
+  getCategoryByName,
+} from "@shared/constants/categories";
 import { useAppSettings } from "@shared/settings/AppSettingsContext";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
 
 type Props = NativeStackScreenProps<TransactionsStackParamList, "VoiceCapture">;
 type Step = "idle" | "recording" | "processing" | "confirm" | "saved";
-
 
 function mapVoiceErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -28,7 +49,10 @@ function mapVoiceErrorMessage(error: unknown): string {
     if (message.includes("http 503")) {
       return "Сервис распознавания временно недоступен (503). Попробуйте чуть позже.";
     }
-    if (message.includes("network request failed") || message.includes("failed to fetch")) {
+    if (
+      message.includes("network request failed") ||
+      message.includes("failed to fetch")
+    ) {
       return "Нет связи с сервером распознавания. Проверьте API URL и доступность gateway.";
     }
     return error.message;
@@ -36,15 +60,22 @@ function mapVoiceErrorMessage(error: unknown): string {
   return "Не удалось распознать голос. Можно распознать текст из поля ниже.";
 }
 export function VoiceCaptureScreen({ navigation }: Props) {
-  const { gradients } = useAppTheme();
   const { formatMoney } = useAppSettings();
   const insets = useSafeAreaInsets();
   const [text, setText] = useState("");
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [step, setStep] = useState<Step>("idle");
   const [parsed, setParsed] = useState<EnrichedVoiceTransaction | null>(null);
+  const [categoryInput, setCategoryInput] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const bars = useMemo(() => Array.from({ length: 18 }, (_, index) => index), []);
+  const bars = useMemo(
+    () => Array.from({ length: 18 }, (_, index) => index),
+    [],
+  );
+  const selectedCategory = useMemo(
+    () => resolveCategoryFromInput(categoryInput),
+    [categoryInput],
+  );
 
   useEffect(() => {
     return () => {
@@ -61,15 +92,17 @@ export function VoiceCaptureScreen({ navigation }: Props) {
     setStep("processing");
     setError(null);
     const enriched = await enrichText(phrase.trim());
-    setParsed(enriched);
-    setStep("confirm");
+    applyParsedTransaction(enriched);
   };
 
   const startRecording = async () => {
     try {
       const permission = await Audio.requestPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert("Нет доступа к микрофону", "Разрешите доступ к микрофону, чтобы использовать голосовой ввод.");
+        Alert.alert(
+          "Нет доступа к микрофону",
+          "Разрешите доступ к микрофону, чтобы использовать голосовой ввод.",
+        );
         return;
       }
 
@@ -77,12 +110,18 @@ export function VoiceCaptureScreen({ navigation }: Props) {
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
       });
-      const result = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      const result = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY,
+      );
       setRecording(result.recording);
       setStep("recording");
       setError(null);
     } catch (recordError) {
-      setError(recordError instanceof Error ? recordError.message : "Не удалось начать запись.");
+      setError(
+        recordError instanceof Error
+          ? recordError.message
+          : "Не удалось начать запись.",
+      );
       setStep("idle");
     }
   };
@@ -103,8 +142,7 @@ export function VoiceCaptureScreen({ navigation }: Props) {
       const phrase = result.text || text;
       setText(phrase);
       if (result.enriched) {
-        setParsed(result.enriched);
-        setStep("confirm");
+        applyParsedTransaction(result.enriched);
         return;
       }
       await processPhrase(phrase);
@@ -113,6 +151,18 @@ export function VoiceCaptureScreen({ navigation }: Props) {
       setError(mapVoiceErrorMessage(recordError));
       setStep("idle");
     }
+  };
+
+  const applyParsedTransaction = (enriched: EnrichedVoiceTransaction) => {
+    setParsed(enriched);
+    const category = resolveVoiceCategory(
+      enriched.transaction.category_code,
+      enriched.transaction.category_name,
+    );
+    setCategoryInput(
+      category?.name || enriched.transaction.category_name || "",
+    );
+    setStep("confirm");
   };
 
   const handleMicPress = () => {
@@ -132,7 +182,8 @@ export function VoiceCaptureScreen({ navigation }: Props) {
     }
     try {
       setError(null);
-      const categoryId = getCategoryByCode(tx.category_code)?.id || getCategoryByName(tx.category_name)?.id;
+      const resolvedCategory = resolveCategoryFromInput(categoryInput);
+      const categoryId = resolvedCategory?.id;
       const created = await createTransaction({
         amount: tx.amount,
         currency: tx.currency || "RUB",
@@ -142,42 +193,85 @@ export function VoiceCaptureScreen({ navigation }: Props) {
         date: tx.date || undefined,
       });
       if (categoryId) {
-        await updateTransaction(created.id, { category_id: categoryId, is_verified: !parsed.needs_review }).catch(() => null);
+        await updateTransaction(created.id, {
+          category_id: categoryId,
+          is_verified: !parsed.needs_review,
+        }).catch(() => null);
       } else {
         await processTransaction(created.id).catch(() => null);
       }
       setStep("saved");
       setTimeout(() => navigation.navigate("TransactionsList"), 650);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Не удалось сохранить транзакцию.");
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Не удалось сохранить транзакцию.",
+      );
     }
   };
 
   return (
-    <LinearGradient colors={["#3D1A8A", "#6B46C1", "#8B5CF6", "#7ED9B6"]} start={{ x: 0, y: 0 }} end={{ x: 0.3, y: 1 }} style={styles.root}>
+    <LinearGradient
+      colors={["#3D1A8A", "#6B46C1", "#8B5CF6", "#7ED9B6"]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 0.3, y: 1 }}
+      style={styles.root}
+    >
       <View style={[styles.nav, { paddingTop: insets.top + 8 }]}>
-        <Pressable onPress={() => navigation.navigate("TransactionsList")} style={styles.closeButton}>
+        <Pressable
+          onPress={() => navigation.navigate("TransactionsList")}
+          style={styles.closeButton}
+        >
           <Feather name="x" size={22} color="#FFFFFF" />
         </Pressable>
         <Text style={styles.navTitle}>Голосовой ввод</Text>
         <View style={styles.closeButton} />
       </View>
 
-      <ScrollView contentContainerStyle={[styles.body, { paddingBottom: 120 + insets.bottom }]} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.body,
+          { paddingBottom: 120 + insets.bottom },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.waveArea}>
           <View style={styles.waveRow}>
             {bars.map((index) => (
-              <WaveBar key={index} index={index} active={step === "recording" || step === "processing"} />
+              <WaveBar
+                key={index}
+                index={index}
+                active={step === "recording" || step === "processing"}
+              />
             ))}
           </View>
           <Text style={styles.waveLabel}>{statusText(step)}</Text>
         </View>
 
-        <Pressable onPress={handleMicPress} disabled={step === "processing"} style={styles.micWrap}>
-          <LinearGradient colors={["#A8E6CF", "#7ED9B6", "#6B46C1"]} style={[styles.bigMic, { opacity: step === "processing" ? 0.65 : 1 }]}>
-            <Feather name={recording ? "square" : "mic"} size={34} color="#FFFFFF" />
+        <Pressable
+          onPress={handleMicPress}
+          disabled={step === "processing"}
+          style={styles.micWrap}
+        >
+          <LinearGradient
+            colors={["#A8E6CF", "#7ED9B6", "#6B46C1"]}
+            style={[
+              styles.bigMic,
+              { opacity: step === "processing" ? 0.65 : 1 },
+            ]}
+          >
+            <Feather
+              name={recording ? "square" : "mic"}
+              size={34}
+              color="#FFFFFF"
+            />
           </LinearGradient>
-          <Text style={styles.micHint}>{recording ? "Нажмите, чтобы остановить" : "Нажмите, чтобы записать"}</Text>
+          <Text style={styles.micHint}>
+            {recording
+              ? "Нажмите, чтобы остановить"
+              : "Нажмите, чтобы записать"}
+          </Text>
         </Pressable>
 
         <View style={styles.transcriptCard}>
@@ -189,7 +283,11 @@ export function VoiceCaptureScreen({ navigation }: Props) {
             placeholderTextColor="transparent"
             style={styles.transcriptInput}
           />
-          <Pressable onPress={() => processPhrase(text)} disabled={step === "processing"} style={styles.textParseButton}>
+          <Pressable
+            onPress={() => processPhrase(text)}
+            disabled={step === "processing"}
+            style={styles.textParseButton}
+          >
             <Text style={styles.textParseButtonText}>Распознать текст</Text>
           </Pressable>
         </View>
@@ -199,17 +297,90 @@ export function VoiceCaptureScreen({ navigation }: Props) {
             <Text style={styles.confirmLabel}>Транзакция распознана</Text>
             <View style={styles.parsedRow}>
               <View style={styles.parsedIcon}>
-                <Feather name={parsed.transaction.operation_type === "income" ? "arrow-down-left" : "arrow-up-right"} size={22} color="#FFFFFF" />
+                <Feather
+                  name={
+                    parsed.transaction.operation_type === "income"
+                      ? "arrow-down-left"
+                      : "arrow-up-right"
+                  }
+                  size={22}
+                  color="#FFFFFF"
+                />
               </View>
               <View style={styles.parsedInfo}>
-                <Text style={styles.parsedMerchant}>{parsed.transaction.merchant || parsed.transaction.category_name || "Операция"}</Text>
+                <Text style={styles.parsedMerchant}>
+                  {parsed.transaction.merchant ||
+                    parsed.transaction.category_name ||
+                    "Операция"}
+                </Text>
                 <Text style={styles.parsedMeta}>
-                  {parsed.transaction.category_name} · уверенность {Math.round(parsed.confidence.overall * 100)}%
+                  Уверенность распознавания{" "}
+                  {Math.round(parsed.confidence.overall * 100)}%
                 </Text>
               </View>
-              <Text style={styles.parsedAmount}>{parsed.transaction.operation_type === "income" ? "+" : "-"}{formatMoney(parsed.transaction.amount || 0)}</Text>
+              <Text style={styles.parsedAmount}>
+                {parsed.transaction.operation_type === "income" ? "+" : "-"}
+                {formatMoney(parsed.transaction.amount || 0)}
+              </Text>
             </View>
-            {parsed.needs_review ? <Text style={styles.reviewText}>Нужна проверка: ML уверен не полностью.</Text> : null}
+
+            <View style={styles.categoryField}>
+              <View style={styles.categoryFieldHeader}>
+                <Text style={styles.categoryFieldLabel}>Категория</Text>
+                <Text style={styles.categoryConfidence}>
+                  ML {Math.round(parsed.confidence.categorization * 100)}%
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.categoryInputWrap,
+                  {
+                    borderColor:
+                      selectedCategory?.color || "rgba(255,255,255,0.24)",
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.categoryIcon,
+                    {
+                      backgroundColor: selectedCategory
+                        ? `${selectedCategory.color}28`
+                        : "rgba(255,255,255,0.14)",
+                    },
+                  ]}
+                >
+                  <Feather
+                    name={(selectedCategory?.icon || "tag") as any}
+                    size={17}
+                    color={selectedCategory?.color || "#A8E6CF"}
+                  />
+                </View>
+                <TextInput
+                  value={categoryInput}
+                  onChangeText={setCategoryInput}
+                  placeholder="Категория не определена"
+                  placeholderTextColor="rgba(255,255,255,0.48)"
+                  style={styles.categoryInput}
+                  returnKeyType="done"
+                />
+                {categoryInput.length > 0 ? (
+                  <Pressable onPress={() => setCategoryInput("")} hitSlop={8}>
+                    <Feather name="x" size={16} color="rgba(255,255,255,0.7)" />
+                  </Pressable>
+                ) : null}
+              </View>
+              <Text style={styles.categoryHelper}>
+                {selectedCategory
+                  ? `Категория будет сохранена как «${selectedCategory.name}».`
+                  : "Проверьте название категории — если совпадения нет, операция уйдет на ML-докатегоризацию."}
+              </Text>
+            </View>
+            {parsed.needs_review ? (
+              <Text style={styles.reviewText}>
+                Нужна проверка: ML уверен не полностью.
+              </Text>
+            ) : null}
           </View>
         ) : null}
 
@@ -224,21 +395,44 @@ export function VoiceCaptureScreen({ navigation }: Props) {
 
         {step === "confirm" ? (
           <View style={styles.actions}>
-            <Pressable style={styles.secondaryButton} onPress={() => setStep("idle")}>
+            <Pressable
+              style={styles.secondaryButton}
+              onPress={() => setStep("idle")}
+            >
               <Feather name="refresh-cw" size={18} color="#FFFFFF" />
               <Text style={styles.secondaryText}>Повторить</Text>
             </Pressable>
             <Pressable style={styles.saveButtonWrap} onPress={handleSave}>
-              <LinearGradient colors={["#A8E6CF", "#7ED9B6"]} style={styles.saveButton}>
+              <LinearGradient
+                colors={["#A8E6CF", "#7ED9B6"]}
+                style={styles.saveButton}
+              >
                 <Feather name="check" size={18} color="#1A1A2E" />
                 <Text style={styles.saveText}>Сохранить</Text>
               </LinearGradient>
             </Pressable>
           </View>
         ) : null}
-
       </ScrollView>
     </LinearGradient>
+  );
+}
+
+function resolveVoiceCategory(
+  categoryCode?: string | null,
+  categoryName?: string | null,
+): FinAppCategory | undefined {
+  return getCategoryByCode(categoryCode) || getCategoryByName(categoryName);
+}
+
+function resolveCategoryFromInput(
+  categoryInput: string,
+): FinAppCategory | undefined {
+  const normalizedInput = categoryInput.trim();
+  if (!normalizedInput) return undefined;
+
+  return (
+    getCategoryByName(normalizedInput) || getCategoryByCode(normalizedInput)
   );
 }
 
@@ -257,7 +451,14 @@ function WaveBar({ index, active }: { index: number; active: boolean }) {
     if (active) {
       height.value = withDelay(
         index * 35,
-        withRepeat(withSequence(withTiming(target, { duration: 380 }), withTiming(12, { duration: 360 })), -1, true),
+        withRepeat(
+          withSequence(
+            withTiming(target, { duration: 380 }),
+            withTiming(12, { duration: 360 }),
+          ),
+          -1,
+          true,
+        ),
       );
     } else {
       height.value = withTiming(14 + (index % 4) * 5, { duration: 240 });
@@ -266,46 +467,235 @@ function WaveBar({ index, active }: { index: number; active: boolean }) {
 
   const style = useAnimatedStyle(() => ({ height: height.value }));
   const palette = ["#A8E6CF", "#7ED9B6", "#8B5CF6", "#FFFFFF"];
-  return <Animated.View style={[styles.waveBar, style, { backgroundColor: palette[index % palette.length] }]} />;
+  return (
+    <Animated.View
+      style={[
+        styles.waveBar,
+        style,
+        { backgroundColor: palette[index % palette.length] },
+      ]}
+    />
+  );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  nav: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingBottom: 12 },
-  closeButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },
+  nav: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+  },
+  closeButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   navTitle: { color: "#FFFFFF", fontSize: 17, fontFamily: "Inter_600SemiBold" },
   body: { paddingHorizontal: 24 },
   waveArea: { alignItems: "center", paddingVertical: 28 },
   waveRow: { height: 96, flexDirection: "row", alignItems: "flex-end", gap: 6 },
   waveBar: { width: 8, borderRadius: 6, opacity: 0.92 },
-  waveLabel: { marginTop: 16, color: "#A8E6CF", fontSize: 15, fontFamily: "Inter_500Medium" },
+  waveLabel: {
+    marginTop: 16,
+    color: "#A8E6CF",
+    fontSize: 15,
+    fontFamily: "Inter_500Medium",
+  },
   micWrap: { alignItems: "center", marginBottom: 20, gap: 10 },
-  bigMic: { width: 88, height: 88, borderRadius: 44, alignItems: "center", justifyContent: "center" },
-  micHint: { color: "rgba(255,255,255,0.72)", fontSize: 13, fontFamily: "Inter_500Medium" },
-  transcriptCard: { backgroundColor: "rgba(255,255,255,0.13)", borderRadius: 16, padding: 16, marginBottom: 20, gap: 12 },
-  transcriptInput: { minHeight: 88, color: "#FFFFFF", fontSize: 17, lineHeight: 25, fontFamily: "Inter_400Regular", textAlignVertical: "top" },
-  textParseButton: { minHeight: 42, borderRadius: 13, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.18)" },
-  textParseButtonText: { color: "#FFFFFF", fontSize: 14, fontFamily: "Inter_700Bold" },
-  confirmCard: { backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 20, padding: 18, gap: 13, marginBottom: 18 },
-  confirmLabel: { color: "#A8E6CF", fontSize: 12, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 1 },
+  bigMic: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  micHint: {
+    color: "rgba(255,255,255,0.72)",
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+  },
+  transcriptCard: {
+    backgroundColor: "rgba(255,255,255,0.13)",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    gap: 12,
+  },
+  transcriptInput: {
+    minHeight: 88,
+    color: "#FFFFFF",
+    fontSize: 17,
+    lineHeight: 25,
+    fontFamily: "Inter_400Regular",
+    textAlignVertical: "top",
+  },
+  textParseButton: {
+    minHeight: 42,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.18)",
+  },
+  textParseButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontFamily: "Inter_700Bold",
+  },
+  confirmCard: {
+    backgroundColor: "rgba(255,255,255,0.15)",
+    borderRadius: 20,
+    padding: 18,
+    gap: 13,
+    marginBottom: 18,
+  },
+  confirmLabel: {
+    color: "#A8E6CF",
+    fontSize: 12,
+    fontFamily: "Inter_700Bold",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
   parsedRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  parsedIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: "rgba(255,255,255,0.16)", alignItems: "center", justifyContent: "center" },
+  parsedIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(255,255,255,0.16)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   parsedInfo: { flex: 1, gap: 3 },
-  parsedMerchant: { color: "#FFFFFF", fontSize: 17, fontFamily: "Inter_700Bold" },
-  parsedMeta: { color: "rgba(255,255,255,0.68)", fontSize: 12, fontFamily: "Inter_400Regular" },
+  parsedMerchant: {
+    color: "#FFFFFF",
+    fontSize: 17,
+    fontFamily: "Inter_700Bold",
+  },
+  parsedMeta: {
+    color: "rgba(255,255,255,0.68)",
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+  },
   parsedAmount: { color: "#FCA5A5", fontSize: 19, fontFamily: "Inter_700Bold" },
-  reviewText: { color: "rgba(255,255,255,0.7)", fontSize: 13, fontFamily: "Inter_500Medium" },
-  savedCard: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 16 },
+  categoryField: { gap: 8, paddingTop: 2 },
+  categoryFieldHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  categoryFieldLabel: {
+    color: "#A8E6CF",
+    fontSize: 12,
+    fontFamily: "Inter_700Bold",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  categoryConfidence: {
+    color: "rgba(255,255,255,0.56)",
+    fontSize: 12,
+    fontFamily: "Inter_600SemiBold",
+  },
+  categoryInputWrap: {
+    minHeight: 52,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: 12,
+  },
+  categoryIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  categoryInput: {
+    flex: 1,
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontFamily: "Inter_700Bold",
+    paddingVertical: 0,
+  },
+  categoryHelper: {
+    color: "rgba(255,255,255,0.66)",
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: "Inter_500Medium",
+  },
+  reviewText: {
+    color: "rgba(255,255,255,0.7)",
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+  },
+  savedCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 16,
+  },
   savedText: { color: "#FFFFFF", fontSize: 16, fontFamily: "Inter_700Bold" },
-  error: { color: "#FCA5A5", fontSize: 13, lineHeight: 19, fontFamily: "Inter_500Medium", marginBottom: 14 },
-  actions: { alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 10, marginBottom: 30 },
-  secondaryButton: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, height: 52, borderRadius: 15, backgroundColor: "rgba(255,255,255,0.15)" },
-  secondaryText: { color: "#FFFFFF", fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  error: {
+    color: "#FCA5A5",
+    fontSize: 13,
+    lineHeight: 19,
+    fontFamily: "Inter_500Medium",
+    marginBottom: 14,
+  },
+  actions: {
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 30,
+  },
+  secondaryButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    height: 52,
+    borderRadius: 15,
+    backgroundColor: "rgba(255,255,255,0.15)",
+  },
+  secondaryText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontFamily: "Inter_600SemiBold",
+  },
   saveButtonWrap: { flex: 1 },
-  saveButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7, height: 52, borderRadius: 15 },
+  saveButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    height: 52,
+    borderRadius: 15,
+  },
   saveText: { color: "#1A1A2E", fontSize: 14, fontFamily: "Inter_700Bold" },
   hints: { gap: 10 },
-  hintsTitle: { color: "rgba(255,255,255,0.52)", fontSize: 12, fontFamily: "Inter_700Bold", textTransform: "uppercase", letterSpacing: 1 },
+  hintsTitle: {
+    color: "rgba(255,255,255,0.52)",
+    fontSize: 12,
+    fontFamily: "Inter_700Bold",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
   hintRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  hintText: { flex: 1, color: "rgba(255,255,255,0.62)", fontSize: 14, lineHeight: 20, fontFamily: "Inter_400Regular", fontStyle: "italic" },
+  hintText: {
+    flex: 1,
+    color: "rgba(255,255,255,0.62)",
+    fontSize: 14,
+    lineHeight: 20,
+    fontFamily: "Inter_400Regular",
+    fontStyle: "italic",
+  },
 });
