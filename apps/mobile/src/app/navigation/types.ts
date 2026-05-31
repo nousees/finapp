@@ -35,6 +35,7 @@ export type DashboardStackParamList = {
   Reports: undefined;
   Analytics: undefined;
   Subscriptions: undefined;
+  Notifications: undefined;
 };
 
 export type DataStackParamList = {

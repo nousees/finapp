@@ -301,7 +301,7 @@ function TransactionCard({ item, onPress, onVerify }: { item: ApiTransaction; on
   const { colors } = useAppTheme();
   const { formatMoney } = useAppSettings();
   const isIncome = item.type === "INCOME";
-  const category = getCategoryById(item.category_id);
+  const category = getCategoryById(item.category_id || item.ml_category_id);
   const icon = isIncome ? "arrow-down-left" : item.is_recurring ? "repeat" : category?.icon || "shopping-bag";
   const accent = isIncome ? colors.success : item.is_recurring ? colors.warning : category?.color || colors.primary;
 

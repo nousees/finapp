@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/csv"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"strconv"
@@ -237,6 +238,25 @@ func (s *ImportService) createImportedTransaction(ctx context.Context, userID uu
 	tx, err := s.transRepo.Create(ctx, userID, in, txDate)
 	if err != nil {
 		return false, err
+	}
+	if tx.Type == model.TypeExpense && tx.Amount >= largeExpenseNotificationThreshold {
+		data, _ := json.Marshal(map[string]interface{}{
+			"amount":        tx.Amount,
+			"currency":      tx.Currency,
+			"transactionId": tx.ID.String(),
+			"source":        "import",
+		})
+		_ = s.transRepo.CreateNotification(
+			ctx,
+			tx.UserID,
+			"LARGE_TRANSACTION",
+			"Крупная операция в импорте",
+			fmt.Sprintf("В импортированной выписке найден расход %.0f %s. Проверьте категорию и описание.", tx.Amount, tx.Currency),
+			"GO",
+			"transaction",
+			tx.ID,
+			string(data),
+		)
 	}
 	if s.processingClient != nil {
 		if err := s.processingClient.ProcessTransaction(ctx, tx.ID, authorization); err != nil {

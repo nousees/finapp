@@ -18,7 +18,7 @@ func NewClient(url, anonKey string) *Client {
 }
 
 func (c *Client) SendEmailOTP(email string) error {
-	payload := map[string]any{"email": email, "create_user": false}
+	payload := map[string]any{"email": email, "create_user": true}
 	return c.post("/auth/v1/otp", payload)
 }
 

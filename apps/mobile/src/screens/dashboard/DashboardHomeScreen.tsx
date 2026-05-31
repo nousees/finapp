@@ -8,7 +8,7 @@ import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, V
 import Svg, { Circle } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DashboardStackParamList } from "@app/navigation/types";
-import { getFinancialInsights, listRecommendations } from "@shared/api/analysis";
+import { getFinancialInsights, getUnreadNotificationCount, listRecommendations } from "@shared/api/analysis";
 import { listTransactions } from "@shared/api/transactions";
 import { useUser } from "@shared/contexts/UserContext";
 import { useAppSettings } from "@shared/settings/AppSettingsContext";
@@ -31,20 +31,23 @@ export function DashboardHomeScreen({ navigation }: Props) {
   const [insights, setInsights] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
       setError(null);
-      const [insightData, txData, recData] = await Promise.all([
+      const [insightData, txData, recData, unreadCount] = await Promise.all([
         getFinancialInsights(),
-        listTransactions({ limit: 5 }),
+        listTransactions({ limit: 1000 }),
         listRecommendations().catch(() => []),
+        getUnreadNotificationCount().catch(() => 0),
       ]);
       setInsights(insightData);
       setTransactions(Array.isArray(txData) ? txData : []);
       setRecommendations(Array.isArray(recData) ? recData.slice(0, 2) : []);
+      setUnreadNotifications(Number(unreadCount || 0));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить дашборд");
     } finally {
@@ -60,9 +63,11 @@ export function DashboardHomeScreen({ navigation }: Props) {
   );
 
   const summary = insights?.summary;
-  const income = Number(summary?.totalIncome || 0);
-  const expense = Number(summary?.totalExpenses || 0);
-  const grossBalance = Number(summary?.netSavings || income - expense || 0);
+  const transactionTotals = useMemo(() => calculateTransactionTotals(transactions), [transactions]);
+  const hasLocalTransactions = transactions.length > 0;
+  const income = hasLocalTransactions ? transactionTotals.income : Number(summary?.totalIncome || 0);
+  const expense = hasLocalTransactions ? transactionTotals.expense : Number(summary?.totalExpenses || 0);
+  const grossBalance = hasLocalTransactions ? transactionTotals.balance : Number(summary?.netSavings || income - expense || 0);
   const reservedInGoals = (Array.isArray(insights?.goals) ? insights.goals : []).reduce(
     (sum, goal) => sum + Number(goal.currentAmount || 0),
     0,
@@ -102,6 +107,7 @@ export function DashboardHomeScreen({ navigation }: Props) {
     })),
   ].slice(0, 2);
 
+  const latestTransactions = transactions.slice(0, 5);
   const topPt = Platform.OS === "web" ? 42 : insets.top;
 
   return (
@@ -112,9 +118,19 @@ export function DashboardHomeScreen({ navigation }: Props) {
             <Text style={styles.greeting}>Доброе утро</Text>
             <Text style={styles.username} numberOfLines={1}>{user?.full_name || user?.email || "FinApp"}</Text>
           </View>
-          <Pressable style={styles.avatar} onPress={() => navigation.getParent()?.navigate("Profile")}>
-            <Text style={styles.avatarText}>{initials(user?.full_name || user?.email)}</Text>
-          </Pressable>
+          <View style={styles.headerActions}>
+            <Pressable style={styles.notificationButton} onPress={() => navigation.navigate("Notifications")}>
+              <Feather name="bell" size={20} color="#1A1A2E" />
+              {unreadNotifications > 0 ? (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText}>{unreadNotifications > 9 ? "9+" : unreadNotifications}</Text>
+                </View>
+              ) : null}
+            </Pressable>
+            <Pressable style={styles.avatar} onPress={() => navigation.getParent()?.navigate("Profile")}>
+              <Text style={styles.avatarText}>{initials(user?.full_name || user?.email)}</Text>
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.balanceBlock}>
@@ -183,13 +199,13 @@ export function DashboardHomeScreen({ navigation }: Props) {
             <Text style={[styles.seeAll, { color: colors.primary }]}>Все</Text>
           </Pressable>
         </View>
-        {transactions.length === 0 ? (
+        {latestTransactions.length === 0 ? (
           <View style={[styles.emptyCard, { backgroundColor: colors.surface }]}>
             <Feather name="inbox" size={30} color={colors.border} />
             <Text style={[styles.emptyText, { color: colors.textMuted }]}>Нажмите на микрофон, чтобы добавить первую транзакцию</Text>
           </View>
         ) : (
-          transactions.map((item) => <TransactionRow key={item.id} item={item} />)
+          latestTransactions.map((item) => <TransactionRow key={item.id} item={item} />)
         )}
 
         <SectionTitle title="Советы" />
@@ -296,6 +312,23 @@ function formatShort(value: number, formatMoney: (value: number) => string) {
   return formatMoney(amount);
 }
 
+function calculateTransactionTotals(items: any[]) {
+  return (Array.isArray(items) ? items : []).reduce(
+    (totals, item) => {
+      const amount = Number(item.amount || 0);
+      if (item.type === "INCOME") {
+        totals.income += amount;
+        totals.balance += amount;
+      } else if (item.type === "EXPENSE") {
+        totals.expense += amount;
+        totals.balance -= amount;
+      }
+      return totals;
+    },
+    { income: 0, expense: 0, balance: 0 },
+  );
+}
+
 const palette = ["#F97316", "#3B82F6", "#EC4899", "#8B5CF6", "#10B981"];
 const fallbackSignals = [
   { id: "plan", title: "Вы в рамках плана", text: "Расходы ниже среднего уровня. Продолжайте отслеживать категории.", icon: "zap", gradient: ["#6B46C1", "#8B5CF6"] },
@@ -308,6 +341,10 @@ const styles = StyleSheet.create({
   headerTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 24 },
   greeting: { fontSize: 13, color: "rgba(255,255,255,0.72)", fontFamily: "Inter_400Regular" },
   username: { maxWidth: 260, fontSize: 20, color: "#FFFFFF", fontFamily: "Inter_700Bold" },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 10 },
+  notificationButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: "rgba(255,255,255,0.86)", alignItems: "center", justifyContent: "center", position: "relative" },
+  notificationBadge: { position: "absolute", top: -3, right: -3, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4, backgroundColor: "#EF4444", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "#FFFFFF" },
+  notificationBadgeText: { color: "#FFFFFF", fontSize: 9, fontFamily: "Inter_700Bold" },
   avatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: "#A8E6CF", alignItems: "center", justifyContent: "center" },
   avatarText: { fontSize: 14, color: "#1A1A2E", fontFamily: "Inter_700Bold" },
   balanceBlock: { alignItems: "center", marginBottom: 24 },

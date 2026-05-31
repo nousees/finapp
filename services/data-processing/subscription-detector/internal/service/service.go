@@ -47,11 +47,11 @@ func (s *Service) Analyze(ctx context.Context, userID uuid.UUID) ([]*model.Subsc
 	recurringIDs := make([]uuid.UUID, 0)
 
 	for _, group := range groups {
-		if len(group.transactions) < 2 {
-			continue
-		}
-
 		recurrence, ok := detectRecurrence(group.transactions)
+		if !ok && isLikelySubscription(group) && len(group.transactions) == 1 {
+			recurrence = "MONTHLY"
+			ok = true
+		}
 		if !ok && isLikelySubscription(group) {
 			if !hasStableAmount(group.transactions) {
 				continue
@@ -63,9 +63,12 @@ func (s *Service) Analyze(ctx context.Context, userID uuid.UUID) ([]*model.Subsc
 			continue
 		}
 
-		usageIndex := estimateUsageIndex(group.name)
+		usageIndex := estimateUsageIndex(group.name) / 100
+		if containsAny(strings.ToLower(group.name), "яндекс", "яндекс плюс", "кинопоиск", "okko", "wink", "start", "premier", "amediateka", "vk music", "boom", "литрес", "mybook") {
+			usageIndex = 0.20
+		}
 		var recommendation *string
-		if usageIndex < 30 {
+		if usageIndex < 0.30 {
 			text := "Низкий индекс использования. Проверьте, нужна ли эта подписка."
 			recommendation = &text
 		}
@@ -217,6 +220,9 @@ func isLikelySubscription(group groupedTransactions) bool {
 		return true
 	}
 	text := strings.ToLower(group.name)
+	if containsAny(text, "подпис", "яндекс", "яндекс плюс", "кинопоиск", "сберпрайм", "сбер prime", "okko", "wink", "start", "premier", "amediateka", "vk music", "boom", "литрес", "mybook") {
+		return true
+	}
 	return containsAny(
 		text,
 		"подпис",

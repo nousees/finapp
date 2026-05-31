@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -18,6 +19,8 @@ var defaultDateFormats = []string{
 	"02.01.2006",
 	"02.01.2006 15:04",
 }
+
+const largeExpenseNotificationThreshold = 50000
 
 type TransactionService struct {
 	repo             *repository.TransactionRepo
@@ -57,6 +60,7 @@ func (s *TransactionService) Create(ctx context.Context, userID uuid.UUID, in mo
 	if err != nil {
 		return nil, err
 	}
+	s.notifyTransactionEvents(ctx, item)
 	if in.CategoryID != nil {
 		return item, nil
 	}
@@ -69,6 +73,7 @@ func (s *TransactionService) CreateBatch(ctx context.Context, userID uuid.UUID, 
 		return items, err
 	}
 	for index, item := range items {
+		s.notifyTransactionEvents(ctx, item)
 		if index < len(in.Transactions) && in.Transactions[index].CategoryID != nil {
 			continue
 		}
@@ -100,4 +105,21 @@ func (s *TransactionService) processIfNeeded(ctx context.Context, transactionID 
 		return nil
 	}
 	return s.processingClient.ProcessTransaction(ctx, transactionID, authorization)
+}
+
+func (s *TransactionService) notifyTransactionEvents(ctx context.Context, tx *model.Transaction) {
+	if tx == nil || tx.Type != model.TypeExpense || tx.Amount < largeExpenseNotificationThreshold {
+		return
+	}
+	data, _ := json.Marshal(map[string]interface{}{
+		"amount":        tx.Amount,
+		"currency":      tx.Currency,
+		"transactionId": tx.ID.String(),
+	})
+	title := "Крупная операция"
+	message := fmt.Sprintf("Добавлен расход %.0f %s. Проверьте категорию и описание операции.", tx.Amount, tx.Currency)
+	if err := s.repo.CreateNotification(ctx, tx.UserID, "LARGE_TRANSACTION", title, message, "GO", "transaction", tx.ID, string(data)); err != nil {
+		// Notification creation must not block transaction entry.
+		return
+	}
 }

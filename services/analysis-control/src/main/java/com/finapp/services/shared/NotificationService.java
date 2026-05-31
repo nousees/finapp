@@ -4,7 +4,6 @@ import com.finapp.models.shared.Notification;
 import com.finapp.models.shared.NotificationTemplate;
 import com.finapp.repositories.shared.NotificationRepository;
 import com.finapp.repositories.shared.NotificationTemplateRepository;
-import com.finapp.services.exceptions.NotFoundException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -78,11 +77,16 @@ public class NotificationService {
                                                       Map<String, String> parameters,
                                                       String sourceModule,
                                                       String entityType, UUID entityId) {
+        Map<String, String> safeParameters = parameters != null ? parameters : Map.of();
         NotificationTemplate template = notificationTemplateRepository.findByType(templateType)
-            .orElseThrow(() -> new NotFoundException("Notification template", templateType));
-        
-        String title = replacePlaceholders(template.getTitleTemplate(), parameters);
-        String message = replacePlaceholders(template.getMessageTemplate(), parameters);
+            .orElse(null);
+
+        String title = template != null
+            ? replacePlaceholders(template.getTitleTemplate(), safeParameters)
+            : defaultTitle(templateType, safeParameters);
+        String message = template != null
+            ? replacePlaceholders(template.getMessageTemplate(), safeParameters)
+            : defaultMessage(templateType, safeParameters);
         
         return createNotification(userId, templateType, title, message, 
                                  sourceModule, entityType, entityId, null);
@@ -158,5 +162,31 @@ public class NotificationService {
             result = result.replace("{{" + entry.getKey() + "}}", entry.getValue());
         }
         return result;
+    }
+
+    private String defaultTitle(String templateType, Map<String, String> parameters) {
+        return switch (templateType) {
+            case "BUDGET_ALERT" -> "Бюджет " + parameters.getOrDefault("budgetName", "") + " достиг порога";
+            case "GOAL_PROGRESS" -> "Прогресс цели: " + parameters.getOrDefault("goalName", "");
+            case "SUBSCRIPTION_REMINDER" -> "Напоминание о подписке";
+            case "LARGE_TRANSACTION" -> "Крупная операция";
+            default -> "Событие FinApp";
+        };
+    }
+
+    private String defaultMessage(String templateType, Map<String, String> parameters) {
+        return switch (templateType) {
+            case "BUDGET_ALERT" -> "Потрачено " + parameters.getOrDefault("currentSpent", "0")
+                + " из " + parameters.getOrDefault("limit", "0")
+                + " (" + parameters.getOrDefault("percentage", "0%") + ").";
+            case "GOAL_PROGRESS" -> "Накоплено " + parameters.getOrDefault("currentAmount", "0")
+                + " из " + parameters.getOrDefault("targetAmount", "0")
+                + " (" + parameters.getOrDefault("progress", "0%") + ").";
+            case "SUBSCRIPTION_REMINDER" -> "Ожидается списание по подписке "
+                + parameters.getOrDefault("subscriptionName", "") + ".";
+            case "LARGE_TRANSACTION" -> "Проверьте крупную операцию на "
+                + parameters.getOrDefault("amount", "0") + ".";
+            default -> "FinApp обнаружил новое событие по вашим финансам.";
+        };
     }
 }

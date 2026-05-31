@@ -120,8 +120,10 @@ func (r *TransactionRepo) List(ctx context.Context, userID uuid.UUID, filter mod
 	}
 
 	limit := filter.Limit
-	if limit <= 0 || limit > 200 {
+	if limit <= 0 {
 		limit = 50
+	} else if limit > 1000 {
+		limit = 1000
 	}
 	args = append(args, limit)
 	limitPos := len(args)
@@ -237,4 +239,25 @@ func (r *TransactionRepo) Update(ctx context.Context, userID, transactionID uuid
 		return nil, err
 	}
 	return &t, nil
+}
+
+func (r *TransactionRepo) CreateNotification(
+	ctx context.Context,
+	userID uuid.UUID,
+	notificationType string,
+	title string,
+	message string,
+	sourceModule string,
+	entityType string,
+	entityID uuid.UUID,
+	data string,
+) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO notifications (
+			id, user_id, type, title, message, source_module, entity_type, entity_id, data, is_read, is_archived, created_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, '')::jsonb, false, false, NOW()
+		)
+	`, uuid.New(), userID, notificationType, title, message, sourceModule, entityType, entityID, data)
+	return err
 }

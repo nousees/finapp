@@ -153,6 +153,25 @@ func (s *VoiceService) BuildTransactionFromBytes(ctx context.Context, userID uui
 	if err != nil {
 		return nil, err
 	}
+	if tx.Type == model.TypeExpense && tx.Amount >= largeExpenseNotificationThreshold {
+		data, _ := json.Marshal(map[string]interface{}{
+			"amount":        tx.Amount,
+			"currency":      tx.Currency,
+			"transactionId": tx.ID.String(),
+			"source":        "voice",
+		})
+		_ = s.transRepo.CreateNotification(
+			ctx,
+			tx.UserID,
+			"LARGE_TRANSACTION",
+			"Крупная операция",
+			fmt.Sprintf("Голосом добавлен расход %.0f %s. Проверьте распознанную операцию.", tx.Amount, tx.Currency),
+			"GO",
+			"transaction",
+			tx.ID,
+			string(data),
+		)
+	}
 	_ = s.repo.UpdateTransactionID(ctx, voice.ID, tx.ID)
 	if s.processingClient != nil {
 		_ = s.processingClient.ProcessTransaction(ctx, tx.ID, authorization)

@@ -15,7 +15,7 @@ export function TransactionDetailScreen({ navigation, route }: Props) {
   const { formatMoney } = useAppSettings();
   const insets = useSafeAreaInsets();
   const transaction = route.params.transaction;
-  const category = getCategoryById(transaction.category_id);
+  const category = getCategoryById(transaction.category_id || transaction.ml_category_id);
   const isIncome = transaction.type === "INCOME";
 
   return (

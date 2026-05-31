@@ -44,7 +44,7 @@ export function GoalsScreen() {
       const [goalItems, insightData, transactionItems] = await Promise.all([
         listGoals(),
         getFinancialInsights(),
-        listTransactions({ limit: 500 }).catch(() => []),
+        listTransactions({ limit: 1000 }).catch(() => []),
       ]);
       setGoals(Array.isArray(goalItems) ? goalItems : []);
       setInsights(insightData);
@@ -100,7 +100,7 @@ export function GoalsScreen() {
     return item.type === "INCOME" ? sum + amount : item.type === "EXPENSE" ? sum - amount : sum;
   }, 0);
   const summaryBalance = Number(insights?.summary?.netSavings ?? NaN);
-  const grossBalance = Number.isFinite(summaryBalance) ? summaryBalance : transactionBalance;
+  const grossBalance = transactions.length > 0 || !Number.isFinite(summaryBalance) ? transactionBalance : summaryBalance;
   const reservedInGoals = cards.reduce((sum, item) => sum + Number(item.current || 0), 0);
   const availableBalance = Math.max(0, grossBalance - reservedInGoals);
 

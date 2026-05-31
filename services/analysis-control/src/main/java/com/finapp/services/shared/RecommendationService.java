@@ -42,7 +42,11 @@ public class RecommendationService {
     }
 
     public List<Recommendation> getUnappliedRecommendations(UUID userId) {
-        return rerank(recommendationRepository.findByUserIdAndIsAppliedFalse(userId));
+        List<Recommendation> existing = recommendationRepository.findByUserIdAndIsAppliedFalse(userId);
+        if (!existing.isEmpty()) {
+            return rerank(existing);
+        }
+        return rerank(generateRecommendations(userId));
     }
 
     public List<Recommendation> getRecommendationsByPriority(UUID userId, Integer priority) {

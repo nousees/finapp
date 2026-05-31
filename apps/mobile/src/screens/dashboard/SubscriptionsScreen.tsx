@@ -62,9 +62,9 @@ export function SubscriptionsScreen({ navigation }: Props) {
 
   const { totalMonthly, unusedCost, rareCost, unused, rare, active } = useMemo(() => {
     const totalMonthly = subscriptions.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-    const unused = subscriptions.filter((item) => Number(item.usage_index || 0) < 30);
-    const rare = subscriptions.filter((item) => Number(item.usage_index || 0) >= 30 && Number(item.usage_index || 0) < 60);
-    const active = subscriptions.filter((item) => Number(item.usage_index || 0) >= 60);
+    const unused = subscriptions.filter((item) => usagePercent(item.usage_index) < 30);
+    const rare = subscriptions.filter((item) => usagePercent(item.usage_index) >= 30 && usagePercent(item.usage_index) < 60);
+    const active = subscriptions.filter((item) => usagePercent(item.usage_index) >= 60);
     return {
       totalMonthly,
       unused,
@@ -174,7 +174,7 @@ function SubscriptionSection({ title, items }: { title: string; items: ApiSubscr
 function SubscriptionCard({ item }: { item: ApiSubscription }) {
   const { colors } = useAppTheme();
   const { formatMoney } = useAppSettings();
-  const usage = Number(item.usage_index || 0);
+  const usage = usagePercent(item.usage_index);
   const usageColor = usage < 30 ? colors.danger : usage < 60 ? colors.warning : colors.success;
   const icon = usage < 30 ? "alert-circle" : usage < 60 ? "clock" : "check-circle";
 
@@ -213,6 +213,11 @@ function SubscriptionCard({ item }: { item: ApiSubscription }) {
       </View>
     </View>
   );
+}
+
+function usagePercent(value?: number | null) {
+  const raw = Number(value || 0);
+  return Math.round(raw <= 1 ? raw * 100 : raw);
 }
 
 const styles = StyleSheet.create({

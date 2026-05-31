@@ -11,20 +11,31 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 @Component
 public class RecommendationEngineModel {
 
+    private static final BigDecimal ZERO = BigDecimal.ZERO;
+    private static final BigDecimal SMALL_SAVING_RATE = BigDecimal.valueOf(10);
+    private static final BigDecimal HEALTHY_SAVING_RATE = BigDecimal.valueOf(20);
+
     public List<RecommendationCandidate> generateRecommendations(FinancialInsight insight) {
         List<RecommendationCandidate> recommendations = new ArrayList<>();
+        recommendations.addAll(generateCashflowRecommendations(insight.summary()));
         recommendations.addAll(generateBudgetRecommendations(insight.budgets()));
         recommendations.addAll(generateGoalRecommendations(insight.goals()));
-        recommendations.addAll(generateCashflowRecommendations(insight.summary()));
         recommendations.addAll(generateAnomalyRecommendations(insight.anomalies()));
         recommendations.addAll(generateMerchantRecommendations(insight.merchants(), insight.summary()));
+        recommendations.addAll(generateDataQualityRecommendations(insight.summary()));
+
         return recommendations.stream()
-            .sorted((left, right) -> Integer.compare(right.priority(), left.priority()))
+            .sorted(
+                Comparator
+                    .comparing(RecommendationCandidate::priority, Comparator.nullsLast(Comparator.reverseOrder()))
+                    .thenComparing(RecommendationCandidate::estimatedSavings, Comparator.nullsLast(Comparator.reverseOrder()))
+            )
             .limit(8)
             .toList();
     }
@@ -32,60 +43,91 @@ public class RecommendationEngineModel {
     public List<RecommendationCandidate> generateBudgetRecommendations(List<BudgetInsight> budgets) {
         return budgets.stream()
             .filter(budget -> "HIGH".equals(budget.riskLevel()) || "MEDIUM".equals(budget.riskLevel()))
-            .map(budget -> new RecommendationCandidate(
-                "BUDGET_OPTIMIZATION",
-                "Оптимизировать бюджет «" + budget.categoryName() + "»",
-                budget.message(),
-                List.of(
-                    "Проверьте крупные расходы в этой категории",
-                    "Снизьте средний дневной расход до конца периода",
-                    "Перенесите необязательные покупки на следующий период"
-                ),
-                budget.forecastedOverspend().compareTo(BigDecimal.ZERO) > 0
-                    ? budget.forecastedOverspend()
-                    : AnalysisMath.money(budget.spentAmount().multiply(new BigDecimal("0.10"))),
-                "HIGH".equals(budget.riskLevel()) ? 3 : 2,
-                "HIGH".equals(budget.riskLevel()),
-                "budget",
-                budget.budgetId(),
-                "BudgetInsightModel"
-            ))
+            .map(budget -> {
+                boolean highRisk = "HIGH".equals(budget.riskLevel());
+                BigDecimal saving = positiveOrFallback(
+                    budget.forecastedOverspend(),
+                    budget.spentAmount().multiply(new BigDecimal("0.10"))
+                );
+                return new RecommendationCandidate(
+                    "BUDGET_OPTIMIZATION",
+                    highRisk
+                        ? "Бюджет почти исчерпан: " + budget.categoryName()
+                        : "Снизить темп расходов: " + budget.categoryName(),
+                    "По категории уже использовано " + budget.progressPercent() + "% лимита. " + budget.message(),
+                    List.of(
+                        "Проверьте последние операции в этой категории",
+                        "Снизьте ежедневный расход до конца периода",
+                        "Перенесите необязательные покупки на следующий месяц"
+                    ),
+                    saving,
+                    highRisk ? 3 : 2,
+                    highRisk,
+                    "budget",
+                    budget.budgetId(),
+                    "BudgetInsightModel"
+                );
+            })
             .toList();
     }
 
     public List<RecommendationCandidate> generateGoalRecommendations(List<GoalInsight> goals) {
         return goals.stream()
+            .filter(goal -> !"COMPLETED".equals(goal.status()))
             .filter(goal -> "HIGH".equals(goal.riskLevel()) || "MEDIUM".equals(goal.riskLevel()))
-            .map(goal -> new RecommendationCandidate(
-                "GOAL_ACCELERATION",
-                "Ускорить цель «" + goal.name() + "»",
-                goal.message(),
-                List.of(
-                    "Настройте или увеличьте автосбережение",
-                    "Проверьте необязательные расходы за последние 30 дней",
-                    "Перенесите часть свободного cashflow в цель"
-                ),
-                goal.requiredMonthlyContribution(),
-                "HIGH".equals(goal.riskLevel()) ? 3 : 2,
-                "HIGH".equals(goal.riskLevel()),
-                "goal",
-                goal.goalId(),
-                "GoalInsightModel"
-            ))
+            .map(goal -> {
+                boolean highRisk = "HIGH".equals(goal.riskLevel());
+                return new RecommendationCandidate(
+                    "GOAL_ACCELERATION",
+                    highRisk ? "Цель отстаёт: " + goal.name() : "Поддержать прогресс цели: " + goal.name(),
+                    goal.message(),
+                    List.of(
+                        "Пополняйте цель небольшими платежами после доходных операций",
+                        "Направьте часть свободного баланса в цель",
+                        "Проверьте категории, где можно высвободить деньги"
+                    ),
+                    positiveOrFallback(goal.requiredMonthlyContribution(), goal.remainingAmount().multiply(new BigDecimal("0.05"))),
+                    highRisk ? 3 : 2,
+                    highRisk,
+                    "goal",
+                    goal.goalId(),
+                    "GoalInsightModel"
+                );
+            })
             .toList();
     }
 
     private List<RecommendationCandidate> generateCashflowRecommendations(SpendingSummary summary) {
         List<RecommendationCandidate> recommendations = new ArrayList<>();
-        if (summary.netSavings().compareTo(BigDecimal.ZERO) < 0) {
+        if (summary.transactionCount() == 0) {
+            recommendations.add(new RecommendationCandidate(
+                "DATA_START",
+                "Добавьте первые операции",
+                "Для точных советов FinApp нужны транзакции: ручной ввод, голос или импорт CSV/Excel.",
+                List.of(
+                    "Добавьте доход за текущий месяц",
+                    "Загрузите выписку CSV/Excel",
+                    "Создайте хотя бы один бюджет по основной категории"
+                ),
+                ZERO,
+                1,
+                false,
+                null,
+                null,
+                "TransactionAnalyticsModel"
+            ));
+            return recommendations;
+        }
+
+        if (summary.netSavings().compareTo(ZERO) < 0) {
             recommendations.add(new RecommendationCandidate(
                 "CASHFLOW_PROTECTION",
-                "Вернуть cashflow в плюс",
-                "За период расходы превысили доходы на " + summary.netSavings().abs() + ".",
+                "Вернуть баланс периода в плюс",
+                "Расходы выше доходов на " + summary.netSavings().abs() + ". Лучше быстро ограничить необязательные траты.",
                 List.of(
-                    "Ограничьте необязательные расходы на ближайшие 7 дней",
-                    "Проверьте регулярные списания и подписки",
-                    "Сформируйте недельный лимит расходов"
+                    "Поставьте недельный лимит на переменные расходы",
+                    "Проверьте подписки и регулярные списания",
+                    "Отложите крупные покупки до следующего дохода"
                 ),
                 summary.netSavings().abs(),
                 3,
@@ -94,18 +136,34 @@ public class RecommendationEngineModel {
                 null,
                 "TransactionAnalyticsModel"
             ));
-        }
-        if (summary.recurringExpenseTotal().compareTo(BigDecimal.ZERO) > 0) {
+        } else if (summary.savingsRate().compareTo(SMALL_SAVING_RATE) < 0) {
             recommendations.add(new RecommendationCandidate(
-                "RECURRING_PAYMENT_REVIEW",
-                "Проверить регулярные платежи",
-                "За период регулярные расходы составили " + summary.recurringExpenseTotal() + ".",
+                "SAVINGS_RATE",
+                "Увеличить норму накоплений",
+                "Сейчас сохраняется около " + summary.savingsRate() + "% дохода. Цель на ближайший месяц - выйти хотя бы на 10-20%.",
                 List.of(
-                    "Откройте список регулярных платежей",
-                    "Отмените неиспользуемые подписки",
-                    "Проверьте дублирующие сервисы"
+                    "Сразу после дохода переводите часть суммы в цель",
+                    "Сократите 1-2 самые крупные категории расходов",
+                    "Проверьте средний дневной расход"
                 ),
-                AnalysisMath.money(summary.recurringExpenseTotal().multiply(new BigDecimal("0.15"))),
+                summary.totalIncome().multiply(new BigDecimal("0.05")),
+                2,
+                false,
+                null,
+                null,
+                "TransactionAnalyticsModel"
+            ));
+        } else if (summary.savingsRate().compareTo(HEALTHY_SAVING_RATE) >= 0) {
+            recommendations.add(new RecommendationCandidate(
+                "GOOD_FINANCIAL_HABIT",
+                "Закрепить хороший темп накоплений",
+                "Период выглядит устойчиво: доходы превышают расходы, а норма накоплений около " + summary.savingsRate() + "%.",
+                List.of(
+                    "Зафиксируйте автопополнение главной цели",
+                    "Проверьте, не простаивает ли свободный баланс",
+                    "Поддерживайте текущий лимит расходов"
+                ),
+                summary.netSavings().multiply(new BigDecimal("0.05")),
                 1,
                 false,
                 null,
@@ -113,24 +171,44 @@ public class RecommendationEngineModel {
                 "TransactionAnalyticsModel"
             ));
         }
+
+        if (summary.recurringExpenseTotal().compareTo(ZERO) > 0) {
+            recommendations.add(new RecommendationCandidate(
+                "RECURRING_PAYMENT_REVIEW",
+                "Проверить регулярные платежи",
+                "За период регулярные расходы составили " + summary.recurringExpenseTotal() + ". Даже небольшая оптимизация даст быстрый эффект.",
+                List.of(
+                    "Откройте раздел подписок и запустите анализ",
+                    "Удалите или отключите сервисы с низким индексом использования",
+                    "Проверьте дублирующиеся подписки"
+                ),
+                summary.recurringExpenseTotal().multiply(new BigDecimal("0.15")),
+                2,
+                false,
+                null,
+                null,
+                "TransactionAnalyticsModel"
+            ));
+        }
+
         return recommendations;
     }
 
     private List<RecommendationCandidate> generateAnomalyRecommendations(List<AnomalyInsight> anomalies) {
         return anomalies.stream()
-            .filter(anomaly -> "HIGH".equals(anomaly.severity()))
+            .filter(anomaly -> "HIGH".equals(anomaly.severity()) || "MEDIUM".equals(anomaly.severity()))
             .map(anomaly -> new RecommendationCandidate(
                 "ANOMALY_REVIEW",
-                anomaly.title(),
+                "Проверить необычную операцию",
                 anomaly.description(),
                 List.of(
-                    "Проверьте детали операции или категории",
-                    "Подтвердите корректность транзакции",
-                    "При необходимости скорректируйте бюджет"
+                    "Откройте транзакцию и проверьте категорию",
+                    "Убедитесь, что сумма и дата указаны корректно",
+                    "Если это регулярная трата, добавьте её в бюджет"
                 ),
-                anomaly.amount().subtract(anomaly.baselineAmount()).max(BigDecimal.ZERO),
-                3,
-                true,
+                positiveOrFallback(anomaly.amount().subtract(anomaly.baselineAmount()), ZERO),
+                "HIGH".equals(anomaly.severity()) ? 3 : 2,
+                "HIGH".equals(anomaly.severity()),
                 anomaly.transactionId() != null ? "transaction" : "category",
                 anomaly.transactionId() != null ? anomaly.transactionId() : anomaly.categoryId(),
                 "TransactionAnalyticsModel"
@@ -139,21 +217,23 @@ public class RecommendationEngineModel {
     }
 
     private List<RecommendationCandidate> generateMerchantRecommendations(List<MerchantInsight> merchants, SpendingSummary summary) {
-        if (summary.totalExpenses().compareTo(BigDecimal.ZERO) == 0) {
+        if (summary.totalExpenses().compareTo(ZERO) == 0) {
             return List.of();
         }
+
         return merchants.stream()
-            .filter(merchant -> merchant.percentage().compareTo(BigDecimal.valueOf(25)) >= 0 && merchant.transactionCount() >= 2)
+            .filter(merchant -> merchant.percentage().compareTo(BigDecimal.valueOf(20)) >= 0 && merchant.transactionCount() >= 2)
+            .limit(3)
             .map(merchant -> new RecommendationCandidate(
                 "MERCHANT_SPENDING_REVIEW",
-                "Проверить расходы у «" + merchant.merchantName() + "»",
-                "На этого получателя приходится " + merchant.percentage() + "% расходов за период.",
+                "Высокие расходы: " + merchant.merchantName(),
+                "На этого получателя приходится " + merchant.percentage() + "% расходов периода. Средний чек: " + merchant.averageTransaction() + ".",
                 List.of(
-                    "Оцените, все ли покупки были обязательными",
-                    "Сравните цены с альтернативными поставщиками",
-                    "Установите лимит на следующую неделю"
+                    "Проверьте, какие покупки повторяются чаще всего",
+                    "Сравните цены или альтернативы",
+                    "Поставьте лимит на следующую неделю"
                 ),
-                AnalysisMath.money(merchant.amount().multiply(new BigDecimal("0.10"))),
+                merchant.amount().multiply(new BigDecimal("0.10")),
                 2,
                 false,
                 null,
@@ -161,5 +241,34 @@ public class RecommendationEngineModel {
                 "TransactionAnalyticsModel"
             ))
             .toList();
+    }
+
+    private List<RecommendationCandidate> generateDataQualityRecommendations(SpendingSummary summary) {
+        if (summary.transactionCount() == 0 || summary.dataQualityScore().compareTo(BigDecimal.valueOf(75)) >= 0) {
+            return List.of();
+        }
+        return List.of(new RecommendationCandidate(
+            "DATA_QUALITY",
+            "Подтвердить категории операций",
+            "Часть операций имеет низкую уверенность ML. После подтверждения категорий бюджеты и аналитика станут точнее.",
+            List.of(
+                "Откройте транзакции со статусом проверки",
+                "Подтвердите или исправьте категорию",
+                "Запустите рекомендации заново"
+            ),
+            ZERO,
+            1,
+            false,
+            null,
+            null,
+            "TransactionAnalyticsModel"
+        ));
+    }
+
+    private BigDecimal positiveOrFallback(BigDecimal value, BigDecimal fallback) {
+        if (value != null && value.compareTo(ZERO) > 0) {
+            return AnalysisMath.money(value);
+        }
+        return AnalysisMath.money(fallback == null ? ZERO : fallback.max(ZERO));
     }
 }

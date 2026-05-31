@@ -159,7 +159,7 @@ export const SimpleLoginScreen = ({ onLogin }) => {
 
       if (!isLogin && data?.requires_email_verification) {
         setPendingVerificationEmail(email.trim());
-        Alert.alert("Подтвердите почту", "Мы отправили 6-значный код на вашу почту");
+        setVerificationCode("");
         return;
       }
 
@@ -257,7 +257,6 @@ export const SimpleLoginScreen = ({ onLogin }) => {
               <AuthInput icon="mail" placeholder="Email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" />
               <AuthInput icon="lock" placeholder="Пароль минимум 8 символов" value={password} onChangeText={setPassword} secureTextEntry />
               {!isLogin ? <AuthInput icon="lock" placeholder="Повторите пароль" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry /> : null}
-              {!isLogin && pendingVerificationEmail ? <AuthInput icon="hash" placeholder="Код из письма (6 цифр)" value={verificationCode} onChangeText={setVerificationCode} keyboardType="number-pad" maxLength={6} /> : null}
 
               {!isLogin ? (
                 <View style={styles.policyRow}>
@@ -271,9 +270,9 @@ export const SimpleLoginScreen = ({ onLogin }) => {
                 </View>
               ) : null}
 
-              <Pressable onPress={!isLogin && pendingVerificationEmail ? handleEmailVerification : handleSubmit} disabled={isLoading}>
+              <Pressable onPress={handleSubmit} disabled={isLoading}>
                 <LinearGradient colors={["#6B46C1", "#8B5CF6", "#7ED9B6"]} style={[styles.submit, isLoading ? { opacity: 0.72 } : null]}>
-                  {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.submitText}>{!isLogin && pendingVerificationEmail ? "Подтвердить почту" : isLogin ? "Войти" : "Создать аккаунт"}</Text>}
+                  {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.submitText}>{isLogin ? "Войти" : "Создать аккаунт"}</Text>}
                 </LinearGradient>
               </Pressable>
             </View>
@@ -313,6 +312,44 @@ export const SimpleLoginScreen = ({ onLogin }) => {
               <LinearGradient colors={["#6B46C1", "#8B5CF6", "#7ED9B6"]} style={styles.policyModalButton}>
                 <Text style={styles.policyModalButtonText}>Понятно</Text>
               </LinearGradient>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={Boolean(pendingVerificationEmail)} animationType="fade" transparent onRequestClose={() => {}}>
+        <View style={styles.verificationBackdrop}>
+          <View style={styles.verificationCard}>
+            <View style={styles.verificationIcon}>
+              <Feather name="mail" size={24} color="#6B46C1" />
+            </View>
+            <Text style={styles.verificationTitle}>Подтверждение почты</Text>
+            <Text style={styles.verificationText}>
+              Введите 6-значный код, который FinApp отправил на {pendingVerificationEmail}.
+            </Text>
+            <TextInput
+              value={verificationCode}
+              onChangeText={(value) => setVerificationCode(value.replace(/\D/g, "").slice(0, 6))}
+              keyboardType="number-pad"
+              maxLength={6}
+              placeholder="000000"
+              placeholderTextColor="#9CA3AF"
+              style={styles.verificationInput}
+            />
+            <Pressable onPress={handleEmailVerification} disabled={isLoading}>
+              <LinearGradient colors={["#6B46C1", "#8B5CF6", "#7ED9B6"]} style={[styles.verificationButton, isLoading ? { opacity: 0.72 } : null]}>
+                {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.verificationButtonText}>Подтвердить</Text>}
+              </LinearGradient>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setPendingVerificationEmail("");
+                setVerificationCode("");
+              }}
+              disabled={isLoading}
+              style={styles.verificationCancel}
+            >
+              <Text style={styles.verificationCancelText}>Вернуться к регистрации</Text>
             </Pressable>
           </View>
         </View>
@@ -373,6 +410,16 @@ const styles = StyleSheet.create({
   policyModalText: { color: "#374151", fontSize: 14, lineHeight: 21, fontFamily: "Inter_400Regular" },
   policyModalButton: { minHeight: 48, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   policyModalButtonText: { color: "#FFFFFF", fontSize: 15, fontFamily: "Inter_700Bold" },
+  verificationBackdrop: { flex: 1, backgroundColor: "rgba(17,24,39,0.65)", alignItems: "center", justifyContent: "center", padding: 20 },
+  verificationCard: { width: "100%", borderRadius: 24, padding: 22, backgroundColor: "#FFFFFF", alignItems: "center", gap: 12 },
+  verificationIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: "#F5F3FF", alignItems: "center", justifyContent: "center" },
+  verificationTitle: { color: "#1A1A2E", fontSize: 21, fontFamily: "Inter_700Bold", textAlign: "center" },
+  verificationText: { color: "#4B5563", fontSize: 14, lineHeight: 20, fontFamily: "Inter_400Regular", textAlign: "center" },
+  verificationInput: { width: "100%", minHeight: 54, borderRadius: 16, backgroundColor: "#F3F4F6", color: "#1A1A2E", fontSize: 24, fontFamily: "Inter_700Bold", letterSpacing: 6, textAlign: "center" },
+  verificationButton: { width: 220, minHeight: 50, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  verificationButtonText: { color: "#FFFFFF", fontSize: 15, fontFamily: "Inter_700Bold" },
+  verificationCancel: { paddingVertical: 4 },
+  verificationCancelText: { color: "#6B46C1", fontSize: 13, fontFamily: "Inter_600SemiBold" },
   submit: { minHeight: 52, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   submitText: { color: "#FFFFFF", fontSize: 16, fontFamily: "Inter_700Bold" },
 });

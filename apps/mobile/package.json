@@ -4,6 +4,8 @@
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
+    "sync-api-host": "node ./scripts/sync-api-host.js",
+    "prestart": "npm run sync-api-host",
     "start": "expo start --port 8081",
     "android": "expo run:android",
     "ios": "expo run:ios",

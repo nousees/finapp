@@ -3,7 +3,7 @@ import React from 'react';
 import { Feather } from "@expo/vector-icons";
 import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { Animated, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, Modal, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RootTabParamList } from "./types";
@@ -72,6 +72,7 @@ function FinAppTabBar({ state, descriptors, navigation }) {
   const { colors, gradients } = useAppTheme();
   const pulse = useRef(new Animated.Value(1)).current;
   const [sheetVisible, setSheetVisible] = useState(false);
+  const [inputMode, setInputMode] = useState<"import" | "voice" | "manual">("voice");
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -96,6 +97,10 @@ function FinAppTabBar({ state, descriptors, navigation }) {
         key={route.key}
         style={styles.tabItem}
         onPress={() => {
+          if (route.name === "Home") {
+            navigation.navigate("Home", { screen: "DashboardHome" });
+            return;
+          }
           if (route.name === "Transactions") {
             navigation.navigate("Transactions", { screen: "TransactionsList" });
             return;
@@ -115,22 +120,57 @@ function FinAppTabBar({ state, descriptors, navigation }) {
   const visibleRoutes = state.routes.filter((route) => route.name !== "Profile");
   const left = visibleRoutes.slice(0, 2);
   const right = visibleRoutes.slice(2);
+  const inputModes = [
+    { id: "import", screen: "ImportCenter", icon: "file-text" },
+    { id: "voice", screen: "VoiceCapture", icon: "mic" },
+    { id: "manual", screen: "TransactionCreate", icon: "edit-3" },
+  ];
+  const activeInput = inputModes.find((mode) => mode.id === inputMode) || inputModes[1];
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dx) > 14 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
+        onPanResponderRelease: (_, gesture) => {
+          if (gesture.dx > 28) {
+            setInputMode("manual");
+          } else if (gesture.dx < -28) {
+            setInputMode("import");
+          }
+        },
+      }),
+    [],
+  );
 
   return (
     <View style={[styles.tabBar, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
       {left.map((route) => renderTab(route))}
-      <View style={styles.micSlot}>
+      <View style={styles.micSlot} {...panResponder.panHandlers}>
         <Animated.View style={{ transform: [{ scale: pulse }] }}>
           <Pressable
-            onPress={() => navigation.navigate("Transactions", { screen: "VoiceCapture" })}
+            onPress={() => navigation.navigate("Transactions", { screen: activeInput.screen })}
             onLongPress={() => setSheetVisible(true)}
             delayLongPress={350}
           >
             <LinearGradient colors={gradients.success} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.micButton}>
-              <Feather name="mic" size={26} color="#FFFFFF" />
+              <Feather name={activeInput.icon} size={26} color="#FFFFFF" />
             </LinearGradient>
           </Pressable>
         </Animated.View>
+        <View style={styles.inputDots}>
+          {inputModes.map((mode) => (
+            <Pressable
+              key={mode.id}
+              onPress={() => setInputMode(mode.id)}
+              style={[
+                styles.inputDot,
+                {
+                  backgroundColor: mode.id === inputMode ? colors.primary : colors.borderStrong || colors.border,
+                  opacity: mode.id === inputMode ? 1 : 0.65,
+                },
+              ]}
+            />
+          ))}
+        </View>
         <View style={[styles.micGlow, { backgroundColor: `${colors.primary}30` }]} />
       </View>
       {right.map((route) => renderTab(route))}
@@ -238,6 +278,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 2,
+    gap: 4,
   },
   micButton: {
     width: 60,
@@ -258,6 +299,18 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     bottom: -10,
     zIndex: -1,
+  },
+  inputDots: {
+    flexDirection: "row",
+    gap: 4,
+    height: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inputDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
   },
   overlay: {
     flex: 1,

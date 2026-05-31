@@ -6,6 +6,7 @@ import com.finapp.services.dtos.BudgetDTO;
 import com.finapp.services.dtos.BudgetViewDTO;
 import com.finapp.services.exceptions.ValidationException;
 import com.finapp.services.exceptions.NotFoundException;
+import com.finapp.services.shared.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -25,6 +26,7 @@ public class BudgetService {
 
     private final BudgetRepository budgetRepository;
     private final JdbcTemplate jdbcTemplate;
+    private final NotificationService notificationService;
 
     public List<Budget> getUserBudgets(UUID userId) {
         log.info("Getting budgets for user: {}", userId);
@@ -106,7 +108,8 @@ public class BudgetService {
         log.info("Adding expense {} to budget {} for user: {}", amount, budgetId, userId);
 
         Budget budget = getBudget(userId, budgetId);
-        BigDecimal newSpentAmount = budget.getSpentAmount().add(amount);
+        BigDecimal previousProgress = calculateProgressPercent(budget.getSpentAmount(), budget.getAmountLimit());
+        BigDecimal newSpentAmount = nullToZero(budget.getSpentAmount()).add(nullToZero(amount));
 
         if (newSpentAmount.compareTo(budget.getAmountLimit()) > 0) {
             log.warn("Budget {} exceeded! Limit: {}, Spent: {}",
@@ -114,9 +117,9 @@ public class BudgetService {
         }
 
         budget.setSpentAmount(newSpentAmount);
-        budgetRepository.save(budget);
+        Budget saved = budgetRepository.save(budget);
 
-        checkBudgetThresholds(budget);
+        checkBudgetThresholds(saved, previousProgress);
     }
 
     public BigDecimal getBudgetProgress(UUID userId, UUID budgetId) {
@@ -213,15 +216,24 @@ public class BudgetService {
         return value == null ? BigDecimal.ZERO : value;
     }
 
-    private void checkBudgetThresholds(Budget budget) {
+    private void checkBudgetThresholds(Budget budget, BigDecimal previousProgress) {
         try {
             List<Integer> thresholds = budget.getAlertThresholds();
             if (thresholds != null && !thresholds.isEmpty()) {
                 BigDecimal progress = getBudgetProgress(budget.getUserId(), budget.getId());
 
                 for (Integer threshold : thresholds) {
-                    if (progress.compareTo(BigDecimal.valueOf(threshold)) >= 0) {
+                    BigDecimal thresholdValue = BigDecimal.valueOf(threshold);
+                    if (previousProgress.compareTo(thresholdValue) < 0 && progress.compareTo(thresholdValue) >= 0) {
                         log.info("Budget {} reached threshold {}%", budget.getId(), threshold);
+                        notificationService.createBudgetAlert(
+                            budget.getUserId(),
+                            budget.getId(),
+                            resolveCategoryName(budget.getCategoryId()),
+                            nullToZero(budget.getSpentAmount()).doubleValue(),
+                            nullToZero(budget.getAmountLimit()).doubleValue(),
+                            threshold
+                        );
                     }
                 }
             }
@@ -256,6 +268,16 @@ public class BudgetService {
                 }
             }
         }
+    }
+
+    private BigDecimal calculateProgressPercent(BigDecimal spentAmount, BigDecimal amountLimit) {
+        BigDecimal limit = nullToZero(amountLimit);
+        if (limit.compareTo(BigDecimal.ZERO) == 0) {
+            return BigDecimal.ZERO;
+        }
+        return nullToZero(spentAmount)
+            .multiply(BigDecimal.valueOf(100))
+            .divide(limit, 2, java.math.RoundingMode.HALF_UP);
     }
 
     private UUID parseAndValidateCategoryId(UUID userId, String rawCategoryId) {
