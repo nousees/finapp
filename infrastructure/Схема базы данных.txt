@@ -220,7 +220,7 @@ CREATE TABLE goal_transactions (
 CREATE TABLE notifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    type VARCHAR(50) NOT NULL, -- 'BUDGET_ALERT', 'GOAL_PROGRESS', 'SUBSCRIPTION_REMINDER', 'HABIT_DETECTED', 'LARGE_TRANSACTION', 'SYSTEM'
+    type VARCHAR(50) NOT NULL, -- BUDGET_*, GOAL_*, LARGE_TRANSACTION, UNUSUAL_TRANSACTION, CATEGORY_SPIKE, SUBSCRIPTION_*, SYSTEM
     title VARCHAR(255) NOT NULL,
     message TEXT NOT NULL,
     source_module VARCHAR(20) NOT NULL CHECK (source_module IN ('GO', 'JAVA', 'ML', 'SYSTEM')),
@@ -396,6 +396,7 @@ CREATE INDEX idx_transactions_user_category ON transactions(user_id, category_id
 CREATE INDEX idx_budgets_user_period ON budgets(user_id, period_start, period_end);
 CREATE INDEX idx_goals_user_status ON goals(user_id, status, deadline);
 CREATE INDEX idx_notifications_user_read ON notifications(user_id, is_read, created_at DESC);
+CREATE INDEX idx_notifications_user_type_entity_created ON notifications(user_id, type, entity_type, entity_id, created_at DESC);
 CREATE INDEX idx_subscriptions_user_active ON subscriptions(user_id, is_active, next_billing_date);
 CREATE INDEX idx_subscription_feedback_user_updated ON subscription_feedback(user_id, updated_at DESC);
 CREATE INDEX idx_voice_user_status ON voice_transcriptions(user_id, status);

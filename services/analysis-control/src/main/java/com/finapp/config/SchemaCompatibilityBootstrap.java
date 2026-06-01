@@ -31,6 +31,7 @@ public class SchemaCompatibilityBootstrap {
         );
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_events_recommendation_id ON recommendation_events(recommendation_id)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_recommendation_events_user_id ON recommendation_events(user_id)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_notifications_user_type_entity_created ON notifications(user_id, type, entity_type, entity_id, created_at DESC)");
         log.info("Ensured compatibility columns are present");
     }
 }
