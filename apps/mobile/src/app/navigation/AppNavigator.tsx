@@ -17,6 +17,26 @@ import { useAppTheme } from "@shared/theme/ThemeProvider";
 
 const Tab = createBottomTabNavigator();
 
+type InputModeId = "import" | "voice" | "manual";
+type SwipeDirection = "left" | "right";
+
+const INPUT_MODES: Array<{ id: InputModeId; screen: "ImportCenter" | "VoiceCapture" | "TransactionCreate"; icon: keyof typeof Feather.glyphMap }> = [
+  { id: "import", screen: "ImportCenter", icon: "file-text" },
+  { id: "voice", screen: "VoiceCapture", icon: "mic" },
+  { id: "manual", screen: "TransactionCreate", icon: "edit-3" },
+];
+
+const SWIPE_DISTANCE_THRESHOLD = 28;
+const SWIPE_VELOCITY_THRESHOLD = 0.35;
+
+function getAdjacentInputMode(currentMode: InputModeId, direction: SwipeDirection): InputModeId {
+  const currentIndex = Math.max(0, INPUT_MODES.findIndex((mode) => mode.id === currentMode));
+  const nextIndex = direction === "right" ? currentIndex + 1 : currentIndex - 1;
+  const clampedIndex = Math.min(Math.max(nextIndex, 0), INPUT_MODES.length - 1);
+
+  return INPUT_MODES[clampedIndex].id;
+}
+
 export function AppNavigator({ onLogout }: { onLogout?: () => void }) {
   const { colors, gradients, isDark } = useAppTheme();
   const { t } = useAppSettings();
@@ -72,7 +92,7 @@ function FinAppTabBar({ state, descriptors, navigation }) {
   const { colors, gradients } = useAppTheme();
   const pulse = useRef(new Animated.Value(1)).current;
   const [sheetVisible, setSheetVisible] = useState(false);
-  const [inputMode, setInputMode] = useState<"import" | "voice" | "manual">("voice");
+  const [inputMode, setInputMode] = useState<InputModeId>("voice");
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -120,22 +140,21 @@ function FinAppTabBar({ state, descriptors, navigation }) {
   const visibleRoutes = state.routes.filter((route) => route.name !== "Profile");
   const left = visibleRoutes.slice(0, 2);
   const right = visibleRoutes.slice(2);
-  const inputModes = [
-    { id: "import", screen: "ImportCenter", icon: "file-text" },
-    { id: "voice", screen: "VoiceCapture", icon: "mic" },
-    { id: "manual", screen: "TransactionCreate", icon: "edit-3" },
-  ];
+  const inputModes = INPUT_MODES;
   const activeInput = inputModes.find((mode) => mode.id === inputMode) || inputModes[1];
   const panResponder = useMemo(
     () =>
       PanResponder.create({
         onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dx) > 14 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
         onPanResponderRelease: (_, gesture) => {
-          if (gesture.dx > 28) {
-            setInputMode("manual");
-          } else if (gesture.dx < -28) {
-            setInputMode("import");
+          const isIntentionalSwipe =
+            Math.abs(gesture.dx) >= SWIPE_DISTANCE_THRESHOLD || Math.abs(gesture.vx) >= SWIPE_VELOCITY_THRESHOLD;
+
+          if (!isIntentionalSwipe) {
+            return;
           }
+
+          setInputMode((currentMode) => getAdjacentInputMode(currentMode, gesture.dx > 0 ? "right" : "left"));
         },
       }),
     [],
