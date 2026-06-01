@@ -48,6 +48,7 @@ func main() {
 	{
 		apiGroup.GET("/subscriptions", handler.ListSubscriptions)
 		apiGroup.POST("/analyze-subscriptions", handler.AnalyzeSubscriptions)
+		apiGroup.POST("/subscriptions/:id/feedback", handler.SaveSubscriptionFeedback)
 	}
 
 	router.GET("/health", func(c *gin.Context) {
