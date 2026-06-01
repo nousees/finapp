@@ -14,7 +14,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -123,6 +125,7 @@ public class GoalService {
 
         Goal saved = goalRepository.save(goal);
         sendProgressNotificationIfNeeded(userId, saved, previousProgress, newProgress);
+        sendGoalPlanNotificationIfNeeded(userId, saved, previousProgress, newProgress);
         return saved;
     }
     
@@ -185,21 +188,117 @@ public class GoalService {
     }
 
     private void sendProgressNotificationIfNeeded(UUID userId, Goal goal, BigDecimal previousProgress, BigDecimal newProgress) {
-        int[] thresholds = {25, 50, 75, 100};
+        int[] thresholds = {25, 50, 75, 90, 100};
         for (int threshold : thresholds) {
             if (previousProgress.compareTo(BigDecimal.valueOf(threshold)) < 0
                 && newProgress.compareTo(BigDecimal.valueOf(threshold)) >= 0) {
-                notificationService.createGoalProgressNotification(
-                    userId,
-                    goal.getId(),
-                    goal.getName(),
-                    nullToZero(goal.getCurrentAmount()).doubleValue(),
-                    nullToZero(goal.getTargetAmount()).doubleValue(),
-                    newProgress.doubleValue()
-                );
+                if (threshold >= 100 || GoalStatus.COMPLETED.toString().equalsIgnoreCase(goal.getStatus())) {
+                    notificationService.createGoalCompleted(
+                        userId,
+                        goal.getId(),
+                        goal.getName(),
+                        nullToZero(goal.getTargetAmount()),
+                        goal.getCurrency()
+                    );
+                } else if (threshold >= 90) {
+                    notificationService.createGoalAlmostCompleted(
+                        userId,
+                        goal.getId(),
+                        goal.getName(),
+                        nullToZero(goal.getTargetAmount()).subtract(nullToZero(goal.getCurrentAmount())).max(BigDecimal.ZERO),
+                        newProgress,
+                        goal.getCurrency()
+                    );
+                } else {
+                    notificationService.createGoalProgressNotification(
+                        userId,
+                        goal.getId(),
+                        goal.getName(),
+                        nullToZero(goal.getCurrentAmount()),
+                        nullToZero(goal.getTargetAmount()),
+                        newProgress,
+                        goal.getCurrency()
+                    );
+                }
                 return;
             }
         }
+    }
+
+    private void sendGoalPlanNotificationIfNeeded(UUID userId, Goal goal, BigDecimal previousProgress, BigDecimal newProgress) {
+        if (!GoalStatus.ACTIVE.toString().equalsIgnoreCase(goal.getStatus())) {
+            return;
+        }
+        BigDecimal targetAmount = nullToZero(goal.getTargetAmount());
+        BigDecimal currentAmount = nullToZero(goal.getCurrentAmount());
+        if (targetAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+
+        BigDecimal remainingAmount = targetAmount.subtract(currentAmount).max(BigDecimal.ZERO);
+        long daysLeft = Math.max(ChronoUnit.DAYS.between(LocalDate.now(), goal.getDeadline()), 0);
+        if (remainingAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+
+        if (daysLeft <= 7) {
+            notificationService.createGoalDeadlineRisk(
+                userId,
+                goal.getId(),
+                goal.getName(),
+                remainingAmount,
+                daysLeft,
+                goal.getCurrency()
+            );
+            return;
+        }
+
+        BigDecimal expectedProgress = expectedGoalProgress(goal);
+        if (expectedProgress.subtract(newProgress).compareTo(BigDecimal.TEN) >= 0) {
+            notificationService.createGoalBehindSchedule(
+                userId,
+                goal.getId(),
+                goal.getName(),
+                requiredMonthlyAmount(remainingAmount, daysLeft),
+                newProgress,
+                expectedProgress,
+                goal.getCurrency()
+            );
+            return;
+        }
+
+        BigDecimal suggestedContribution = requiredMonthlyAmount(remainingAmount, daysLeft);
+        if (suggestedContribution.compareTo(BigDecimal.ZERO) > 0
+            && (goal.getAutoSaveAmount() == null || goal.getAutoSaveAmount().compareTo(suggestedContribution) < 0)) {
+            notificationService.createGoalContributionDue(
+                userId,
+                goal.getId(),
+                goal.getName(),
+                suggestedContribution,
+                daysLeft,
+                goal.getCurrency()
+            );
+        }
+    }
+
+    private BigDecimal expectedGoalProgress(Goal goal) {
+        if (goal.getCreatedAt() == null || goal.getDeadline() == null) {
+            return BigDecimal.ZERO;
+        }
+        long totalDays = Math.max(ChronoUnit.DAYS.between(goal.getCreatedAt().toLocalDate(), goal.getDeadline()), 1);
+        long elapsedDays = Math.min(Math.max(ChronoUnit.DAYS.between(goal.getCreatedAt().toLocalDate(), LocalDate.now()), 0), totalDays);
+        return BigDecimal.valueOf(elapsedDays)
+            .multiply(BigDecimal.valueOf(100))
+            .divide(BigDecimal.valueOf(totalDays), 2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal requiredMonthlyAmount(BigDecimal remainingAmount, long daysLeft) {
+        BigDecimal monthsLeft = BigDecimal.valueOf(Math.max(daysLeft, 1))
+            .divide(BigDecimal.valueOf(30), 4, RoundingMode.HALF_UP);
+        if (monthsLeft.compareTo(BigDecimal.ONE) < 0) {
+            monthsLeft = BigDecimal.ONE;
+        }
+        return remainingAmount.divide(monthsLeft, 2, RoundingMode.HALF_UP);
     }
 
     private BigDecimal nullToZero(BigDecimal value) {

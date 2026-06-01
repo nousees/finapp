@@ -14,6 +14,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -200,6 +203,11 @@ public class BudgetService {
         return nullToZero(value);
     }
 
+
+    private BigDecimal currentBudgetSpent(Budget budget) {
+        return calculateSpentAmount(budget).max(nullToZero(budget.getSpentAmount()));
+    }
+
     private String resolveCategoryName(UUID categoryId) {
         if (categoryId == null) {
             return "Общий бюджет";
@@ -219,27 +227,84 @@ public class BudgetService {
     private void checkBudgetThresholds(Budget budget, BigDecimal previousProgress) {
         try {
             List<Integer> thresholds = budget.getAlertThresholds();
-            if (thresholds != null && !thresholds.isEmpty()) {
-                BigDecimal progress = getBudgetProgress(budget.getUserId(), budget.getId());
+            if (thresholds == null || thresholds.isEmpty()) {
+                thresholds = List.of(70, 85, 95, 100);
+            }
 
-                for (Integer threshold : thresholds) {
-                    BigDecimal thresholdValue = BigDecimal.valueOf(threshold);
-                    if (previousProgress.compareTo(thresholdValue) < 0 && progress.compareTo(thresholdValue) >= 0) {
-                        log.info("Budget {} reached threshold {}%", budget.getId(), threshold);
-                        notificationService.createBudgetAlert(
-                            budget.getUserId(),
-                            budget.getId(),
-                            resolveCategoryName(budget.getCategoryId()),
-                            nullToZero(budget.getSpentAmount()).doubleValue(),
-                            nullToZero(budget.getAmountLimit()).doubleValue(),
-                            threshold
-                        );
-                    }
+            BigDecimal spent = currentBudgetSpent(budget);
+            BigDecimal limit = nullToZero(budget.getAmountLimit());
+            BigDecimal progress = calculateProgressPercent(spent, limit);
+            BigDecimal remaining = limit.subtract(spent).max(BigDecimal.ZERO);
+            long daysLeft = daysLeftInPeriod(budget);
+            BigDecimal safeDailyAmount = safeDailyAmount(remaining, daysLeft);
+            String budgetName = resolveCategoryName(budget.getCategoryId());
+
+            for (Integer threshold : thresholds) {
+                BigDecimal thresholdValue = BigDecimal.valueOf(threshold);
+                if (previousProgress.compareTo(thresholdValue) < 0 && progress.compareTo(thresholdValue) >= 0) {
+                    log.info("Budget {} reached threshold {}%", budget.getId(), threshold);
+                    notificationService.createBudgetThresholdNotification(
+                        budget.getUserId(),
+                        budget.getId(),
+                        budgetName,
+                        spent,
+                        limit,
+                        threshold,
+                        remaining,
+                        daysLeft,
+                        safeDailyAmount,
+                        budget.getCurrency()
+                    );
                 }
+            }
+
+            checkBudgetForecast(budget, budgetName, spent, limit);
+            if (progress.compareTo(BigDecimal.valueOf(70)) >= 0 && remaining.compareTo(BigDecimal.ZERO) > 0) {
+                notificationService.createDailySafeLimit(
+                    budget.getUserId(), budget.getId(), budgetName, remaining, daysLeft, safeDailyAmount, budget.getCurrency());
+            }
+            if (daysLeft <= 3 && remaining.compareTo(BigDecimal.ZERO) > 0) {
+                notificationService.createBudgetPeriodEnding(
+                    budget.getUserId(), budget.getId(), budgetName, remaining, daysLeft, safeDailyAmount, budget.getCurrency());
             }
         } catch (Exception e) {
             log.error("Error checking budget thresholds: {}", e.getMessage());
         }
+    }
+
+    private void checkBudgetForecast(Budget budget, String budgetName, BigDecimal spent, BigDecimal limit) {
+        if (limit.compareTo(BigDecimal.ZERO) <= 0 || spent.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+        long daysTotal = Math.max(ChronoUnit.DAYS.between(budget.getPeriodStart(), budget.getPeriodEnd()) + 1, 1);
+        long daysPassed = Math.min(
+            Math.max(ChronoUnit.DAYS.between(budget.getPeriodStart(), LocalDate.now()) + 1, 1),
+            daysTotal
+        );
+        BigDecimal projectedSpent = spent
+            .divide(BigDecimal.valueOf(daysPassed), 4, RoundingMode.HALF_UP)
+            .multiply(BigDecimal.valueOf(daysTotal));
+        if (projectedSpent.compareTo(limit.multiply(BigDecimal.valueOf(1.10))) >= 0) {
+            notificationService.createBudgetForecastRisk(
+                budget.getUserId(),
+                budget.getId(),
+                budgetName,
+                spent,
+                limit,
+                daysPassed,
+                daysTotal,
+                projectedSpent,
+                budget.getCurrency()
+            );
+        }
+    }
+
+    private long daysLeftInPeriod(Budget budget) {
+        return Math.max(ChronoUnit.DAYS.between(LocalDate.now(), budget.getPeriodEnd()) + 1, 1);
+    }
+
+    private BigDecimal safeDailyAmount(BigDecimal remaining, long daysLeft) {
+        return nullToZero(remaining).divide(BigDecimal.valueOf(Math.max(daysLeft, 1)), 2, RoundingMode.HALF_UP);
     }
 
     private void validateBudgetOverlap(UUID userId, BudgetDTO budgetDTO, UUID categoryId) {
