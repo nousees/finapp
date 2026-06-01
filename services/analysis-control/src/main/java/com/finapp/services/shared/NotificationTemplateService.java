@@ -103,14 +103,40 @@ public class NotificationTemplateService {
     public void createDefaultTemplates() {
         List<NotificationTemplate> defaultTemplates = List.of(
             createBudgetAlertTemplate(),
+            createTemplate("BUDGET_EXCEEDED", "Бюджет превышен: {{budgetName}}", "Лимит превышен. Проверьте последние операции и скорректируйте траты.", 3),
+            createTemplate("BUDGET_FORECAST_RISK", "Темп расходов выше плана", "По текущему темпу бюджет может закончиться раньше срока.", 2),
+            createTemplate("DAILY_SAFE_LIMIT", "Дневной лимит по бюджету", "Безопасный дневной лимит: {{safeDailyAmount}}. Осталось {{remaining}}.", 1),
+            createTemplate("BUDGET_PERIOD_ENDING", "Бюджетный период скоро закончится", "До конца периода осталось {{daysLeft}} дней. Проверьте остаток бюджета.", 1),
             createGoalProgressTemplate(),
+            createTemplate("GOAL_CONTRIBUTION_DUE", "Пора пополнить цель {{goalName}}", "Чтобы сохранить план, внесите {{requiredAmount}}.", 2),
+            createTemplate("GOAL_BEHIND_SCHEDULE", "Цель {{goalName}} отстаёт", "Проверьте план: нужно откладывать около {{requiredMonthlyAmount}} в месяц.", 2),
+            createTemplate("GOAL_DEADLINE_RISK", "Цель может не успеть", "До срока мало времени. Осталось накопить {{remainingAmount}}.", 3),
+            createTemplate("GOAL_ALMOST_COMPLETED", "До цели осталось немного", "Осталось {{remainingAmount}}. Можно закрыть цель досрочно.", 2),
+            createTemplate("GOAL_COMPLETED", "Цель достигнута", "Вы накопили {{targetAmount}}. Отличный результат.", 3),
             createSubscriptionReminderTemplate(),
+            createTemplate("SUBSCRIPTION_RENEWAL", "Скоро спишется {{subscriptionName}}", "Проверьте подписку перед списанием {{amount}}.", 2),
+            createTemplate("SUBSCRIPTION_UNUSED", "Проверить подписку {{subscriptionName}}", "Подписка выглядит редко используемой. Ответьте на один вопрос перед отменой.", 2),
+            createTemplate("SUBSCRIPTION_DUPLICATE", "Похожие подписки", "Найдено несколько похожих подписок. Проверьте, все ли нужны.", 2),
+            createTemplate("SUBSCRIPTION_PRICE_INCREASE", "Подписка подорожала", "Стоимость выросла. Проверьте тариф и альтернативы.", 2),
             createHabitDetectedTemplate(),
-            createLargeTransactionTemplate()
+            createLargeTransactionTemplate(),
+            createTemplate("UNUSUAL_TRANSACTION", "Нетипичная трата", "Операция отличается от обычных расходов. Проверьте категорию.", 3),
+            createTemplate("CATEGORY_SPIKE", "Расходы в категории выросли", "Расходы заметно выше обычного. Проверьте операции.", 2),
+            createTemplate("RECURRING_TRANSACTION_DETECTED", "Новая повторяющаяся трата", "FinApp заметил регулярный платёж. Проверьте, подписка ли это.", 1)
         );
 
         notificationTemplateRepository.saveAll(defaultTemplates);
         log.info("Created default notification templates");
+    }
+
+
+    private NotificationTemplate createTemplate(String type, String titleTemplate, String messageTemplate, Integer priority) {
+        NotificationTemplate template = new NotificationTemplate();
+        template.setType(type);
+        template.setTitleTemplate(titleTemplate);
+        template.setMessageTemplate(messageTemplate);
+        template.setPriority(priority);
+        return template;
     }
 
     private NotificationTemplate createBudgetAlertTemplate() {

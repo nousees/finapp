@@ -28,6 +28,14 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
     List<Notification> findByUserIdAndSourceModule(UUID userId, String sourceModule);
     
     List<Notification> findByUserIdAndCreatedAtAfter(UUID userId, OffsetDateTime date);
+
+    boolean existsByUserIdAndTypeAndEntityTypeAndEntityIdAndCreatedAtAfter(
+        UUID userId,
+        String type,
+        String entityType,
+        UUID entityId,
+        OffsetDateTime createdAt
+    );
     
     @Query("SELECT n FROM Notification n WHERE n.userId = :userId " +
            "AND n.scheduledFor IS NOT NULL " +

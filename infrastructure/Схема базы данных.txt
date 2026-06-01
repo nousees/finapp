@@ -124,9 +124,32 @@ CREATE TABLE subscriptions (
     next_billing_date DATE NOT NULL,
     is_active BOOLEAN DEFAULT TRUE,
     ml_detected BOOLEAN DEFAULT FALSE, -- обнаружено ML
-    usage_index DECIMAL(5,2), -- индекс использования (0-100)
+    usage_index DECIMAL(5,2), -- индекс использования (0-1)
+    subscription_confidence DECIMAL(5,4) DEFAULT 0.5,
+    recommendation_confidence DECIMAL(5,4) DEFAULT 0,
+    budget_impact DECIMAL(5,4) DEFAULT 0,
+    related_activity_index DECIMAL(5,4) DEFAULT 0,
+    user_feedback_score DECIMAL(5,4),
+    status VARCHAR(40) DEFAULT 'needs_review',
+    recommendation_type VARCHAR(40),
+    evidence_summary TEXT DEFAULT '',
+    next_action TEXT DEFAULT '',
+    recommendation TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+
+CREATE TABLE subscription_feedback (
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    subscription_name VARCHAR(200) NOT NULL,
+    usage_frequency VARCHAR(20) NOT NULL,
+    importance VARCHAR(20) NOT NULL DEFAULT 'medium',
+    decision VARCHAR(40) NOT NULL DEFAULT 'none',
+    feedback_score DECIMAL(5,4) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, subscription_name)
 );
 
 4. Бюджеты (Java модуль)
@@ -197,11 +220,11 @@ CREATE TABLE goal_transactions (
 CREATE TABLE notifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    type VARCHAR(50) NOT NULL, -- 'BUDGET_ALERT', 'GOAL_PROGRESS', 'SUBSCRIPTION_REMINDER', 'HABIT_DETECTED', 'LARGE_TRANSACTION', 'SYSTEM'
+    type VARCHAR(50) NOT NULL, -- budget, goal, operation, subscription and system notification types
     title VARCHAR(255) NOT NULL,
     message TEXT NOT NULL,
     source_module VARCHAR(20) NOT NULL CHECK (source_module IN ('GO', 'JAVA', 'ML', 'SYSTEM')),
-    entity_type VARCHAR(50), -- 'transaction', 'budget', 'goal', 'subscription'
+    entity_type VARCHAR(50), -- 'transaction', 'category', 'budget', 'goal', 'subscription'
     entity_id UUID, -- ID связанной сущности
     data JSONB, -- дополнительные данные
     is_read BOOLEAN DEFAULT FALSE,
@@ -373,7 +396,9 @@ CREATE INDEX idx_transactions_user_category ON transactions(user_id, category_id
 CREATE INDEX idx_budgets_user_period ON budgets(user_id, period_start, period_end);
 CREATE INDEX idx_goals_user_status ON goals(user_id, status, deadline);
 CREATE INDEX idx_notifications_user_read ON notifications(user_id, is_read, created_at DESC);
+CREATE INDEX idx_notifications_user_type_entity_created ON notifications(user_id, type, entity_type, entity_id, created_at DESC);
 CREATE INDEX idx_subscriptions_user_active ON subscriptions(user_id, is_active, next_billing_date);
+CREATE INDEX idx_subscription_feedback_user_updated ON subscription_feedback(user_id, updated_at DESC);
 CREATE INDEX idx_voice_user_status ON voice_transcriptions(user_id, status);
 -- Для поиска неподтвержденных транзакций (ML категоризация)
 CREATE INDEX idx_transactions_is_verified ON transactions(is_verified);

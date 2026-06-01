@@ -23,7 +23,7 @@ public class Notification {
     private UUID userId;
     
     @Column(name = "type", nullable = false, length = 50)
-    private String type; // BUDGET_ALERT, GOAL_PROGRESS, SUBSCRIPTION_REMINDER, HABIT_DETECTED, LARGE_TRANSACTION, SYSTEM
+    private String type; // budget, goal, transaction, subscription and system notification types
     
     @Column(name = "title", nullable = false, length = 255)
     private String title;
@@ -35,7 +35,7 @@ public class Notification {
     private String sourceModule; // GO, JAVA, ML, SYSTEM
     
     @Column(name = "entity_type", length = 50)
-    private String entityType; // transaction, budget, goal, subscription
+    private String entityType; // transaction, category, budget, goal, subscription
     
     @Column(name = "entity_id")
     private UUID entityId;

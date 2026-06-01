@@ -85,10 +85,31 @@ CREATE TABLE subscriptions (
     category_id UUID REFERENCES categories(id),
     recurrence VARCHAR(20) NOT NULL CHECK (recurrence IN ('WEEKLY', 'MONTHLY', 'YEARLY')),
     usage_index DECIMAL(5,2),
+    subscription_confidence DECIMAL(5,4) DEFAULT 0.5,
+    recommendation_confidence DECIMAL(5,4) DEFAULT 0,
+    budget_impact DECIMAL(5,4) DEFAULT 0,
+    related_activity_index DECIMAL(5,4) DEFAULT 0,
+    user_feedback_score DECIMAL(5,4),
+    status VARCHAR(40) DEFAULT 'needs_review',
+    recommendation_type VARCHAR(40),
+    evidence_summary TEXT DEFAULT '',
+    next_action TEXT DEFAULT '',
     is_active BOOLEAN DEFAULT TRUE,
     recommendation TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE subscription_feedback (
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    subscription_name VARCHAR(200) NOT NULL,
+    usage_frequency VARCHAR(20) NOT NULL,
+    importance VARCHAR(20) NOT NULL DEFAULT 'medium',
+    decision VARCHAR(40) NOT NULL DEFAULT 'none',
+    feedback_score DECIMAL(5,4) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, subscription_name)
 );
 
 CREATE TABLE recommendations (
@@ -113,3 +134,4 @@ CREATE INDEX idx_transactions_is_verified ON transactions(user_id, is_verified);
 CREATE INDEX idx_imports_user ON imports(user_id);
 CREATE INDEX idx_voice_user_status ON voice_transcriptions(user_id, status);
 CREATE INDEX idx_subscriptions_user_active ON subscriptions(user_id, is_active);
+CREATE INDEX idx_subscription_feedback_user_updated ON subscription_feedback(user_id, updated_at DESC);
