@@ -57,7 +57,7 @@ public class NotificationService {
         notification.setType(type);
         notification.setTitle(title);
         notification.setMessage(message);
-        notification.setSourceModule(sourceModule);
+        notification.setSourceModule(normalizeSourceModule(sourceModule));
         notification.setEntityType(entityType);
         notification.setEntityId(entityId);
         
@@ -105,7 +105,7 @@ public class NotificationService {
         );
         
         return createNotificationFromTemplate(userId, "BUDGET_ALERT", params, 
-                                             "BUDGET", "budget", budgetId);
+                                             "JAVA", "budget", budgetId);
     }
     
     @Transactional
@@ -120,7 +120,7 @@ public class NotificationService {
         );
         
         return createNotificationFromTemplate(userId, "GOAL_PROGRESS", params,
-                                             "GOAL", "goal", goalId);
+                                             "JAVA", "goal", goalId);
     }
     
     @Transactional
@@ -156,6 +156,16 @@ public class NotificationService {
         }
     }
     
+    private String normalizeSourceModule(String sourceModule) {
+        if (sourceModule == null) {
+            return "JAVA";
+        }
+        return switch (sourceModule.toUpperCase()) {
+            case "GO", "JAVA", "ML", "SYSTEM" -> sourceModule.toUpperCase();
+            default -> "JAVA";
+        };
+    }
+
     private String replacePlaceholders(String template, Map<String, String> parameters) {
         String result = template;
         for (Map.Entry<String, String> entry : parameters.entrySet()) {

@@ -2,6 +2,7 @@ package com.finapp.controllers.shared;
 
 import com.finapp.controllers.ApiResponse;
 import com.finapp.security.JwtUserIdExtractor;
+import com.finapp.services.shared.FinancialNotificationService;
 import com.finapp.services.shared.NotificationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,6 +27,7 @@ import java.util.UUID;
 public class NotificationController {
 
     private final NotificationService notificationService;
+    private final FinancialNotificationService financialNotificationService;
 
     @GetMapping
     @PreAuthorize("hasAuthority('SCOPE_notifications:read')")
@@ -73,6 +75,21 @@ public class NotificationController {
             ApiResponse.success(
                 "Unread notifications count retrieved",
                 Map.of("count", notificationService.getUnreadCount(userId))
+            )
+        );
+    }
+
+
+    @PostMapping("/generate-smart")
+    @PreAuthorize("hasAuthority('SCOPE_notifications:write')")
+    @Operation(summary = "Generate smart financial notifications")
+    public ResponseEntity<ApiResponse<?>> generateSmartNotifications(
+            @AuthenticationPrincipal Jwt jwt) {
+        UUID userId = extractUserId(jwt);
+        return ResponseEntity.ok(
+            ApiResponse.success(
+                "Smart notifications generated",
+                financialNotificationService.generateSmartNotifications(userId)
             )
         );
     }

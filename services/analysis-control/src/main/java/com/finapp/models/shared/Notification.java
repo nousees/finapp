@@ -23,7 +23,7 @@ public class Notification {
     private UUID userId;
     
     @Column(name = "type", nullable = false, length = 50)
-    private String type; // BUDGET_ALERT, GOAL_PROGRESS, SUBSCRIPTION_REMINDER, HABIT_DETECTED, LARGE_TRANSACTION, SYSTEM
+    private String type; // BUDGET_*, GOAL_*, LARGE_TRANSACTION, UNUSUAL_TRANSACTION, CATEGORY_SPIKE, SUBSCRIPTION_*, SYSTEM
     
     @Column(name = "title", nullable = false, length = 255)
     private String title;
