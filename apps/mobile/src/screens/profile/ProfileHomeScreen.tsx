@@ -33,15 +33,14 @@ const emptyProfile: EditableProfile = {
 
 export function ProfileHomeScreen({ navigation, onLogout }: Props) {
   const { colors, gradients, mode, toggleMode } = useAppTheme();
-  const { formatMoney } = useAppSettings();
+  const { settings, setSetting, formatMoney, t } = useAppSettings();
   const { user } = useUser();
   const insets = useSafeAreaInsets();
   const [profile, setProfile] = useState<EditableProfile>(emptyProfile);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [insights, setInsights] = useState(null);
-  const [transactionCount, setTransactionCount] = useState(0);
+  const [transactions, setTransactions] = useState([]);
   const profileStorageKey = useMemo(() => `${PROFILE_STORAGE_KEY}:${user?.id || user?.email || "anonymous"}`, [user?.email, user?.id]);
 
   useEffect(() => {
@@ -51,10 +50,10 @@ export function ProfileHomeScreen({ navigation, onLogout }: Props) {
   useFocusEffect(
     useCallback(() => {
       let active = true;
-      Promise.all([getFinancialInsights().catch(() => null), listTransactions().catch(() => [])]).then(([nextInsights, tx]) => {
+      Promise.all([getFinancialInsights().catch(() => null), listTransactions({ limit: 1000 }).catch(() => [])]).then(([nextInsights, tx]) => {
         if (!active) return;
         setInsights(nextInsights);
-        setTransactionCount(tx.length);
+        setTransactions(Array.isArray(tx) ? tx : []);
       });
       return () => {
         active = false;
@@ -62,8 +61,8 @@ export function ProfileHomeScreen({ navigation, onLogout }: Props) {
     }, []),
   );
 
-  const displayName = profile.displayName.trim() || user?.full_name || "Пользователь FinApp";
-  const email = user?.email || "email не указан";
+  const displayName = profile.displayName.trim() || user?.full_name || t("profileFallbackName");
+  const email = user?.email || t("emailMissing");
   const hasProfile = useMemo(() => Object.values(profile).some((value) => value.trim().length > 0), [profile]);
   const initials = useMemo(() => {
     const source = displayName || email;
@@ -75,9 +74,15 @@ export function ProfileHomeScreen({ navigation, onLogout }: Props) {
       .toUpperCase();
   }, [displayName, email]);
 
+  const totals = useMemo(() => calculateTransactionTotals(transactions), [transactions]);
   const summary = insights?.summary;
-  const healthScore = Math.round(insights?.healthScore?.score ?? Math.max(35, Math.min(92, 60 + Number(summary?.savingsRate || 0))));
-  const savingsRate = Math.round(summary?.savingsRate ?? 0);
+  const hasTransactions = transactions.length > 0;
+  const income = hasTransactions ? totals.income : Number(summary?.totalIncome || 0);
+  const expense = hasTransactions ? totals.expense : Number(summary?.totalExpenses || 0);
+  const reservedInGoals = (Array.isArray(insights?.goals) ? insights.goals : []).reduce((sum, goal) => sum + Number(goal.currentAmount || 0), 0);
+  const netSavings = (hasTransactions ? totals.balance : Number(summary?.netSavings || income - expense || 0)) - reservedInGoals;
+  const savingsRate = income > 0 ? Math.round(((income - expense) / income) * 100) : 0;
+  const healthScore = Math.round(insights?.healthScore?.score ?? Math.max(35, Math.min(92, 60 + savingsRate)));
 
   const loadProfile = async () => {
     try {
@@ -108,16 +113,16 @@ export function ProfileHomeScreen({ navigation, onLogout }: Props) {
       setIsEditing(false);
     } catch (error) {
       console.error("Profile save error:", error);
-      Alert.alert("Ошибка", "Не удалось сохранить профиль");
+      Alert.alert(t("error"), t("profileSaveError"));
     } finally {
       setSaving(false);
     }
   };
 
   const confirmLogout = () => {
-    Alert.alert("Выйти из аккаунта?", "Локальная сессия будет завершена.", [
-      { text: "Отмена", style: "cancel" },
-      { text: "Выйти", style: "destructive", onPress: () => void onLogout?.() },
+    Alert.alert(t("logoutTitle"), t("logoutText"), [
+      { text: t("cancel"), style: "cancel" },
+      { text: t("logout"), style: "destructive", onPress: () => void onLogout?.() },
     ]);
   };
 
@@ -125,7 +130,7 @@ export function ProfileHomeScreen({ navigation, onLogout }: Props) {
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 18, paddingBottom: 118 + insets.bottom }]} showsVerticalScrollIndicator={false}>
         <View style={styles.topBar}>
-          <Text style={[styles.title, { color: colors.text }]}>Профиль</Text>
+          <Text style={[styles.title, { color: colors.text }]}>{t("profileTitle")}</Text>
           <Pressable
             style={[styles.iconButton, { backgroundColor: colors.surfaceAlt }]}
             onPress={isEditing ? saveProfile : () => setIsEditing(true)}
@@ -141,12 +146,8 @@ export function ProfileHomeScreen({ navigation, onLogout }: Props) {
               <Text style={styles.avatarText}>{initials || "FA"}</Text>
             </View>
             <View style={styles.profileText}>
-              <Text style={styles.profileName} numberOfLines={1}>
-                {displayName}
-              </Text>
-              <Text style={styles.profileEmail} numberOfLines={1}>
-                {email}
-              </Text>
+              <Text style={styles.profileName} numberOfLines={1}>{displayName}</Text>
+              <Text style={styles.profileEmail} numberOfLines={1}>{email}</Text>
             </View>
             <View style={styles.healthPill}>
               <Text style={styles.healthPillText}>{healthScore}</Text>
@@ -154,69 +155,75 @@ export function ProfileHomeScreen({ navigation, onLogout }: Props) {
           </View>
 
           <View style={styles.statsGrid}>
-            <Metric label="Доход" value={formatMoney(summary?.totalIncome)} />
-            <Metric label="Расходы" value={formatMoney(summary?.totalExpenses)} />
-            <Metric label="Сбережения" value={`${savingsRate}%`} />
+            <Metric label={t("income")} value={formatMoney(income)} />
+            <Metric label={t("expense")} value={formatMoney(expense)} />
+            <Metric label={t("savings")} value={`${savingsRate}%`} />
           </View>
         </LinearGradient>
 
+        <View style={[styles.syncCard, { backgroundColor: colors.surfaceAlt }]}>
+          <Feather name="check-circle" size={18} color={colors.success} />
+          <View style={styles.syncText}>
+            <Text style={[styles.syncTitle, { color: colors.text }]}>{t("dataSynced")}</Text>
+            <Text style={[styles.syncBody, { color: colors.textMuted }]}>{t("dataSyncedText")}</Text>
+          </View>
+        </View>
+
         <View style={[styles.panel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.panelHeader}>
-            <Text style={[styles.panelTitle, { color: colors.text }]}>Личные данные</Text>
-            <Text style={[styles.panelHint, { color: colors.textMuted }]}>{hasProfile ? "Сохранено локально" : "Можно заполнить позже"}</Text>
+            <Text style={[styles.panelTitle, { color: colors.text }]}>{t("personalData")}</Text>
+            <Text style={[styles.panelHint, { color: colors.textMuted }]}>{hasProfile ? t("savedLocally") : t("canFillLater")}</Text>
           </View>
 
           {isEditing ? (
             <View style={styles.form}>
-              <ProfileInput label="Имя" placeholder="Например, Даниил" value={profile.displayName} onChangeText={(value) => updateField("displayName", value)} />
-              <ProfileInput label="Телефон" placeholder="+7..." value={profile.phone} onChangeText={(value) => updateField("phone", value)} keyboardType="phone-pad" />
-              <ProfileInput label="Город" placeholder="Ваш город" value={profile.city} onChangeText={(value) => updateField("city", value)} />
+              <ProfileInput label={t("name")} placeholder={t("namePlaceholder")} value={profile.displayName} onChangeText={(value) => updateField("displayName", value)} />
+              <ProfileInput label={t("phone")} placeholder="+7..." value={profile.phone} onChangeText={(value) => updateField("phone", value)} keyboardType="phone-pad" />
+              <ProfileInput label={t("city")} placeholder={t("cityPlaceholder")} value={profile.city} onChangeText={(value) => updateField("city", value)} />
               <View style={styles.actionRow}>
                 <Pressable style={[styles.secondaryButton, { borderColor: colors.border }]} onPress={() => setIsEditing(false)}>
-                  <Text style={[styles.secondaryButtonText, { color: colors.textSecondary }]}>Отмена</Text>
+                  <Text style={[styles.secondaryButtonText, { color: colors.textSecondary }]}>{t("cancel")}</Text>
                 </Pressable>
                 <Pressable style={styles.primaryButtonWrap} onPress={saveProfile} disabled={saving}>
                   <LinearGradient colors={gradients.successDeep} style={styles.primaryButton}>
-                    <Text style={styles.primaryButtonText}>{saving ? "Сохранение..." : "Сохранить"}</Text>
+                    <Text style={styles.primaryButtonText}>{saving ? t("savingNow") : t("save")}</Text>
                   </LinearGradient>
                 </Pressable>
               </View>
             </View>
           ) : (
             <View style={styles.fields}>
-              <ProfileField icon="phone" label="Телефон" value={profile.phone || "Не указан"} />
-              <ProfileField icon="map-pin" label="Город" value={profile.city || "Не указан"} />
+              <ProfileField icon="phone" label={t("phone")} value={profile.phone || t("notSpecified")} />
+              <ProfileField icon="map-pin" label={t("city")} value={profile.city || t("notSpecified")} />
             </View>
           )}
         </View>
 
         <View style={[styles.panel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.panelTitle, { color: colors.text }]}>Финансовый контур</Text>
+          <Text style={[styles.panelTitle, { color: colors.text }]}>{t("financeContour")}</Text>
           <View style={styles.healthRow}>
             <ScoreRing score={healthScore} />
             <View style={styles.healthCopy}>
-              <Text style={[styles.healthTitle, { color: colors.text }]}>Индекс контроля</Text>
-              <Text style={[styles.healthText, { color: colors.textMuted }]}>
-                В расчете используются транзакции, бюджеты и цели из общего контура FinApp.
-              </Text>
+              <Text style={[styles.healthTitle, { color: colors.text }]}>{t("controlIndex")}</Text>
+              <Text style={[styles.healthText, { color: colors.textMuted }]}>{t("controlIndexText")}</Text>
             </View>
           </View>
           <View style={styles.quickStats}>
-            <SmallStat icon="list" label="Операций" value={String(transactionCount || summary?.transactionCount || 0)} />
-            <SmallStat icon="trending-up" label="Чистый поток" value={formatMoney(summary?.netSavings)} />
+            <SmallStat icon="list" label={t("operations")} value={String(transactions.length || summary?.transactionCount || 0)} />
+            <SmallStat icon="trending-up" label={t("netFlow")} value={formatMoney(netSavings)} />
           </View>
         </View>
 
         <View style={[styles.panel, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={[styles.panelTitle, { color: colors.text }]}>Настройки</Text>
-          <SettingsRow icon="bell" label="Умные уведомления" right={<Switch value={notificationsEnabled} onValueChange={setNotificationsEnabled} trackColor={{ false: colors.border, true: colors.accent }} thumbColor={colors.white} />} />
-          <SettingsRow icon="moon" label="Темная тема" right={<Switch value={mode === "dark"} onValueChange={toggleMode} trackColor={{ false: colors.border, true: colors.primaryLight }} thumbColor={colors.white} />} />
-          <SettingsRow icon="settings" label="Параметры приложения" onPress={() => navigation.navigate("Settings")} />
-          <SettingsRow icon="shield" label="Безопасность и аудит" onPress={() => Alert.alert("FinApp", "JWT-сессия, refresh tokens и аудит операций подключены на backend-контуре.")} />
-          <SettingsRow icon="log-out" label="Выйти" danger onPress={confirmLogout} />
+          <Text style={[styles.panelTitle, { color: colors.text }]}>{t("appShortcuts")}</Text>
+          <SettingsRow icon="bell" label={t("smartNotifications")} right={<Switch value={settings.pushEnabled} onValueChange={(value) => void setSetting("pushEnabled", value)} trackColor={{ false: colors.border, true: colors.accent }} thumbColor={colors.white} />} />
+          <SettingsRow icon="moon" label={t("darkTheme")} right={<Switch value={mode === "dark"} onValueChange={toggleMode} trackColor={{ false: colors.border, true: colors.primaryLight }} thumbColor={colors.white} />} />
+          <SettingsRow icon="settings" label={t("openSettings")} onPress={() => navigation.navigate("Settings")} />
+          <SettingsRow icon="shield" label={t("securityAudit")} onPress={() => Alert.alert("FinApp", t("securityAuditText"))} />
+          <SettingsRow icon="log-out" label={t("logout")} danger onPress={confirmLogout} />
         </View>
 
-        <Text style={[styles.version, { color: colors.textMuted }]}>FinApp 1.0 · сбор и анализ финансов</Text>
+        <Text style={[styles.version, { color: colors.textMuted }]}>{t("profileVersion")}</Text>
       </ScrollView>
     </View>
   );
@@ -225,9 +232,7 @@ export function ProfileHomeScreen({ navigation, onLogout }: Props) {
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.metric}>
-      <Text style={styles.metricValue} numberOfLines={1}>
-        {value}
-      </Text>
+      <Text style={styles.metricValue} numberOfLines={1}>{value}</Text>
       <Text style={styles.metricLabel}>{label}</Text>
     </View>
   );
@@ -240,7 +245,7 @@ function ProfileInput({ label, ...props }) {
       <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>{label}</Text>
       <TextInput
         {...props}
-        style={[styles.input, props.multiline ? styles.multilineInput : null, { color: colors.text, borderColor: colors.border, backgroundColor: colors.backgroundAlt }]}
+        style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.backgroundAlt }]}
         placeholderTextColor={colors.textMuted}
       />
     </View>
@@ -256,9 +261,7 @@ function ProfileField({ icon, label, value }) {
       </View>
       <View style={styles.fieldCopy}>
         <Text style={[styles.fieldLabel, { color: colors.textMuted }]}>{label}</Text>
-        <Text style={[styles.fieldValue, { color: colors.text }]} numberOfLines={2}>
-          {value}
-        </Text>
+        <Text style={[styles.fieldValue, { color: colors.text }]} numberOfLines={2}>{value}</Text>
       </View>
     </View>
   );
@@ -266,10 +269,11 @@ function ProfileField({ icon, label, value }) {
 
 function ScoreRing({ score }: { score: number }) {
   const { colors } = useAppTheme();
+  const { t } = useAppSettings();
   return (
     <View style={[styles.scoreRing, { borderColor: colors.accent }]}>
       <Text style={[styles.scoreValue, { color: colors.primary }]}>{score}</Text>
-      <Text style={[styles.scoreLabel, { color: colors.textMuted }]}>баллов</Text>
+      <Text style={[styles.scoreLabel, { color: colors.textMuted }]}>{t("points")}</Text>
     </View>
   );
 }
@@ -279,9 +283,7 @@ function SmallStat({ icon, label, value }) {
   return (
     <View style={[styles.smallStat, { backgroundColor: colors.backgroundAlt }]}>
       <Feather name={icon} size={17} color={colors.primary} />
-      <Text style={[styles.smallStatValue, { color: colors.text }]} numberOfLines={1}>
-        {value}
-      </Text>
+      <Text style={[styles.smallStatValue, { color: colors.text }]} numberOfLines={1}>{value}</Text>
       <Text style={[styles.smallStatLabel, { color: colors.textMuted }]}>{label}</Text>
     </View>
   );
@@ -302,297 +304,80 @@ function SettingsRow({ icon, label, right, onPress, danger }) {
   );
 }
 
+function calculateTransactionTotals(items: any[]) {
+  return (Array.isArray(items) ? items : []).reduce(
+    (totals, item) => {
+      const amount = Number(item.amount || 0);
+      if (item.type === "INCOME") {
+        totals.income += amount;
+        totals.balance += amount;
+      } else if (item.type === "EXPENSE") {
+        totals.expense += amount;
+        totals.balance -= amount;
+      }
+      return totals;
+    },
+    { income: 0, expense: 0, balance: 0 },
+  );
+}
+
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: 20,
-    gap: 16,
-  },
-  topBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingTop: 6,
-  },
-  title: {
-    fontSize: 30,
-    fontFamily: "Inter_700Bold",
-  },
-  iconButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  profileCard: {
-    borderRadius: 28,
-    padding: 22,
-    gap: 22,
-    shadowColor: "#6B46C1",
-    shadowOpacity: 0.22,
-    shadowOffset: { width: 0, height: 10 },
-    shadowRadius: 24,
-    elevation: 8,
-  },
-  profileHead: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: "rgba(255,255,255,0.22)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.42)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: {
-    color: "#FFFFFF",
-    fontSize: 21,
-    fontFamily: "Inter_700Bold",
-  },
-  profileText: {
-    flex: 1,
-    gap: 4,
-  },
-  profileName: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontFamily: "Inter_700Bold",
-  },
-  profileEmail: {
-    color: "rgba(255,255,255,0.78)",
-    fontSize: 13,
-    fontFamily: "Inter_500Medium",
-  },
-  healthPill: {
-    minWidth: 44,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 10,
-  },
-  healthPillText: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontFamily: "Inter_700Bold",
-  },
-  statsGrid: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  metric: {
-    flex: 1,
-    minHeight: 74,
-    borderRadius: 18,
-    backgroundColor: "rgba(255,255,255,0.16)",
-    padding: 12,
-    justifyContent: "center",
-    gap: 5,
-  },
-  metricValue: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontFamily: "Inter_700Bold",
-  },
-  metricLabel: {
-    color: "rgba(255,255,255,0.74)",
-    fontSize: 11,
-    fontFamily: "Inter_500Medium",
-  },
-  panel: {
-    borderRadius: 24,
-    borderWidth: 1,
-    padding: 18,
-    gap: 16,
-    shadowColor: "#000",
-    shadowOpacity: 0.04,
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 18,
-    elevation: 2,
-  },
-  panelHeader: {
-    gap: 3,
-  },
-  panelTitle: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-  },
-  panelHint: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-  },
-  form: {
-    gap: 12,
-  },
-  inputGroup: {
-    gap: 7,
-  },
-  inputLabel: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-  },
-  input: {
-    minHeight: 48,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    fontSize: 15,
-    fontFamily: "Inter_500Medium",
-  },
-  multilineInput: {
-    minHeight: 92,
-    paddingTop: 12,
-    textAlignVertical: "top",
-  },
-  actionRow: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 2,
-  },
-  secondaryButton: {
-    flex: 1,
-    minHeight: 50,
-    borderRadius: 18,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  secondaryButtonText: {
-    fontSize: 14,
-    fontFamily: "Inter_700Bold",
-  },
-  primaryButtonWrap: {
-    flex: 1,
-  },
-  primaryButton: {
-    minHeight: 50,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  primaryButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontFamily: "Inter_700Bold",
-  },
-  fields: {
-    gap: 10,
-  },
-  fieldRow: {
-    minHeight: 62,
-    borderRadius: 18,
-    padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  fieldIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  fieldCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  fieldLabel: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-  },
-  fieldValue: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-  },
-  healthRow: {
-    flexDirection: "row",
-    gap: 15,
-    alignItems: "center",
-  },
-  scoreRing: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    borderWidth: 9,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  scoreValue: {
-    fontSize: 24,
-    fontFamily: "Inter_700Bold",
-  },
-  scoreLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_500Medium",
-  },
-  healthCopy: {
-    flex: 1,
-    gap: 5,
-  },
-  healthTitle: {
-    fontSize: 16,
-    fontFamily: "Inter_700Bold",
-  },
-  healthText: {
-    fontSize: 13,
-    lineHeight: 19,
-    fontFamily: "Inter_500Medium",
-  },
-  quickStats: {
-    flexDirection: "row",
-    gap: 10,
-  },
-  smallStat: {
-    flex: 1,
-    minHeight: 82,
-    borderRadius: 18,
-    padding: 12,
-    justifyContent: "space-between",
-  },
-  smallStatValue: {
-    fontSize: 15,
-    fontFamily: "Inter_700Bold",
-  },
-  smallStatLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_500Medium",
-  },
-  settingsRow: {
-    minHeight: 54,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  settingsLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  settingsIcon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  settingsLabel: {
-    fontSize: 15,
-    fontFamily: "Inter_600SemiBold",
-  },
-  version: {
-    textAlign: "center",
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    marginTop: 2,
-  },
+  screen: { flex: 1 },
+  content: { paddingHorizontal: 20, gap: 16 },
+  topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingTop: 6 },
+  title: { fontSize: 30, fontFamily: "Inter_700Bold" },
+  iconButton: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
+  profileCard: { borderRadius: 28, padding: 22, gap: 22, shadowColor: "#6B46C1", shadowOpacity: 0.22, shadowOffset: { width: 0, height: 10 }, shadowRadius: 24, elevation: 8 },
+  profileHead: { flexDirection: "row", alignItems: "center", gap: 14 },
+  avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: "rgba(255,255,255,0.22)", borderWidth: 1, borderColor: "rgba(255,255,255,0.42)", alignItems: "center", justifyContent: "center" },
+  avatarText: { color: "#FFFFFF", fontSize: 21, fontFamily: "Inter_700Bold" },
+  profileText: { flex: 1, gap: 4 },
+  profileName: { color: "#FFFFFF", fontSize: 20, fontFamily: "Inter_700Bold" },
+  profileEmail: { color: "rgba(255,255,255,0.78)", fontSize: 13, fontFamily: "Inter_500Medium" },
+  healthPill: { minWidth: 44, height: 34, borderRadius: 17, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center", paddingHorizontal: 10 },
+  healthPillText: { color: "#FFFFFF", fontSize: 15, fontFamily: "Inter_700Bold" },
+  statsGrid: { flexDirection: "row", gap: 10 },
+  metric: { flex: 1, minHeight: 74, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.16)", padding: 12, justifyContent: "center", gap: 5 },
+  metricValue: { color: "#FFFFFF", fontSize: 15, fontFamily: "Inter_700Bold" },
+  metricLabel: { color: "rgba(255,255,255,0.74)", fontSize: 11, fontFamily: "Inter_500Medium" },
+  syncCard: { borderRadius: 18, padding: 14, flexDirection: "row", gap: 10, alignItems: "center" },
+  syncText: { flex: 1, gap: 2 },
+  syncTitle: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  syncBody: { fontSize: 12, lineHeight: 17, fontFamily: "Inter_500Medium" },
+  panel: { borderRadius: 24, borderWidth: 1, padding: 18, gap: 16, shadowColor: "#000", shadowOpacity: 0.04, shadowOffset: { width: 0, height: 8 }, shadowRadius: 18, elevation: 2 },
+  panelHeader: { gap: 3 },
+  panelTitle: { fontSize: 18, fontFamily: "Inter_700Bold" },
+  panelHint: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  form: { gap: 12 },
+  inputGroup: { gap: 7 },
+  inputLabel: { fontSize: 13, fontFamily: "Inter_600SemiBold" },
+  input: { minHeight: 48, borderRadius: 16, borderWidth: 1, paddingHorizontal: 14, fontSize: 15, fontFamily: "Inter_500Medium" },
+  actionRow: { flexDirection: "row", gap: 10, marginTop: 2 },
+  secondaryButton: { flex: 1, minHeight: 50, borderRadius: 18, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  secondaryButtonText: { fontSize: 14, fontFamily: "Inter_700Bold" },
+  primaryButtonWrap: { flex: 1 },
+  primaryButton: { minHeight: 50, borderRadius: 18, alignItems: "center", justifyContent: "center" },
+  primaryButtonText: { color: "#FFFFFF", fontSize: 14, fontFamily: "Inter_700Bold" },
+  fields: { gap: 10 },
+  fieldRow: { minHeight: 62, borderRadius: 18, padding: 12, flexDirection: "row", alignItems: "center", gap: 12 },
+  fieldIcon: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
+  fieldCopy: { flex: 1, gap: 2 },
+  fieldLabel: { fontSize: 12, fontFamily: "Inter_500Medium" },
+  fieldValue: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  healthRow: { flexDirection: "row", gap: 15, alignItems: "center" },
+  scoreRing: { width: 96, height: 96, borderRadius: 48, borderWidth: 9, alignItems: "center", justifyContent: "center" },
+  scoreValue: { fontSize: 24, fontFamily: "Inter_700Bold" },
+  scoreLabel: { fontSize: 11, fontFamily: "Inter_500Medium" },
+  healthCopy: { flex: 1, gap: 5 },
+  healthTitle: { fontSize: 16, fontFamily: "Inter_700Bold" },
+  healthText: { fontSize: 13, lineHeight: 19, fontFamily: "Inter_500Medium" },
+  quickStats: { flexDirection: "row", gap: 10 },
+  smallStat: { flex: 1, minHeight: 82, borderRadius: 18, padding: 12, justifyContent: "space-between" },
+  smallStatValue: { fontSize: 15, fontFamily: "Inter_700Bold" },
+  smallStatLabel: { fontSize: 11, fontFamily: "Inter_500Medium" },
+  settingsRow: { minHeight: 54, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  settingsLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
+  settingsIcon: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
+  settingsLabel: { fontSize: 15, fontFamily: "Inter_600SemiBold" },
+  version: { textAlign: "center", fontSize: 12, fontFamily: "Inter_500Medium", marginTop: 2 },
 });

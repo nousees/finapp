@@ -17,15 +17,15 @@ import { useAppTheme } from "@shared/theme/ThemeProvider";
 type Props = NativeStackScreenProps<DashboardStackParamList, "DashboardHome">;
 
 const quickActions = [
-  { icon: "bar-chart-2", label: "Аналитика", target: "Analytics", gradient: ["#6B46C1", "#8B5CF6"] },
-  { icon: "repeat", label: "Подписки", target: "Subscriptions", gradient: ["#059669", "#7ED9B6"] },
-  { icon: "file-text", label: "Отчёты", target: "Reports", gradient: ["#2563EB", "#60A5FA"] },
-  { icon: "target", label: "Цели", target: "GoalsTab", gradient: ["#D97706", "#FBBF24"] },
+  { icon: "bar-chart-2", labelKey: "analytics", target: "Analytics", gradient: ["#6B46C1", "#8B5CF6"] },
+  { icon: "repeat", labelKey: "subscriptions", target: "Subscriptions", gradient: ["#059669", "#7ED9B6"] },
+  { icon: "file-text", labelKey: "reports", target: "Reports", gradient: ["#2563EB", "#60A5FA"] },
+  { icon: "target", labelKey: "goals", target: "GoalsTab", gradient: ["#D97706", "#FBBF24"] },
 ];
 
 export function DashboardHomeScreen({ navigation }: Props) {
   const { colors, gradients } = useAppTheme();
-  const { formatMoney } = useAppSettings();
+  const { formatMoney, formatExchangeHint, t, settings } = useAppSettings();
   const { user } = useUser();
   const insets = useSafeAreaInsets();
   const [insights, setInsights] = useState(null);
@@ -49,11 +49,11 @@ export function DashboardHomeScreen({ navigation }: Props) {
       setRecommendations(Array.isArray(recData) ? recData.slice(0, 2) : []);
       setUnreadNotifications(Number(unreadCount || 0));
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Не удалось загрузить дашборд");
+      setError(loadError instanceof Error ? loadError.message : settings.language === "en" ? "Could not load dashboard" : "Не удалось загрузить дашборд");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [settings.language]);
 
   useFocusEffect(
     useCallback(() => {
@@ -68,12 +68,10 @@ export function DashboardHomeScreen({ navigation }: Props) {
   const income = hasLocalTransactions ? transactionTotals.income : Number(summary?.totalIncome || 0);
   const expense = hasLocalTransactions ? transactionTotals.expense : Number(summary?.totalExpenses || 0);
   const grossBalance = hasLocalTransactions ? transactionTotals.balance : Number(summary?.netSavings || income - expense || 0);
-  const reservedInGoals = (Array.isArray(insights?.goals) ? insights.goals : []).reduce(
-    (sum, goal) => sum + Number(goal.currentAmount || 0),
-    0,
-  );
+  const reservedInGoals = (Array.isArray(insights?.goals) ? insights.goals : []).reduce((sum, goal) => sum + Number(goal.currentAmount || 0), 0);
   const balance = grossBalance - reservedInGoals;
   const savingsRate = income > 0 ? Math.round(((income - expense) / income) * 100) : 0;
+  const exchangeHint = formatExchangeHint();
 
   const categories = useMemo(
     () =>
@@ -82,26 +80,26 @@ export function DashboardHomeScreen({ navigation }: Props) {
         .slice(0, 5)
         .map((item, index) => ({
           id: item.categoryId || `category-${index}`,
-          name: item.categoryName || "Без категории",
+          name: item.categoryName || (settings.language === "en" ? "No category" : "Без категории"),
           amount: Number(item.amount || 0),
           percent: Math.round(Number(item.percentage || 0)),
           color: palette[index % palette.length],
         })),
-    [insights],
+    [insights, settings.language],
   );
 
   const topSignals = [
     ...(Array.isArray(insights?.anomalies) ? insights.anomalies : []).slice(0, 1).map((item) => ({
       id: `anomaly-${item.title || item.type}`,
-      title: item.title || "Проверьте необычную трату",
-      text: item.description || "Сумма отличается от обычного поведения в категории.",
+      title: item.title || (settings.language === "en" ? "Check unusual spending" : "Проверьте необычную трату"),
+      text: item.description || (settings.language === "en" ? "The amount differs from the usual category pattern." : "Сумма отличается от обычного поведения в категории."),
       icon: "alert-triangle",
       gradient: ["#EF4444", "#F97316"],
     })),
     ...recommendations.map((item) => ({
       id: item.id || item.title,
-      title: item.title || "Рекомендация FinApp",
-      text: item.description || "Посмотрите, где можно снизить расходы.",
+      title: item.title || "FinApp",
+      text: item.description || (settings.language === "en" ? "Check where you can reduce expenses." : "Посмотрите, где можно снизить расходы."),
       icon: "zap",
       gradient: ["#6B46C1", "#8B5CF6"],
     })),
@@ -115,7 +113,7 @@ export function DashboardHomeScreen({ navigation }: Props) {
       <LinearGradient colors={gradients.success} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.header, { paddingTop: topPt + 16 }]}>
         <View style={styles.headerTop}>
           <View>
-            <Text style={styles.greeting}>Доброе утро</Text>
+            <Text style={styles.greeting}>{t("goodMorning")}</Text>
             <Text style={styles.username} numberOfLines={1}>{user?.full_name || user?.email || "FinApp"}</Text>
           </View>
           <View style={styles.headerActions}>
@@ -134,16 +132,17 @@ export function DashboardHomeScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.balanceBlock}>
-          <Text style={styles.balanceLabel}>Общий баланс</Text>
+          <Text style={styles.balanceLabel}>{t("totalBalance")}</Text>
           <Text style={styles.balanceAmount}>{formatMoney(balance, { cents: true })}</Text>
+          {exchangeHint ? <Text style={styles.exchangeHint}>{exchangeHint}</Text> : null}
         </View>
 
         <View style={styles.statsRow}>
-          <Metric icon="arrow-down-left" label="Доходы" value={formatShort(income, formatMoney)} color="#A8E6CF" />
+          <Metric icon="arrow-down-left" label={t("income")} value={formatShort(income, formatMoney)} color="#A8E6CF" />
           <View style={styles.statDivider} />
-          <Metric icon="arrow-up-right" label="Расходы" value={formatShort(expense, formatMoney)} color="#FCA5A5" />
+          <Metric icon="arrow-up-right" label={t("expense")} value={formatShort(expense, formatMoney)} color="#FCA5A5" />
           <View style={styles.statDivider} />
-          <Metric icon="percent" label="Сбережения" value={`${savingsRate}%`} color={savingsRate >= 0 ? "#A8E6CF" : "#FCA5A5"} />
+          <Metric icon="percent" label={t("savings")} value={`${savingsRate}%`} color={savingsRate >= 0 ? "#A8E6CF" : "#FCA5A5"} />
         </View>
       </LinearGradient>
 
@@ -156,31 +155,31 @@ export function DashboardHomeScreen({ navigation }: Props) {
           </Pressable>
         ) : null}
 
-        <SectionTitle title="Быстрый доступ" />
+        <SectionTitle title={t("quickAccess")} />
         <View style={styles.quickActions}>
           {quickActions.map((action) => (
-            <Pressable key={action.label} style={styles.quickAction} onPress={() => action.target === "GoalsTab" ? navigation.getParent()?.navigate("Goals") : navigation.navigate(action.target)}>
+            <Pressable key={action.labelKey} style={styles.quickAction} onPress={() => action.target === "GoalsTab" ? navigation.getParent()?.navigate("Goals") : navigation.navigate(action.target)}>
               <LinearGradient colors={action.gradient} style={styles.quickIcon}>
                 <Feather name={action.icon} size={20} color="#FFFFFF" />
               </LinearGradient>
-              <Text style={[styles.quickLabel, { color: colors.text }]}>{action.label}</Text>
+              <Text style={[styles.quickLabel, { color: colors.text }]}>{t(action.labelKey)}</Text>
             </Pressable>
           ))}
         </View>
 
         <View style={styles.sectionHeader}>
-          <SectionTitle title="За этот месяц" />
+          <SectionTitle title={t("thisMonth")} />
           <Pressable onPress={() => navigation.navigate("Analytics")}>
-            <Text style={[styles.seeAll, { color: colors.primary }]}>Подробнее</Text>
+            <Text style={[styles.seeAll, { color: colors.primary }]}>{t("details")}</Text>
           </Pressable>
         </View>
         <View style={[styles.chartCard, { backgroundColor: colors.surface }]}>
           <LinearGradient colors={gradients.success} style={styles.chartGradient}>
-            <DonutChart data={categories} total={expense} formatMoney={formatMoney} />
+            <DonutChart data={categories} total={expense} formatMoney={formatMoney} label={t("expense").toLowerCase()} />
           </LinearGradient>
           <View style={styles.legend}>
             {categories.length === 0 ? (
-              <Text style={[styles.emptyText, { color: colors.textMuted }]}>Добавьте транзакции, чтобы увидеть структуру расходов.</Text>
+              <Text style={[styles.emptyText, { color: colors.textMuted }]}>{t("noTransactionsStructure")}</Text>
             ) : (
               categories.map((item) => (
                 <View key={item.id} style={styles.legendRow}>
@@ -194,29 +193,29 @@ export function DashboardHomeScreen({ navigation }: Props) {
         </View>
 
         <View style={styles.sectionHeader}>
-          <SectionTitle title="Последние" />
+          <SectionTitle title={t("latest")} />
           <Pressable onPress={() => navigation.getParent()?.navigate("Transactions")}>
-            <Text style={[styles.seeAll, { color: colors.primary }]}>Все</Text>
+            <Text style={[styles.seeAll, { color: colors.primary }]}>{t("all")}</Text>
           </Pressable>
         </View>
         {latestTransactions.length === 0 ? (
           <View style={[styles.emptyCard, { backgroundColor: colors.surface }]}>
             <Feather name="inbox" size={30} color={colors.border} />
-            <Text style={[styles.emptyText, { color: colors.textMuted }]}>Нажмите на микрофон, чтобы добавить первую транзакцию</Text>
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>{t("noTransactionsYet")}</Text>
           </View>
         ) : (
           latestTransactions.map((item) => <TransactionRow key={item.id} item={item} />)
         )}
 
-        <SectionTitle title="Советы" />
+        <SectionTitle title={t("tips")} />
         {topSignals.length === 0 ? (
           <Pressable style={[styles.tipCard, { backgroundColor: colors.surfaceAlt }]} onPress={() => navigation.navigate("Reports")}>
             <LinearGradient colors={["#059669", "#7ED9B6"]} style={styles.tipIcon}>
               <Feather name="refresh-cw" size={16} color="#FFFFFF" />
             </LinearGradient>
             <View style={styles.tipText}>
-              <Text style={[styles.tipTitle, { color: colors.text }]}>Рекомендаций пока нет</Text>
-              <Text style={[styles.tipBody, { color: colors.textMuted }]} numberOfLines={2}>Сформируйте рекомендации после добавления транзакций, бюджетов и целей.</Text>
+              <Text style={[styles.tipTitle, { color: colors.text }]}>{t("noRecommendations")}</Text>
+              <Text style={[styles.tipBody, { color: colors.textMuted }]} numberOfLines={2}>{t("noRecommendationsText")}</Text>
             </View>
             <Feather name="chevron-right" size={16} color={colors.textMuted} />
           </Pressable>
@@ -258,7 +257,7 @@ function SectionTitle({ title }: { title: string }) {
   return <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>;
 }
 
-function DonutChart({ data, total, formatMoney }) {
+function DonutChart({ data, total, formatMoney, label }) {
   const size = 132;
   const stroke = 16;
   const radius = (size - stroke) / 2;
@@ -279,7 +278,7 @@ function DonutChart({ data, total, formatMoney }) {
       </Svg>
       <View style={styles.donutCenter}>
         <Text style={styles.donutValue}>{formatShort(total, formatMoney)}</Text>
-        <Text style={styles.donutLabel}>расходы</Text>
+        <Text style={styles.donutLabel}>{label}</Text>
       </View>
     </View>
   );
@@ -287,7 +286,7 @@ function DonutChart({ data, total, formatMoney }) {
 
 function TransactionRow({ item }) {
   const { colors } = useAppTheme();
-  const { formatMoney } = useAppSettings();
+  const { formatMoney, t } = useAppSettings();
   const isIncome = item.type === "INCOME";
   return (
     <View style={[styles.txRow, { backgroundColor: colors.surface }]}>
@@ -295,8 +294,8 @@ function TransactionRow({ item }) {
         <Feather name={isIncome ? "arrow-down-left" : item.is_recurring ? "repeat" : "shopping-bag"} size={18} color={colors.primary} />
       </View>
       <View style={styles.txText}>
-        <Text style={[styles.txTitle, { color: colors.text }]} numberOfLines={1}>{item.description || item.original_description || "Транзакция"}</Text>
-        <Text style={[styles.txMeta, { color: colors.textMuted }]}>{isIncome ? "Доход" : item.is_recurring ? "Подписка" : "Расход"}</Text>
+        <Text style={[styles.txTitle, { color: colors.text }]} numberOfLines={1}>{item.description || item.original_description || t("transaction")}</Text>
+        <Text style={[styles.txMeta, { color: colors.textMuted }]}>{isIncome ? t("income") : item.is_recurring ? t("subscription") : t("expense")}</Text>
       </View>
       <Text style={[styles.txAmount, { color: isIncome ? colors.success : colors.danger }]}>{formatMoney(isIncome ? item.amount : -item.amount, { sign: true })}</Text>
     </View>
@@ -330,10 +329,6 @@ function calculateTransactionTotals(items: any[]) {
 }
 
 const palette = ["#F97316", "#3B82F6", "#EC4899", "#8B5CF6", "#10B981"];
-const fallbackSignals = [
-  { id: "plan", title: "Вы в рамках плана", text: "Расходы ниже среднего уровня. Продолжайте отслеживать категории.", icon: "zap", gradient: ["#6B46C1", "#8B5CF6"] },
-  { id: "subs", title: "Проверьте подписки", text: "FinApp найдёт регулярные списания и покажет индекс использования.", icon: "repeat", gradient: ["#059669", "#7ED9B6"] },
-];
 
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
@@ -350,6 +345,7 @@ const styles = StyleSheet.create({
   balanceBlock: { alignItems: "center", marginBottom: 24 },
   balanceLabel: { fontSize: 13, color: "rgba(255,255,255,0.72)", fontFamily: "Inter_400Regular", marginBottom: 6 },
   balanceAmount: { fontSize: 34, color: "#FFFFFF", fontFamily: "Inter_700Bold" },
+  exchangeHint: { marginTop: 6, fontSize: 11, color: "rgba(255,255,255,0.78)", fontFamily: "Inter_500Medium" },
   statsRow: { flexDirection: "row", backgroundColor: "rgba(255,255,255,0.15)", borderRadius: 16, padding: 14, gap: 8 },
   statCard: { flex: 1, flexDirection: "row", alignItems: "center", gap: 8 },
   statIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: "rgba(255,255,255,0.18)", alignItems: "center", justifyContent: "center" },

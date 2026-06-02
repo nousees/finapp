@@ -10,21 +10,21 @@ import { changePassword } from "@shared/api/auth";
 import { useAppSettings } from "@shared/settings/AppSettingsContext";
 import { useAppTheme } from "@shared/theme/ThemeProvider";
 
-export function SettingsScreen() {
+export function SettingsScreen({ navigation }) {
   const { colors, gradients, mode, toggleMode } = useAppTheme();
-  const { settings, rates, languageLabel, setSetting, refreshRates, t } = useAppSettings();
+  const { settings, languageLabel, setSetting, refreshRates, t } = useAppSettings();
   const insets = useSafeAreaInsets();
   const [passwordModal, setPasswordModal] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ current: "", next: "", confirm: "" });
   const [changingPassword, setChangingPassword] = useState(false);
 
   const chooseCurrency = () => {
-    Alert.alert(t("chooseCurrency"), rateSubtitle(rates), [
+    Alert.alert(t("chooseCurrency"), "FinApp", [
       { text: "RUB", onPress: () => setSetting("currency", "RUB") },
       { text: "USD", onPress: () => setSetting("currency", "USD") },
       { text: "EUR", onPress: () => setSetting("currency", "EUR") },
-      { text: "Обновить курс", onPress: () => refreshRates() },
-      { text: "Отмена", style: "cancel" },
+      { text: t("updateRates"), onPress: () => refreshRates() },
+      { text: t("cancel"), style: "cancel" },
     ]);
   };
 
@@ -32,7 +32,7 @@ export function SettingsScreen() {
     Alert.alert(t("chooseLanguage"), "FinApp", [
       { text: "Русский", onPress: () => setSetting("language", "ru") },
       { text: "English", onPress: () => setSetting("language", "en") },
-      { text: "Отмена", style: "cancel" },
+      { text: t("cancel"), style: "cancel" },
     ]);
   };
 
@@ -51,7 +51,7 @@ export function SettingsScreen() {
 
     const result = await LocalAuthentication.authenticateAsync({
       promptMessage: "FinApp",
-      cancelLabel: "Cancel",
+      cancelLabel: t("cancel"),
       disableDeviceFallback: false,
     });
     if (result.success) {
@@ -99,8 +99,13 @@ export function SettingsScreen() {
           <Text style={styles.heroText}>{t("settingsText")}</Text>
         </LinearGradient>
 
+        <View style={[styles.infoCard, { backgroundColor: colors.surfaceAlt }]}>
+          <Feather name="sliders" size={18} color={colors.primary} />
+          <Text style={[styles.infoText, { color: colors.textMuted }]}>{t("settingsUsefulText")}</Text>
+        </View>
+
         <SettingsSection title={t("main")}>
-          <SettingsRow icon="dollar-sign" label={t("currency")} value={`${settings.currency} · ${rateSubtitle(rates)}`} onPress={chooseCurrency} />
+          <SettingsRow icon="dollar-sign" label={t("currency")} value={settings.currency} onPress={chooseCurrency} />
           <SettingsRow icon="globe" label={t("language")} value={languageLabel} onPress={chooseLanguage} />
           <SettingsRow icon="moon" label={t("darkTheme")} toggle value={mode === "dark"} onToggle={toggleMode} />
         </SettingsSection>
@@ -108,7 +113,7 @@ export function SettingsScreen() {
         <SettingsSection title={t("sync")}>
           <SettingsRow icon="bell" label={t("push")} toggle value={settings.pushEnabled} onToggle={(value) => setSetting("pushEnabled", value)} />
           <SettingsRow icon="refresh-cw" label={t("backgroundSync")} toggle value={settings.backgroundSync} onToggle={(value) => setSetting("backgroundSync", value)} />
-          <SettingsRow icon="wifi" label="Pull-to-Refresh" toggle value={settings.pullToRefresh} onToggle={(value) => setSetting("pullToRefresh", value)} />
+          <SettingsRow icon="wifi" label={t("pullToRefresh")} toggle value={settings.pullToRefresh} onToggle={(value) => setSetting("pullToRefresh", value)} />
         </SettingsSection>
 
         <SettingsSection title={t("security")}>
@@ -119,7 +124,7 @@ export function SettingsScreen() {
         </SettingsSection>
 
         <SettingsSection title={t("data")}>
-          <SettingsRow icon="download" label={t("exportData")} onPress={() => Alert.alert("FinApp", "Reports screen")} />
+          <SettingsRow icon="download" label={t("exportData")} onPress={() => navigation?.getParent?.()?.navigate("Home", { screen: "Reports" })} />
           <SettingsRow icon="trash-2" label={t("clearCache")} danger onPress={clearCache} />
         </SettingsSection>
       </ScrollView>
@@ -144,12 +149,6 @@ export function SettingsScreen() {
   );
 }
 
-function rateSubtitle(rates) {
-  const usd = Number(rates?.rates?.USD || 0).toFixed(2);
-  const eur = Number(rates?.rates?.EUR || 0).toFixed(2);
-  return `USD ${usd} ₽ · EUR ${eur} ₽`;
-}
-
 function SettingsSection({ title, children }) {
   const { colors } = useAppTheme();
   return (
@@ -162,6 +161,7 @@ function SettingsSection({ title, children }) {
 
 function SettingsRow({ icon, label, value, toggle, onToggle, onPress, danger }) {
   const { colors } = useAppTheme();
+  const { t } = useAppSettings();
   return (
     <Pressable style={[styles.row, { borderBottomColor: colors.border }]} onPress={onPress} disabled={toggle && !onPress}>
       <View style={[styles.rowIcon, { backgroundColor: danger ? `${colors.danger}15` : colors.surfaceAlt }]}>
@@ -172,7 +172,7 @@ function SettingsRow({ icon, label, value, toggle, onToggle, onPress, danger }) 
         <Switch value={value} onValueChange={onToggle} trackColor={{ false: colors.border, true: `${colors.primary}80` }} thumbColor={colors.white} />
       ) : (
         <View style={styles.rowValueWrap}>
-          <Text style={[styles.rowValue, { color: danger ? colors.danger : colors.textMuted }]} numberOfLines={1}>{value || "Open"}</Text>
+          <Text style={[styles.rowValue, { color: danger ? colors.danger : colors.textMuted }]} numberOfLines={1}>{value || t("open")}</Text>
           <Feather name="chevron-right" size={17} color={colors.textMuted} />
         </View>
       )}
@@ -198,6 +198,8 @@ const styles = StyleSheet.create({
   heroLabel: { color: "rgba(255,255,255,0.72)", fontSize: 12, fontFamily: "Inter_400Regular" },
   heroTitle: { color: "#FFFFFF", fontSize: 26, fontFamily: "Inter_700Bold" },
   heroText: { color: "rgba(255,255,255,0.74)", fontSize: 13, lineHeight: 19, fontFamily: "Inter_400Regular" },
+  infoCard: { minHeight: 58, borderRadius: 16, padding: 14, flexDirection: "row", alignItems: "center", gap: 10 },
+  infoText: { flex: 1, fontSize: 13, lineHeight: 18, fontFamily: "Inter_500Medium" },
   section: { gap: 8 },
   sectionTitle: { fontSize: 13, fontFamily: "Inter_700Bold", textTransform: "uppercase" },
   card: { borderRadius: 16, overflow: "hidden" },

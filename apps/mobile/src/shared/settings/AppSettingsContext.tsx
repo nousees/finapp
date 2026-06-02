@@ -27,9 +27,9 @@ const defaultRates = {
 };
 
 const currencyMeta = {
-  RUB: { locale: "ru-RU", currency: "RUB" },
-  USD: { locale: "en-US", currency: "USD" },
-  EUR: { locale: "de-DE", currency: "EUR" },
+  RUB: { locale: "ru-RU", currency: "RUB", symbol: "₽" },
+  USD: { locale: "en-US", currency: "USD", symbol: "$" },
+  EUR: { locale: "de-DE", currency: "EUR", symbol: "€" },
 };
 
 export const languageLabels = {
@@ -52,15 +52,72 @@ const dictionary = {
     manualDesc: "Ввести сумму и описание",
     file: "Файл",
     fileDesc: "CSV или Excel",
+
+    goodMorning: "Доброе утро",
+    totalBalance: "Общий баланс",
+    income: "Доходы",
+    expense: "Расходы",
+    savings: "Сбережения",
+    quickAccess: "Быстрый доступ",
+    analytics: "Аналитика",
+    subscriptions: "Подписки",
+    reports: "Отчёты",
+    thisMonth: "За этот месяц",
+    details: "Подробнее",
+    latest: "Последние",
+    all: "Все",
+    tips: "Советы",
+    noTransactionsStructure: "Добавьте транзакции, чтобы увидеть структуру расходов.",
+    noTransactionsYet: "Нажмите на центральную кнопку, чтобы добавить первую транзакцию.",
+    noRecommendations: "Рекомендаций пока нет",
+    noRecommendationsText: "Сформируйте рекомендации после добавления транзакций, бюджетов и целей.",
+    transaction: "Транзакция",
+    subscription: "Подписка",
+
+    profileTitle: "Профиль",
+    profileFallbackName: "Пользователь FinApp",
+    emailMissing: "email не указан",
+    personalData: "Личные данные",
+    savedLocally: "Сохранено локально",
+    canFillLater: "Можно заполнить позже",
+    name: "Имя",
+    namePlaceholder: "Например, Даниил",
+    phone: "Телефон",
+    city: "Город",
+    cityPlaceholder: "Ваш город",
+    cancel: "Отмена",
+    save: "Сохранить",
+    savingNow: "Сохранение...",
+    notSpecified: "Не указан",
+    financeContour: "Финансовый контур",
+    controlIndex: "Индекс контроля",
+    controlIndexText: "Расчёт синхронизирован с главной страницей: доходы, расходы, цели и операции берутся из общего контура FinApp.",
+    points: "баллов",
+    operations: "Операций",
+    netFlow: "Чистый поток",
+    appShortcuts: "Действия",
+    openSettings: "Параметры приложения",
+    securityAudit: "Безопасность и аудит",
+    smartNotifications: "Умные уведомления",
+    darkTheme: "Тёмная тема",
+    logout: "Выйти",
+    logoutTitle: "Выйти из аккаунта?",
+    logoutText: "Локальная сессия будет завершена.",
+    profileSaveError: "Не удалось сохранить профиль",
+    securityAuditText: "JWT-сессия, refresh tokens и аудит операций подключены на backend-контуре.",
+    profileVersion: "FinApp 1.0 · сбор и анализ финансов",
+    dataSynced: "Данные синхронизированы",
+    dataSyncedText: "Профиль использует те же транзакции и цели, что главная страница.",
+
     settingsTitle: "Настройки приложения",
     settingsText: "Безопасность, синхронизация и параметры интерфейса.",
     main: "Основные",
     currency: "Валюта интерфейса",
     language: "Язык интерфейса",
-    darkTheme: "Темная тема",
     sync: "Уведомления и синхронизация",
     push: "Push-уведомления",
     backgroundSync: "Фоновая синхронизация",
+    pullToRefresh: "Pull-to-Refresh",
     security: "Безопасность",
     active: "Активно",
     changePassword: "Сменить пароль",
@@ -68,17 +125,18 @@ const dictionary = {
     biometric: "Биометрический вход",
     audit: "Аудит операций",
     data: "Данные",
-    exportData: "Экспорт данных",
+    exportData: "Открыть отчёты",
     clearCache: "Очистить локальный кэш",
     chooseCurrency: "Выберите валюту",
     chooseLanguage: "Выберите язык",
+    updateRates: "Обновить курсы",
     passwordTitle: "Смена пароля",
     currentPassword: "Текущий пароль",
     newPassword: "Новый пароль",
     repeatPassword: "Повторите новый пароль",
     savePassword: "Сохранить пароль",
     done: "Готово",
-    passwordChanged: "Пароль изменен.",
+    passwordChanged: "Пароль изменён.",
     error: "Ошибка",
     passwordTooShort: "Новый пароль должен содержать минимум 8 символов.",
     passwordMismatch: "Подтверждение пароля не совпадает.",
@@ -86,6 +144,7 @@ const dictionary = {
     cacheCleared: "Локальный кэш очищен.",
     biometricsUnavailable: "Биометрия недоступна",
     biometricsUnavailableText: "На устройстве нет настроенной биометрической проверки.",
+    settingsUsefulText: "Настройки применяются к интерфейсу, валюте, уведомлениям и способам синхронизации.",
   },
   en: {
     home: "Home",
@@ -101,15 +160,72 @@ const dictionary = {
     manualDesc: "Enter amount and description",
     file: "File",
     fileDesc: "CSV or Excel",
-    settingsTitle: "App Settings",
+
+    goodMorning: "Good morning",
+    totalBalance: "Total balance",
+    income: "Income",
+    expense: "Expenses",
+    savings: "Savings",
+    quickAccess: "Quick access",
+    analytics: "Analytics",
+    subscriptions: "Subscriptions",
+    reports: "Reports",
+    thisMonth: "This month",
+    details: "Details",
+    latest: "Latest",
+    all: "All",
+    tips: "Tips",
+    noTransactionsStructure: "Add transactions to see your spending structure.",
+    noTransactionsYet: "Tap the center button to add your first transaction.",
+    noRecommendations: "No recommendations yet",
+    noRecommendationsText: "Generate recommendations after adding transactions, budgets and goals.",
+    transaction: "Transaction",
+    subscription: "Subscription",
+
+    profileTitle: "Profile",
+    profileFallbackName: "FinApp User",
+    emailMissing: "email not specified",
+    personalData: "Personal data",
+    savedLocally: "Saved locally",
+    canFillLater: "Can be filled later",
+    name: "Name",
+    namePlaceholder: "For example, Daniel",
+    phone: "Phone",
+    city: "City",
+    cityPlaceholder: "Your city",
+    cancel: "Cancel",
+    save: "Save",
+    savingNow: "Saving...",
+    notSpecified: "Not specified",
+    financeContour: "Financial contour",
+    controlIndex: "Control index",
+    controlIndexText: "This profile is synced with the dashboard: income, expenses, goals and operations come from the shared FinApp data flow.",
+    points: "points",
+    operations: "Operations",
+    netFlow: "Net flow",
+    appShortcuts: "Actions",
+    openSettings: "App settings",
+    securityAudit: "Security and audit",
+    smartNotifications: "Smart notifications",
+    darkTheme: "Dark theme",
+    logout: "Log out",
+    logoutTitle: "Log out?",
+    logoutText: "The local session will be closed.",
+    profileSaveError: "Could not save profile",
+    securityAuditText: "JWT session, refresh tokens and operation audit are connected in the backend layer.",
+    profileVersion: "FinApp 1.0 · finance collection and analysis",
+    dataSynced: "Data is synced",
+    dataSyncedText: "Profile uses the same transactions and goals as the dashboard.",
+
+    settingsTitle: "App settings",
     settingsText: "Security, sync and interface preferences.",
     main: "General",
     currency: "Display currency",
     language: "Interface language",
-    darkTheme: "Dark theme",
     sync: "Notifications and sync",
     push: "Push notifications",
     backgroundSync: "Background sync",
+    pullToRefresh: "Pull-to-Refresh",
     security: "Security",
     active: "Active",
     changePassword: "Change password",
@@ -117,11 +233,12 @@ const dictionary = {
     biometric: "Biometric login",
     audit: "Operation audit",
     data: "Data",
-    exportData: "Export data",
+    exportData: "Open reports",
     clearCache: "Clear local cache",
     chooseCurrency: "Choose currency",
     chooseLanguage: "Choose language",
-    passwordTitle: "Change Password",
+    updateRates: "Update rates",
+    passwordTitle: "Change password",
     currentPassword: "Current password",
     newPassword: "New password",
     repeatPassword: "Repeat new password",
@@ -135,6 +252,7 @@ const dictionary = {
     cacheCleared: "Local cache cleared.",
     biometricsUnavailable: "Biometrics unavailable",
     biometricsUnavailableText: "No biometric authentication is configured on this device.",
+    settingsUsefulText: "Settings affect interface language, currency, notifications and sync behavior.",
   },
 };
 
@@ -146,6 +264,7 @@ const AppSettingsContext = createContext({
   updateSettings: async () => {},
   refreshRates: async () => {},
   formatMoney: (value: number, options?: Record<string, unknown>) => `${Number(value || 0)} ₽`,
+  formatExchangeHint: () => "",
   t: (key: string) => key,
 });
 
@@ -202,10 +321,11 @@ export function AppSettingsProvider({ children }) {
     (value, options = {}) => {
       const currency = currencyMeta[settings.currency] ? settings.currency : "RUB";
       const meta = currencyMeta[currency];
-      const rubAmount = Math.abs(Number(value || 0));
+      const raw = Number(value || 0);
+      const rubAmount = Math.abs(raw);
       const rate = Number(rates.rates[currency] || 1);
       const amount = currency === "RUB" ? rubAmount : rubAmount / rate;
-      const sign = options.sign ? (Number(value || 0) >= 0 ? "+" : "-") : "";
+      const sign = options.sign ? (raw >= 0 ? "+" : "-") : "";
       const formatter = new Intl.NumberFormat(meta.locale, {
         style: "currency",
         currency: meta.currency,
@@ -217,6 +337,16 @@ export function AppSettingsProvider({ children }) {
     [rates.rates, settings.currency],
   );
 
+  const formatExchangeHint = useCallback(() => {
+    const currency = currencyMeta[settings.currency] ? settings.currency : "RUB";
+    if (currency === "RUB") return "";
+    const rate = Number(rates.rates[currency] || 0);
+    if (!rate) return "";
+    const date = rates.updatedAt ? new Date(rates.updatedAt) : null;
+    const dateText = date && !Number.isNaN(date.getTime()) ? date.toLocaleDateString(settings.language === "en" ? "en-US" : "ru-RU") : "";
+    return `1 ${currency} ≈ ${Math.round(rate * 100) / 100} ₽${dateText ? ` · ${dateText}` : ""}`;
+  }, [rates.rates, rates.updatedAt, settings.currency, settings.language]);
+
   const value = useMemo(
     () => ({
       settings,
@@ -226,9 +356,10 @@ export function AppSettingsProvider({ children }) {
       updateSettings,
       refreshRates,
       formatMoney,
+      formatExchangeHint,
       t,
     }),
-    [formatMoney, rates, refreshRates, setSetting, settings, t, updateSettings],
+    [formatExchangeHint, formatMoney, rates, refreshRates, setSetting, settings, t, updateSettings],
   );
 
   return <AppSettingsContext.Provider value={value}>{children}</AppSettingsContext.Provider>;
