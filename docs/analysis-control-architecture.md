@@ -1895,3 +1895,407 @@ Screen --> Api : markAsRead / archive
 | `GOAL_PROGRESS` | `FinancialInsight.goals` | Прогресс финансовых целей |
 
 Краткое описание для вставки в раздел 3.5: отчётность реализована через компонент `ReportService`, который запрашивает данные у `FinancialAnalysisFacade`, формирует отчётное представление выбранного типа и сохраняет результат в таблицу `reports`. Отчёты дополняют рекомендации и уведомления, так как предоставляют пользователю не точечное предупреждение или совет, а структурированную сводку за выбранный период.
+
+## 19. ER-фрагмент таблиц модуля анализа и контроля финансов
+
+Этот раздел можно использовать для подготовки «Рисунок 27 — ER-фрагмент таблиц, используемых модулем анализа и контроля финансов». Важно подчеркнуть, что здесь не выполняется повторное проектирование базы данных. Логическая модель базы данных рассматривается отдельно, а данный фрагмент показывает только практическое использование таблиц модулем анализа и контроля финансов.
+
+### 19.1. Назначение ER-фрагмента
+
+ER-фрагмент должен показать, какие таблицы используются модулем как входные источники данных, а какие таблицы используются как хранилища результатов аналитической обработки.
+
+На схеме рекомендуется разделить таблицы на три смысловые группы:
+
+1. **Подготовленные входные данные**:
+   - `transactions`;
+   - `categories`.
+2. **Данные контрольных механизмов**:
+   - `budgets`;
+   - `general_budgets`;
+   - `goals`;
+   - `goal_transactions`.
+3. **Результаты аналитической обработки**:
+   - `recommendations`;
+   - `notifications`;
+   - `reports`.
+
+Дополнительно на схеме можно показать таблицу `users` как внешний контекст, потому что большинство таблиц содержат поле `user_id`. Однако в таблицу 3.3 её лучше не включать, если подраздел посвящён именно таблицам, используемым аналитико-контрольным модулем.
+
+### 19.2. Таблица 3.3 — таблицы базы данных, используемые модулем
+
+| Таблица | Назначение в модуле анализа и контроля финансов |
+| --- | --- |
+| `transactions` | Используется как основной источник транзакционных данных для расчёта доходов, расходов, cashflow, структуры расходов, выявления крупных и нетипичных трат. |
+| `categories` | Используется для группировки доходов и расходов по категориям, построения структуры расходов и отображения аналитики по направлениям затрат. |
+| `budgets` | Используется для контроля категорийных бюджетов: расчёта лимита, потраченной суммы, остатка, процента использования и уровня риска перерасхода. |
+| `general_budgets` | Используется для учёта общего лимита расходов за период. В рамках модуля применяется как источник данных для общей бюджетной аналитики без расширенного описания неподтверждённых UI-сценариев. |
+| `goals` | Используется для анализа финансовых целей: расчёта прогресса, остатка до целевой суммы, срока достижения и риска невыполнения цели. |
+| `goal_transactions` | Используется для учёта операций, связанных с пополнением финансовых целей, и уточнения фактического прогресса накопления. |
+| `notifications` | Используется для хранения уведомлений, сформированных по результатам анализа бюджетов, целей, крупных или нетипичных трат и рекомендаций. |
+| `recommendations` | Используется для хранения рекомендаций, сформированных на основе финансовых инсайтов, включая данные о бюджетах, целях, cashflow, аномалиях и качестве исходных данных. |
+| `reports` | Используется для хранения отчётных данных за выбранный период, включая сводные показатели, анализ категорий и прогресс финансовых целей. |
+
+### 19.3. Ключевые поля, которые стоит отразить на ER-схеме
+
+Чтобы рисунок не был перегружен, на нём достаточно показать только поля, важные для модуля анализа и контроля.
+
+| Таблица | Поля, которые рекомендуется показать |
+| --- | --- |
+| `transactions` | `id`, `user_id`, `amount`, `currency`, `type`, `category_id`, `ml_category_id`, `ml_confidence`, `description`, `date`, `is_verified`, `is_recurring` |
+| `categories` | `id`, `user_id`, `name`, `type` |
+| `budgets` | `id`, `user_id`, `category_id`, `amount_limit`, `spent_amount`, `period`, `period_start`, `period_end`, `currency`, `alert_thresholds`, `is_active` |
+| `general_budgets` | `id`, `user_id`, `total_limit`, `spent_amount`, `period`, `period_start`, `period_end` |
+| `goals` | `id`, `user_id`, `name`, `target_amount`, `current_amount`, `currency`, `deadline`, `goal_type`, `priority`, `status`, `auto_save_amount`, `auto_save_frequency` |
+| `goal_transactions` | `id`, `goal_id`, `transaction_id`, `amount`, `date`, `is_auto_save` |
+| `recommendations` | `id`, `user_id`, `type`, `title`, `description`, `action_items`, `estimated_savings`, `priority`, `is_applied`, `applied_at` |
+| `notifications` | `id`, `user_id`, `type`, `title`, `message`, `source_module`, `entity_type`, `entity_id`, `data`, `is_read`, `is_archived`, `scheduled_for` |
+| `reports` | `id`, `user_id`, `report_type`, `period_start`, `period_end`, `data`, `pdf_url` |
+
+### 19.4. Основные связи между таблицами
+
+На рисунке 27 рекомендуется показать следующие связи.
+
+| Связь | Тип связи | Назначение связи в модуле |
+| --- | --- | --- |
+| `categories.id` → `transactions.category_id` | 1:N | Категория используется для группировки транзакций и расчёта структуры расходов. |
+| `categories.id` → `transactions.ml_category_id` | 1:N, вспомогательная | ML-категория используется как дополнительный аналитический признак, если пользовательская категория не подтверждена. |
+| `categories.id` → `budgets.category_id` | 1:N | Категорийный бюджет задаёт лимит расходов по конкретной категории. |
+| `goals.id` → `goal_transactions.goal_id` | 1:N | Одна финансовая цель может иметь несколько операций пополнения. |
+| `transactions.id` → `goal_transactions.transaction_id` | 1:0..N, опциональная | Пополнение цели может быть связано с конкретной транзакцией. |
+| `recommendations.id` → `notifications.entity_id` | логическая полиморфная | Важная рекомендация может стать источником уведомления, если `entity_type = 'recommendation'`. |
+| `budgets.id` → `notifications.entity_id` | логическая полиморфная | Уведомление может быть связано с бюджетом, если `entity_type = 'budget'`. |
+| `goals.id` → `notifications.entity_id` | логическая полиморфная | Уведомление может быть связано с целью, если `entity_type = 'goal'`. |
+| `transactions.id` → `notifications.entity_id` | логическая полиморфная | Уведомление может быть связано с крупной или нетипичной транзакцией, если `entity_type = 'transaction'`. |
+
+Поле `notifications.entity_id` является универсальной ссылкой на сущность-источник уведомления. Поэтому на ER-схеме такие связи лучше обозначать пунктирными линиями или отдельной подписью «логическая связь через `entity_type` + `entity_id`», чтобы не создавать впечатление строгого внешнего ключа ко всем таблицам одновременно.
+
+### 19.5. Mermaid ER-схема для рисунка 27
+
+Ниже приведён вариант ER-фрагмента для Mermaid. Его можно использовать как основу для построения рисунка 27.
+
+```mermaid
+erDiagram
+    CATEGORIES ||--o{ TRANSACTIONS : "category_id"
+    CATEGORIES ||--o{ TRANSACTIONS : "ml_category_id"
+    CATEGORIES ||--o{ BUDGETS : "category_id"
+    GOALS ||--o{ GOAL_TRANSACTIONS : "goal_id"
+    TRANSACTIONS ||--o{ GOAL_TRANSACTIONS : "transaction_id"
+
+    TRANSACTIONS {
+        uuid id PK
+        uuid user_id
+        decimal amount
+        string currency
+        string type
+        uuid category_id FK
+        uuid ml_category_id FK
+        decimal ml_confidence
+        string description
+        datetime date
+        boolean is_verified
+        boolean is_recurring
+    }
+
+    CATEGORIES {
+        uuid id PK
+        uuid user_id
+        string name
+        string type
+    }
+
+    BUDGETS {
+        uuid id PK
+        uuid user_id
+        uuid category_id FK
+        decimal amount_limit
+        decimal spent_amount
+        string period
+        date period_start
+        date period_end
+        string currency
+        json alert_thresholds
+        boolean is_active
+    }
+
+    GENERAL_BUDGETS {
+        uuid id PK
+        uuid user_id
+        decimal total_limit
+        decimal spent_amount
+        string period
+        date period_start
+        date period_end
+    }
+
+    GOALS {
+        uuid id PK
+        uuid user_id
+        string name
+        decimal target_amount
+        decimal current_amount
+        string currency
+        date deadline
+        string goal_type
+        int priority
+        string status
+        decimal auto_save_amount
+        string auto_save_frequency
+    }
+
+    GOAL_TRANSACTIONS {
+        uuid id PK
+        uuid goal_id FK
+        uuid transaction_id FK
+        decimal amount
+        date date
+        boolean is_auto_save
+    }
+
+    RECOMMENDATIONS {
+        uuid id PK
+        uuid user_id
+        string type
+        string title
+        string description
+        json action_items
+        decimal estimated_savings
+        int priority
+        boolean is_applied
+        datetime applied_at
+    }
+
+    NOTIFICATIONS {
+        uuid id PK
+        uuid user_id
+        string type
+        string title
+        string message
+        string source_module
+        string entity_type
+        uuid entity_id
+        json data
+        boolean is_read
+        boolean is_archived
+        datetime scheduled_for
+    }
+
+    REPORTS {
+        uuid id PK
+        uuid user_id
+        string report_type
+        date period_start
+        date period_end
+        json data
+        string pdf_url
+    }
+```
+
+### 19.6. Mermaid-схема с группировкой по назначению
+
+Если требуется не строго ER-представление, а более наглядная схема для дипломного рисунка, можно использовать вариант с группировкой таблиц по роли в модуле.
+
+```mermaid
+flowchart TB
+    subgraph input["Подготовленные входные данные"]
+        transactions["transactions\nтранзакции, суммы, даты\ncategory_id, ml_category_id, ml_confidence"]
+        categories["categories\nназвания и типы категорий"]
+    end
+
+    subgraph control["Данные контрольных механизмов"]
+        budgets["budgets\nкатегорийные лимиты"]
+        generalBudgets["general_budgets\nобщий лимит расходов"]
+        goals["goals\nфинансовые цели"]
+        goalTx["goal_transactions\nоперации пополнения целей"]
+    end
+
+    subgraph results["Результаты аналитической обработки"]
+        recommendations["recommendations\nсформированные рекомендации"]
+        notifications["notifications\nвнутренние уведомления"]
+        reports["reports\nотчётные данные"]
+    end
+
+    categories -->|"category_id / ml_category_id"| transactions
+    categories -->|"category_id"| budgets
+    transactions -->|"расходы, доходы, cashflow"| recommendations
+    transactions -->|"крупные и нетипичные траты"| notifications
+    budgets -->|"риск перерасхода"| recommendations
+    budgets -->|"порог лимита"| notifications
+    goals -->|"прогресс и риск"| recommendations
+    goals -->|"риск дедлайна"| notifications
+    goals --> goalTx
+    transactions -.->|"transaction_id, если пополнение связано с операцией"| goalTx
+    transactions --> reports
+    categories --> reports
+    goals --> reports
+    recommendations -.->|"важные рекомендации"| notifications
+```
+
+### 19.7. PlantUML-вариант ER-фрагмента
+
+```plantuml
+@startuml
+hide circle
+skinparam linetype ortho
+skinparam shadowing false
+
+title ER-фрагмент таблиц, используемых модулем анализа и контроля финансов
+
+entity "transactions" as transactions {
+  * id : uuid
+  --
+  user_id : uuid
+  amount : decimal
+  currency : string
+  type : string
+  category_id : uuid
+  ml_category_id : uuid
+  ml_confidence : decimal
+  date : datetime
+  is_verified : boolean
+  is_recurring : boolean
+}
+
+entity "categories" as categories {
+  * id : uuid
+  --
+  user_id : uuid
+  name : string
+  type : string
+}
+
+entity "budgets" as budgets {
+  * id : uuid
+  --
+  user_id : uuid
+  category_id : uuid
+  amount_limit : decimal
+  spent_amount : decimal
+  period_start : date
+  period_end : date
+  is_active : boolean
+}
+
+entity "general_budgets" as general_budgets {
+  * id : uuid
+  --
+  user_id : uuid
+  total_limit : decimal
+  spent_amount : decimal
+  period_start : date
+  period_end : date
+}
+
+entity "goals" as goals {
+  * id : uuid
+  --
+  user_id : uuid
+  name : string
+  target_amount : decimal
+  current_amount : decimal
+  deadline : date
+  status : string
+  auto_save_amount : decimal
+  auto_save_frequency : string
+}
+
+entity "goal_transactions" as goal_transactions {
+  * id : uuid
+  --
+  goal_id : uuid
+  transaction_id : uuid
+  amount : decimal
+  date : date
+  is_auto_save : boolean
+}
+
+entity "recommendations" as recommendations {
+  * id : uuid
+  --
+  user_id : uuid
+  type : string
+  title : string
+  action_items : json
+  estimated_savings : decimal
+  priority : int
+  is_applied : boolean
+}
+
+entity "notifications" as notifications {
+  * id : uuid
+  --
+  user_id : uuid
+  type : string
+  title : string
+  message : text
+  entity_type : string
+  entity_id : uuid
+  data : json
+  is_read : boolean
+}
+
+entity "reports" as reports {
+  * id : uuid
+  --
+  user_id : uuid
+  report_type : string
+  period_start : date
+  period_end : date
+  data : json
+}
+
+categories ||--o{ transactions : category_id
+categories ||..o{ transactions : ml_category_id
+categories ||--o{ budgets : category_id
+goals ||--o{ goal_transactions : goal_id
+transactions ||..o{ goal_transactions : transaction_id
+recommendations ||..o{ notifications : entity_type/entity_id
+budgets ||..o{ notifications : entity_type/entity_id
+goals ||..o{ notifications : entity_type/entity_id
+transactions ||..o{ notifications : entity_type/entity_id
+@enduml
+```
+
+### 19.8. Как расположить таблицы на рисунке 27
+
+Для читаемости рисунка рекомендуется использовать следующую компоновку:
+
+- Слева разместить `transactions` и `categories`, потому что они являются основой транзакционной аналитики.
+- В центре разместить `budgets`, `general_budgets`, `goals` и `goal_transactions`, потому что они используются для контрольных расчётов.
+- Справа разместить `recommendations`, `notifications` и `reports`, потому что это результаты аналитической обработки.
+- Связи `categories → transactions` и `categories → budgets` сделать сплошными.
+- Связь `categories → transactions` по `ml_category_id` можно сделать пунктирной и подписать как «ML-признак после предварительной обработки».
+- Связь `goals → goal_transactions` сделать сплошной.
+- Связь `transactions → goal_transactions` сделать пунктирной, так как операция пополнения цели может быть связана с транзакцией, но такая связь не является основным источником транзакционной аналитики.
+- Связи от `notifications` к бюджетам, целям, транзакциям и рекомендациям лучше показать пунктиром как логические связи через `entity_type` и `entity_id`.
+- Таблицу `reports` можно расположить отдельно справа снизу, так как она хранит агрегированные отчётные данные за период и не является источником для основных расчётов.
+
+### 19.9. Подписи связей для рисунка 27
+
+| Откуда | Куда | Подпись на схеме |
+| --- | --- | --- |
+| `categories` | `transactions` | Категория подтверждённой транзакции: `category_id` |
+| `categories` | `transactions` | ML-категория как аналитический признак: `ml_category_id` |
+| `categories` | `budgets` | Лимит по категории: `category_id` |
+| `goals` | `goal_transactions` | Пополнения цели: `goal_id` |
+| `transactions` | `goal_transactions` | Связанная операция пополнения: `transaction_id` |
+| `budgets` | `notifications` | Уведомление о лимите или риске перерасхода |
+| `goals` | `notifications` | Уведомление о прогрессе или риске дедлайна |
+| `transactions` | `notifications` | Уведомление о крупной или нетипичной трате |
+| `recommendations` | `notifications` | Уведомление по важной рекомендации |
+| `transactions`, `categories`, `goals` | `reports` | Данные для отчётов `MONTHLY_SUMMARY`, `CATEGORY_ANALYSIS`, `GOAL_PROGRESS` |
+
+### 19.10. Готовый пояснительный текст под рисунок 27
+
+На рисунке 27 представлен ER-фрагмент таблиц, используемых модулем анализа и контроля финансов. Данный фрагмент не является повторным проектированием базы данных FinApp, а отражает практическое использование уже существующих таблиц в рамках аналитико-контрольного модуля. Таблицы `transactions` и `categories` используются как подготовленные входные данные для расчёта доходов, расходов, cashflow, структуры расходов и выявления крупных или нетипичных трат.
+
+Таблицы `budgets` и `general_budgets` применяются для контроля бюджетных ограничений. `budgets` связывается с `categories` через `category_id` и используется для расчёта лимита, потраченной суммы, остатка, процента использования и риска перерасхода по категории. `general_budgets` отражает общий лимит расходов за период и может применяться как источник общей бюджетной аналитики. Таблицы `goals` и `goal_transactions` используются для анализа финансовых целей: расчёта прогресса, остатка до целевой суммы, срока достижения, требуемого взноса и риска невыполнения цели.
+
+Таблицы `recommendations`, `notifications` и `reports` используются для хранения результатов аналитической обработки. В `recommendations` сохраняются рекомендации, сформированные на основе объекта `FinancialInsight`; в `notifications` сохраняются внутренние уведомления приложения, связанные с бюджетами, целями, транзакциями или рекомендациями; в `reports` сохраняются отчётные представления за выбранный период. Поля `ml_category_id` и `ml_confidence` в таблице `transactions` используются только как дополнительные признаки аналитической обработки и не означают выполнение первичной ML-категоризации внутри данного модуля.
+
+Таким образом, база данных в модуле анализа и контроля финансов выступает централизованным хранилищем FinApp, которое предоставляет входные данные для аналитических расчётов и обеспечивает сохранение результатов: рекомендаций, уведомлений и отчётных данных.
+
+### 19.11. Краткая версия для вставки рядом с рисунком 27
+
+ER-фрагмент на рисунке 27 показывает таблицы, которые используются модулем анализа и контроля финансов как источники данных и как хранилища результатов аналитической обработки. `transactions` и `categories` применяются для транзакционной аналитики и анализа расходов по категориям. `budgets`, `general_budgets`, `goals` и `goal_transactions` используются для контрольных расчётов по бюджетам и финансовым целям. `recommendations`, `notifications` и `reports` предназначены для хранения результатов работы модуля: рекомендаций, уведомлений и отчётных данных.
+
+База данных в данном модуле не рассматривается как самостоятельно проектируемый компонент. Она используется как общее хранилище FinApp, обеспечивающее получение подготовленных входных данных и сохранение результатов аналитической обработки.
