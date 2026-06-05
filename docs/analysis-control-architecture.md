@@ -722,3 +722,322 @@ FinancialInsight --> Controller : ApiResponse<FinancialInsight>
 Центральным компонентом серверной части является `FinancialAnalysisFacade`. Он принимает `userId`, `periodStart` и `periodEnd`, проверяет корректность периода и координирует работу специализированных аналитических моделей. `TransactionAnalyticsModel` рассчитывает финансовую сводку, daily cashflow, распределение расходов по категориям и торговым точкам, а также выявляет аномалии. `BudgetInsightModel` анализирует активные бюджеты пользователя, `GoalInsightModel` оценивает прогресс финансовых целей, `FinancialHealthScoreModel` формирует интегральную оценку финансового состояния, а `RecommendationEngineModel` подготавливает рекомендации на основе промежуточного объекта `baseInsight`.
 
 На рисунке 16 показано, что `FinancialInsight` формируется не одним расчётом, а последовательной сборкой нескольких групп данных: `summary`, `cashflow`, `categories`, `merchants`, `budgets`, `goals`, `anomalies`, `healthScore`, `recommendations` и `metadata`. Итоговый объект передаётся через API в мобильное приложение и используется для отображения аналитики, бюджетов, целей, уведомлений, рекомендаций и отчётов.
+
+## 14. Схема контроля бюджета
+
+Этот раздел можно использовать для подготовки «Рисунок 17 — Схема контроля бюджета». Рисунок должен показывать, как компонент `BudgetInsightModel` получает активные бюджеты пользователя, сопоставляет лимиты с фактическими расходами за период, рассчитывает прогноз перерасхода и формирует объект `BudgetInsight` с уровнем риска `LOW`, `MEDIUM` или `HIGH`.
+
+### 14.1. Назначение рисунка 17
+
+Схема контроля бюджета должна отражать не общий процесс аналитики, а отдельный механизм финансового контроля. Его задача — ответить на вопросы:
+
+- какой лимит был задан пользователем;
+- сколько уже потрачено в рамках периода бюджета;
+- сколько средств осталось до лимита;
+- какой процент бюджета использован;
+- сохранится ли текущий темп расходов до конца периода;
+- есть ли риск перерасхода;
+- какое сообщение нужно показать пользователю на экране бюджетов.
+
+На схеме важно показать, что `BudgetInsightModel` работает с уже подготовленными данными. Он не импортирует транзакции, не выполняет голосовой ввод и не запускает первичную ML-категоризацию. Если у транзакции отсутствует подтверждённая пользовательская категория, при сопоставлении с категорийным бюджетом может использоваться `ml_category_id` как вспомогательный признак.
+
+### 14.2. Компоненты, которые нужно показать на схеме
+
+Для рисунка 17 рекомендуется использовать следующие блоки:
+
+1. `FinancialAnalysisFacade` или сценарий запроса аналитики — источник вызова `BudgetInsightModel.analyzeBudgets(userId, analysisDate)`.
+2. `BudgetService` — получение активных бюджетов пользователя.
+3. `BudgetInsightModel` — центральный блок контроля бюджета.
+4. PostgreSQL — источник бюджетов, категорий и транзакций.
+5. Блок фильтрации бюджетов по дате анализа.
+6. Блок расчёта фактических расходов.
+7. Блок расчёта показателей бюджета.
+8. Блок определения риска.
+9. Блок формирования `BudgetInsight`.
+10. Получатели результата: `BudgetsScreen`, рекомендации, уведомления и `FinancialHealthScoreModel`.
+
+### 14.3. Входные данные BudgetInsightModel
+
+На вход модели поступают:
+
+- `userId` — идентификатор пользователя;
+- `analysisDate` — дата, относительно которой оценивается актуальность бюджета;
+- активные бюджеты пользователя из `BudgetService.getActiveBudgets(userId)`;
+- параметры каждого бюджета:
+  - `budgetId`;
+  - `categoryId`;
+  - `amountLimit`;
+  - `periodStart`;
+  - `periodEnd`;
+  - `period`;
+  - `currency`;
+  - `alertThresholds`;
+  - `isActive`;
+- транзакции пользователя за период бюджета;
+- категории транзакций;
+- вспомогательный ML-признак `ml_category_id`, если подтверждённая категория `category_id` отсутствует.
+
+### 14.4. Логика выбора транзакций для бюджета
+
+Для каждого активного бюджета модель определяет фактические расходы `spentAmount`.
+
+Если бюджет общий, то есть `categoryId` отсутствует, в расчёт включаются все расходные транзакции пользователя за период бюджета:
+
+- `user_id = userId`;
+- `type = EXPENSE`;
+- `date >= periodStart`;
+- `date < periodEnd + 1 день`.
+
+Если бюджет задан для конкретной категории, в расчёт включаются только расходы этой категории:
+
+- `user_id = userId`;
+- `type = EXPENSE`;
+- `COALESCE(category_id, ml_category_id) = budget.categoryId`;
+- `date >= periodStart`;
+- `date < periodEnd + 1 день`.
+
+Такой подход позволяет учитывать как вручную подтверждённые категории, так и результат предварительной ML-обработки, но сама ML-категоризация остаётся вне данного механизма.
+
+### 14.5. Расчётные показатели бюджета
+
+После получения суммы расходов модель рассчитывает основные показатели:
+
+| Показатель | Формула / источник | Назначение |
+| --- | --- | --- |
+| `amountLimit` | Лимит из бюджета | Максимально допустимая сумма расходов |
+| `spentAmount` | `SUM(transactions.amount)` | Фактические расходы за период бюджета |
+| `remainingAmount` | `max(amountLimit - spentAmount, 0)` | Остаток до лимита |
+| `progressPercent` | `spentAmount / amountLimit * 100%` | Процент использования бюджета |
+| `daysRemaining` | `max(periodEnd - analysisDate, 0)` | Сколько дней осталось до конца периода |
+| `elapsedDays` | `max(analysisDate - periodStart + 1, 1)` | Сколько дней периода уже прошло |
+| `totalDays` | `max(periodEnd - periodStart + 1, 1)` | Полная длительность бюджетного периода |
+| `forecastedSpend` | `spentAmount * totalDays / elapsedDays` | Прогноз расходов к концу периода при текущем темпе |
+| `forecastedOverspend` | `max(forecastedSpend - amountLimit, 0)` | Ожидаемый перерасход |
+| `riskLevel` | Правила `LOW` / `MEDIUM` / `HIGH` | Интерпретация состояния бюджета |
+| `message` | Текст по уровню риска | Пояснение для пользователя |
+
+### 14.6. Правила определения уровня риска
+
+Для схемы можно выделить отдельный блок «Классификация риска».
+
+Уровень `HIGH` устанавливается, если:
+
+- `progressPercent >= 100%`, то есть лимит уже достигнут или превышен;
+- или `forecastedOverspend > 0`, то есть при текущем темпе расходов прогнозируется перерасход к концу периода.
+
+Уровень `MEDIUM` устанавливается, если:
+
+- `progressPercent >= 85%`;
+- или `progressPercent >= 70%` и до конца периода осталось больше 7 дней.
+
+Уровень `LOW` устанавливается во всех остальных случаях, когда бюджет используется в безопасном темпе.
+
+На рисунке это удобно представить как ромбы условий:
+
+1. «Лимит достигнут или прогнозируется перерасход?» → `HIGH`.
+2. «Использовано 85% или больше?» → `MEDIUM`.
+3. «Использовано 70% или больше и осталось больше 7 дней?» → `MEDIUM`.
+4. Иначе → `LOW`.
+
+### 14.7. Формирование объекта BudgetInsight
+
+Результатом обработки одного бюджета является объект `BudgetInsight`. На схеме его можно показать как контейнер с такими полями:
+
+| Поле `BudgetInsight` | Смысл |
+| --- | --- |
+| `budgetId` | Идентификатор бюджета |
+| `categoryId` | Идентификатор категории или `null` для общего бюджета |
+| `categoryName` | Название категории или «Общий бюджет» |
+| `periodStart`, `periodEnd` | Границы периода действия бюджета |
+| `amountLimit` | Установленный лимит |
+| `spentAmount` | Фактически потраченная сумма |
+| `remainingAmount` | Остаток до лимита |
+| `progressPercent` | Процент использования лимита |
+| `riskLevel` | Уровень риска `LOW`, `MEDIUM` или `HIGH` |
+| `daysRemaining` | Количество дней до конца периода |
+| `forecastedOverspend` | Прогнозируемый перерасход |
+| `message` | Текстовая интерпретация состояния бюджета |
+
+После формирования всех объектов список `BudgetInsight` сортируется по уровню риска: сначала бюджеты с `HIGH`, затем `MEDIUM`, затем `LOW`. Это удобно для интерфейса, потому что наиболее проблемные бюджеты отображаются выше.
+
+### 14.8. Mermaid-схема контроля бюджета
+
+Ниже приведён готовый вариант схемы для вставки в Mermaid-редактор.
+
+```mermaid
+flowchart TB
+    start["Запрос аналитики\nFinancialAnalysisFacade"]
+    call["BudgetInsightModel\nanalyzeBudgets(userId, analysisDate)"]
+    service["BudgetService\ngetActiveBudgets(userId)"]
+    db[("PostgreSQL\nbudgets, categories, transactions\ncategory_id, ml_category_id")]
+
+    active["Список активных бюджетов пользователя"]
+    filter{"Бюджет актуален\nдля analysisDate?\nperiodStart <= analysisDate <= periodEnd"}
+    skip["Исключить бюджет\nиз текущего анализа"]
+
+    category{"Тип бюджета"}
+    general["Общий бюджет\nсуммировать все EXPENSE\nза periodStart..periodEnd"]
+    categoryBudget["Категорийный бюджет\nсуммировать EXPENSE, где\nCOALESCE(category_id, ml_category_id) = categoryId"]
+
+    spent["spentAmount\nфактические расходы"]
+    calc["Расчёт показателей\nremainingAmount = max(limit - spent, 0)\nprogressPercent = spent / limit * 100\ndaysRemaining\nelapsedDays / totalDays"]
+    forecast["Прогноз\nforecastedSpend = spent * totalDays / elapsedDays\nforecastedOverspend = max(forecastedSpend - limit, 0)"]
+
+    high{"progressPercent >= 100%\nили forecastedOverspend > 0?"}
+    medium1{"progressPercent >= 85%?"}
+    medium2{"progressPercent >= 70%\nи daysRemaining > 7?"}
+
+    riskHigh["riskLevel = HIGH\nлимит достигнут или прогнозируется перерасход"]
+    riskMedium["riskLevel = MEDIUM\nбюджет близок к рисковой зоне"]
+    riskLow["riskLevel = LOW\nбезопасный темп расходов"]
+
+    insight["BudgetInsight\nbudgetId, categoryName, amountLimit\nspentAmount, remainingAmount\nprogressPercent, riskLevel\ndaysRemaining, forecastedOverspend, message"]
+    sort["Сортировка списка\nHIGH -> MEDIUM -> LOW"]
+    output["List<BudgetInsight>"]
+
+    consumers["Использование результата\nBudgetsScreen\nFinancialHealthScoreModel\nRecommendationEngineModel\nуведомления"]
+
+    start --> call --> service --> active
+    service --> db
+    db --> service
+    active --> filter
+    filter -- нет --> skip
+    filter -- да --> category
+    category -- "categoryId = null" --> general
+    category -- "categoryId задан" --> categoryBudget
+    db --> general
+    db --> categoryBudget
+    general --> spent
+    categoryBudget --> spent
+    spent --> calc --> forecast --> high
+
+    high -- да --> riskHigh
+    high -- нет --> medium1
+    medium1 -- да --> riskMedium
+    medium1 -- нет --> medium2
+    medium2 -- да --> riskMedium
+    medium2 -- нет --> riskLow
+
+    riskHigh --> insight
+    riskMedium --> insight
+    riskLow --> insight
+    insight --> sort --> output --> consumers
+```
+
+### 14.9. Компактная Mermaid-схема для рисунка 17
+
+Если требуется более лаконичная схема, можно использовать следующий вариант.
+
+```mermaid
+flowchart LR
+    in["userId + analysisDate"] --> m["BudgetInsightModel"]
+    db[("PostgreSQL\nbudgets + transactions + categories")] --> m
+    m --> a["Активные бюджеты"]
+    a --> f["Фильтр по periodStart / periodEnd"]
+    f --> s["Расчёт spentAmount\nобщий бюджет или категория"]
+    s --> c["remainingAmount\nprogressPercent\ndaysRemaining\nforecastedOverspend"]
+    c --> r{"Классификация риска"}
+    r --> low["LOW"]
+    r --> med["MEDIUM"]
+    r --> high["HIGH"]
+    low --> out["BudgetInsight"]
+    med --> out
+    high --> out
+    out --> ui["BudgetsScreen\nрекомендации\nуведомления"]
+```
+
+### 14.10. PlantUML-вариант схемы контроля бюджета
+
+```plantuml
+@startuml
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam wrapWidth 220
+
+title Схема контроля бюджета
+
+actor "FinancialAnalysisFacade" as Facade
+component "BudgetInsightModel" as Model
+component "BudgetService" as BudgetService
+component "Фильтрация по периоду" as Filter
+component "Расчёт spentAmount" as Spent
+component "Расчёт показателей" as Metrics
+component "Классификация риска" as Risk
+artifact "BudgetInsight" as Insight
+artifact "List<BudgetInsight>" as Output
+
+database "PostgreSQL\nbudgets, transactions, categories" as DB
+
+Facade --> Model : analyzeBudgets(userId, analysisDate)
+Model --> BudgetService : getActiveBudgets(userId)
+BudgetService --> DB : чтение активных бюджетов
+DB --> BudgetService : budgets
+BudgetService --> Model : active budgets
+Model --> Filter : periodStart <= analysisDate <= periodEnd
+Filter --> Spent : релевантный бюджет
+Spent --> DB : SUM(EXPENSE) за период бюджета\nобщий бюджет или categoryId
+DB --> Spent : spentAmount
+Spent --> Metrics : amountLimit, spentAmount, dates
+Metrics --> Risk : progressPercent, daysRemaining,\nforecastedOverspend
+Risk --> Insight : LOW / MEDIUM / HIGH + message
+Insight --> Output : сортировка HIGH -> MEDIUM -> LOW
+Output --> Facade : budgets для FinancialInsight
+Output --> "BudgetsScreen" : отображение лимитов и рисков
+Output --> "RecommendationEngineModel" : рекомендации по перерасходу
+Output --> "FinancialNotificationService" : уведомления при риске
+@enduml
+```
+
+### 14.11. Последовательность контроля бюджета
+
+Алгоритм можно описать под рисунком 17 следующим образом:
+
+1. `FinancialAnalysisFacade` вызывает `BudgetInsightModel.analyzeBudgets(userId, analysisDate)`.
+2. `BudgetInsightModel` получает активные бюджеты пользователя через `BudgetService.getActiveBudgets(userId)`.
+3. Для каждого бюджета выполняется проверка актуальности: `periodStart <= analysisDate <= periodEnd`.
+4. Если бюджет не относится к текущей дате анализа, он исключается из расчёта.
+5. Если бюджет общий, модель суммирует все расходные транзакции пользователя за период бюджета.
+6. Если бюджет категорийный, модель суммирует расходные транзакции, у которых `category_id` или `ml_category_id` соответствует категории бюджета.
+7. На основе лимита и фактических расходов рассчитываются `remainingAmount` и `progressPercent`.
+8. На основе дат периода рассчитываются `daysRemaining`, `elapsedDays` и `totalDays`.
+9. По текущему темпу расходов рассчитывается `forecastedSpend` и `forecastedOverspend`.
+10. Модель определяет уровень риска: `HIGH`, `MEDIUM` или `LOW`.
+11. Для бюджета формируется текстовое сообщение, объясняющее состояние лимита.
+12. Модель создаёт объект `BudgetInsight`.
+13. Все `BudgetInsight` сортируются по риску, чтобы наиболее проблемные бюджеты отображались первыми.
+14. Список передаётся в `FinancialInsight`, на экран `BudgetsScreen`, а также используется при формировании рекомендаций, уведомлений и общей оценки финансового состояния.
+
+### 14.12. Подписи стрелок для рисунка 17
+
+| Откуда | Куда | Подпись стрелки |
+| --- | --- | --- |
+| `FinancialAnalysisFacade` | `BudgetInsightModel` | `analyzeBudgets(userId, analysisDate)` |
+| `BudgetInsightModel` | `BudgetService` | Запрос активных бюджетов пользователя |
+| `BudgetService` | PostgreSQL | Чтение `budgets` |
+| PostgreSQL | `BudgetInsightModel` | Бюджеты, категории, расходные транзакции |
+| `BudgetInsightModel` | Фильтр периода | Проверка актуальности бюджета |
+| Фильтр периода | Расчёт расходов | Только бюджеты, действующие на `analysisDate` |
+| Расчёт расходов | PostgreSQL | `SUM(amount)` по `EXPENSE` за период бюджета |
+| Расчёт расходов | Расчёт показателей | `spentAmount` |
+| Расчёт показателей | Классификация риска | `progressPercent`, `forecastedOverspend`, `daysRemaining` |
+| Классификация риска | `BudgetInsight` | `LOW` / `MEDIUM` / `HIGH`, `message` |
+| `BudgetInsight` | `BudgetsScreen` | Отображение лимита, остатка, прогресса и риска |
+| `BudgetInsight` | `RecommendationEngineModel` | Основание для рекомендаций по снижению расходов |
+| `BudgetInsight` | `FinancialNotificationService` | Основание для уведомлений о риске перерасхода |
+| `BudgetInsight` | `FinancialHealthScoreModel` | Учет бюджетного риска в общей оценке состояния |
+
+### 14.13. Готовый пояснительный текст под рисунок 17
+
+На рисунке 17 представлена схема контроля бюджета в модуле анализа и контроля финансов. Центральным компонентом данного механизма является `BudgetInsightModel`, который получает активные бюджеты пользователя, проверяет их актуальность для даты анализа и сопоставляет установленные лимиты с фактическими расходами за период действия бюджета. Источником данных выступает PostgreSQL, где хранятся бюджеты, категории и подготовленные транзакции пользователя. Первичный ввод, импорт, голосовой ввод и первичная ML-категоризация в рамках данного механизма не выполняются.
+
+Для общего бюджета модель суммирует все расходные транзакции пользователя за период. Для категорийного бюджета учитываются только транзакции соответствующей категории; при отсутствии подтверждённой пользовательской категории может использоваться `ml_category_id`, сохранённый на этапе предварительной обработки. После расчёта фактических расходов модель определяет остаток до лимита, процент использования бюджета, количество дней до конца периода, прогноз расходов при текущем темпе и возможный перерасход.
+
+На основании рассчитанных показателей `BudgetInsightModel` присваивает бюджету уровень риска. Уровень `HIGH` используется, если лимит уже достигнут или при текущем темпе прогнозируется перерасход. Уровень `MEDIUM` применяется, если бюджет близок к исчерпанию или значительная часть лимита израсходована задолго до конца периода. Уровень `LOW` означает, что бюджет используется в безопасном темпе. Итогом работы модели является объект `BudgetInsight`, содержащий лимит, потраченную сумму, остаток, процент использования, прогнозируемый перерасход, уровень риска и поясняющее сообщение.
+
+Результат контроля бюджета используется для отображения состояния лимитов на `BudgetsScreen`, входит в состав объекта `FinancialInsight`, учитывается при расчёте общей оценки финансового состояния пользователя и может служить основанием для формирования рекомендаций и уведомлений. При наличии данных общего бюджета они могут применяться как дополнительный источник для общей бюджетной аналитики.
+
+### 14.14. Краткая версия для вставки в раздел 3.4.1
+
+Контроль бюджетов реализован компонентом `BudgetInsightModel`. Он получает активные бюджеты пользователя, проверяет их применимость к дате анализа и сопоставляет заданные лимиты с фактическими расходами за соответствующий период. Для общего бюджета учитываются все расходные транзакции пользователя, а для категорийного бюджета — только транзакции соответствующей категории, определяемой по `category_id` или, при его отсутствии, по `ml_category_id`.
+
+На основе лимита и расходов рассчитываются `spentAmount`, `remainingAmount`, `progressPercent`, `daysRemaining`, `forecastedOverspend` и уровень риска `LOW`, `MEDIUM` или `HIGH`. Сформированный объект `BudgetInsight` используется на экране `BudgetsScreen`, включается в `FinancialInsight`, а также применяется при генерации рекомендаций, уведомлений и общей оценки финансового состояния пользователя.
