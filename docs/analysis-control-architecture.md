@@ -407,3 +407,318 @@ Mobile --> User : визуализация результатов
 Серверный сервис `services/analysis-control` принимает запросы мобильного клиента, выполняет расчёт финансовой сводки, анализ cashflow, контроль бюджетов и целей, выявление отклонений, расчёт финансового здоровья, формирование рекомендаций, уведомлений и отчётов. Для расчётов сервис обращается к PostgreSQL, где хранятся подготовленные транзакции, категории, бюджеты, финансовые цели и результаты предварительной обработки. Сохранённые поля `ml_category_id` и `ml_confidence` используются только как дополнительные признаки при аналитической обработке; первичная ML-категоризация выполняется вне рассматриваемого модуля.
 
 Таким образом, архитектура модуля обеспечивает разделение ответственности между пользовательским интерфейсом, клиентским API, серверной бизнес-логикой и хранилищем данных, а также демонстрирует движение данных от действий пользователя к аналитическим расчётам и обратно к визуальному представлению результатов.
+
+## 13. Схема формирования объекта FinancialInsight
+
+Этот раздел можно использовать для подготовки «Рисунок 16 — Схема формирования FinancialInsight». В отличие от рисунка 15, который показывает общую архитектуру модуля, рисунок 16 должен сфокусироваться на внутреннем алгоритме работы `FinancialAnalysisFacade`: какие данные фасад получает на вход, какие модели вызывает, какие промежуточные результаты формируются и как они объединяются в единый объект `FinancialInsight`.
+
+### 13.1. Назначение рисунка 16
+
+Схема формирования `FinancialInsight` должна показать, что фасад не выполняет все вычисления самостоятельно. Его роль — координационная. Он принимает `userId`, `periodStart` и `periodEnd`, проверяет корректность периода, вызывает специализированные аналитические модели, собирает их результаты, формирует промежуточный объект без рекомендаций, передаёт его в механизм рекомендаций и после этого возвращает финальный `FinancialInsight`.
+
+На рисунке важно отразить две особенности:
+
+- `FinancialHealthScoreModel` зависит не от сырых транзакций напрямую, а от уже рассчитанных результатов: `summary`, `budgets`, `goals` и `anomalies`.
+- `RecommendationEngineModel` получает на вход базовый `FinancialInsight`, потому что рекомендации строятся на совокупной картине: финансовой сводке, бюджетах, целях, аномалиях, категориях и качестве данных.
+
+### 13.2. Входные и выходные данные фасада
+
+Вход фасада:
+
+- `userId` — идентификатор пользователя, для которого выполняется анализ;
+- `periodStart` — дата начала анализируемого периода;
+- `periodEnd` — дата окончания анализируемого периода.
+
+Внутренние источники данных:
+
+- `transactions` — транзакции пользователя за период;
+- `categories` — категории транзакций;
+- `budgets` — активные бюджеты пользователя;
+- `goals` и `goal_transactions` — финансовые цели и связанные с ними операции;
+- `ml_category_id`, `ml_confidence` — вспомогательные признаки, сохранённые после предварительной обработки транзакций.
+
+Выход фасада:
+
+- `FinancialInsight` — единый объект аналитического результата, который передаётся через REST API в мобильное приложение.
+
+### 13.3. Рекомендуемая структура рисунка 16
+
+Для рисунка 16 удобно использовать горизонтальное расположение слева направо.
+
+1. Слева разместить блок «Входные параметры»: `userId`, `periodStart`, `periodEnd`.
+2. Далее разместить центральный блок `FinancialAnalysisFacade`.
+3. Внутри или рядом с фасадом показать шаг `validatePeriod()`.
+4. Справа от фасада разместить пять специализированных моделей:
+   - `TransactionAnalyticsModel`;
+   - `BudgetInsightModel`;
+   - `GoalInsightModel`;
+   - `FinancialHealthScoreModel`;
+   - `RecommendationEngineModel`.
+5. Ниже моделей показать PostgreSQL как источник данных для транзакций, категорий, бюджетов и целей.
+6. В правой части схемы показать сборку итогового объекта `FinancialInsight`.
+7. От `FinancialInsight` провести стрелку к REST API и мобильным экранам.
+
+### 13.4. Mermaid-схема формирования FinancialInsight
+
+Ниже приведён готовый вариант схемы для вставки в Mermaid-редактор.
+
+```mermaid
+flowchart LR
+    input["Входные параметры\nuserId\nperiodStart\nperiodEnd"]
+
+    facade["FinancialAnalysisFacade\nanalyzeUser(userId, periodStart, periodEnd)"]
+    validation["validatePeriod()\nпроверка обязательности дат\nperiodStart <= periodEnd"]
+
+    subgraph models["Специализированные аналитические модели"]
+        tam["TransactionAnalyticsModel"]
+        bim["BudgetInsightModel"]
+        gim["GoalInsightModel"]
+        fhsm["FinancialHealthScoreModel"]
+        rem["RecommendationEngineModel"]
+    end
+
+    subgraph txresults["Результаты транзакционной аналитики"]
+        summary["SpendingSummary\nдоходы, расходы, netSavings, savingsRate"]
+        cashflow["List<CashflowPoint>\ndaily income / expenses / netCashflow"]
+        categories["List<CategoryInsight>\nрасходы по категориям"]
+        merchants["List<MerchantInsight>\nкрупные торговые точки"]
+        anomalies["List<AnomalyInsight>\nкрупные операции и всплески категорий"]
+    end
+
+    budgets["List<BudgetInsight>\nлимит, spent, remaining, progress, risk"]
+    goals["List<GoalInsight>\nprogress, remaining, required contribution, risk"]
+    health["FinancialHealthScore\nscore, level, factors"]
+    base["baseInsight\nFinancialInsight без recommendations"]
+    recommendations["List<RecommendationCandidate>\nтип, описание, действия, приоритет"]
+    metadata["InsightMetadata\ngeneratedAt, modelVersion, dataSources, limitations"]
+    final["FinancialInsight\nsummary + healthScore + cashflow + categories\n+ merchants + budgets + goals + anomalies\n+ recommendations + metadata"]
+
+    db[("PostgreSQL\ntransactions, categories\nbudgets, goals, goal_transactions\nml_category_id, ml_confidence")]
+    api["REST API\nApiResponse<FinancialInsight>"]
+    mobile["Мобильное приложение\nаналитика, бюджеты, цели, рекомендации, отчёты"]
+
+    input --> facade --> validation
+    validation --> tam
+    validation --> bim
+    validation --> gim
+
+    db --> tam
+    db --> bim
+    db --> gim
+
+    tam --> summary
+    tam --> cashflow
+    tam --> categories
+    tam --> merchants
+    tam --> anomalies
+    bim --> budgets
+    gim --> goals
+
+    summary --> fhsm
+    budgets --> fhsm
+    goals --> fhsm
+    anomalies --> fhsm
+    fhsm --> health
+
+    summary --> base
+    cashflow --> base
+    categories --> base
+    merchants --> base
+    budgets --> base
+    goals --> base
+    anomalies --> base
+    health --> base
+    metadata --> base
+
+    base --> rem --> recommendations
+
+    base --> final
+    recommendations --> final
+    metadata --> final
+
+    final --> api --> mobile
+```
+
+### 13.5. Упрощённая Mermaid-схема для компактного рисунка
+
+Если на странице мало места, можно использовать компактную версию. Она лучше подходит для вставки в текстовую часть документа, где не нужно показывать все поля каждого DTO.
+
+```mermaid
+flowchart TB
+    in["userId + periodStart + periodEnd"] --> f["FinancialAnalysisFacade"]
+    f --> v["Проверка периода"]
+    v --> t["TransactionAnalyticsModel"]
+    v --> b["BudgetInsightModel"]
+    v --> g["GoalInsightModel"]
+
+    db[("PostgreSQL\nподготовленные данные")] --> t
+    db --> b
+    db --> g
+
+    t --> s["summary, cashflow, categories, merchants, anomalies"]
+    b --> bi["budgets"]
+    g --> gi["goals"]
+
+    s --> h["FinancialHealthScoreModel"]
+    bi --> h
+    gi --> h
+    h --> hs["healthScore"]
+
+    s --> base["baseInsight"]
+    bi --> base
+    gi --> base
+    hs --> base
+
+    base --> r["RecommendationEngineModel"]
+    r --> rc["recommendations"]
+
+    base --> out["FinancialInsight"]
+    rc --> out
+    out --> api["API -> мобильное приложение"]
+```
+
+### 13.6. PlantUML-вариант рисунка 16
+
+```plantuml
+@startuml
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam wrapWidth 220
+
+title Схема формирования объекта FinancialInsight
+
+actor "REST-контроллер" as Controller
+component "FinancialAnalysisFacade" as Facade
+component "validatePeriod()" as Validate
+component "TransactionAnalyticsModel" as TransactionModel
+component "BudgetInsightModel" as BudgetModel
+component "GoalInsightModel" as GoalModel
+component "FinancialHealthScoreModel" as HealthModel
+component "RecommendationEngineModel" as RecommendationModel
+
+database "PostgreSQL\ntransactions, categories\nbudgets, goals, goal_transactions" as DB
+
+artifact "SpendingSummary" as Summary
+artifact "CashflowPoint[]" as Cashflow
+artifact "CategoryInsight[]" as Categories
+artifact "MerchantInsight[]" as Merchants
+artifact "BudgetInsight[]" as Budgets
+artifact "GoalInsight[]" as Goals
+artifact "AnomalyInsight[]" as Anomalies
+artifact "FinancialHealthScore" as Health
+artifact "baseInsight" as BaseInsight
+artifact "RecommendationCandidate[]" as Recommendations
+artifact "FinancialInsight" as FinancialInsight
+
+Controller --> Facade : userId, periodStart, periodEnd
+Facade --> Validate : проверка периода
+Validate --> TransactionModel : analyzeSpending(), analyzeDailyCashflow(),\nanalyzeCategories(), analyzeMerchants(), detectAnomalies()
+Validate --> BudgetModel : analyzeBudgets(userId, periodEnd)
+Validate --> GoalModel : analyzeGoals(userId, periodEnd)
+
+DB --> TransactionModel : транзакции, категории, ML-признаки
+DB --> BudgetModel : бюджеты и расходы по ним
+DB --> GoalModel : цели и пополнения
+
+TransactionModel --> Summary
+TransactionModel --> Cashflow
+TransactionModel --> Categories
+TransactionModel --> Merchants
+TransactionModel --> Anomalies
+BudgetModel --> Budgets
+GoalModel --> Goals
+
+Summary --> HealthModel
+Budgets --> HealthModel
+Goals --> HealthModel
+Anomalies --> HealthModel
+HealthModel --> Health
+
+Summary --> BaseInsight
+Cashflow --> BaseInsight
+Categories --> BaseInsight
+Merchants --> BaseInsight
+Budgets --> BaseInsight
+Goals --> BaseInsight
+Anomalies --> BaseInsight
+Health --> BaseInsight
+
+BaseInsight --> RecommendationModel : generateRecommendations(baseInsight)
+RecommendationModel --> Recommendations
+
+BaseInsight --> FinancialInsight
+Recommendations --> FinancialInsight
+FinancialInsight --> Controller : ApiResponse<FinancialInsight>
+@enduml
+```
+
+### 13.7. Последовательность формирования объекта
+
+Алгоритм работы `FinancialAnalysisFacade` можно отразить на схеме или описать под рисунком следующим образом:
+
+1. REST-контроллер передаёт в фасад `userId`, `periodStart` и `periodEnd`.
+2. Фасад вызывает `validatePeriod()` и проверяет, что обе даты указаны, а дата начала не позже даты окончания.
+3. `TransactionAnalyticsModel.analyzeSpending()` формирует `SpendingSummary`.
+4. `TransactionAnalyticsModel.analyzeDailyCashflow()` формирует массив `CashflowPoint`.
+5. `TransactionAnalyticsModel.analyzeCategories()` формирует список `CategoryInsight`.
+6. `TransactionAnalyticsModel.analyzeMerchants()` формирует список `MerchantInsight`.
+7. `BudgetInsightModel.analyzeBudgets()` формирует список `BudgetInsight` по активным бюджетам пользователя.
+8. `GoalInsightModel.analyzeGoals()` формирует список `GoalInsight` по финансовым целям пользователя.
+9. `TransactionAnalyticsModel.detectAnomalies()` формирует список `AnomalyInsight`.
+10. `FinancialHealthScoreModel.calculate()` получает `summary`, `budgets`, `goals` и `anomalies`, после чего рассчитывает `FinancialHealthScore`.
+11. Фасад собирает промежуточный `baseInsight`, где список `recommendations` временно пустой.
+12. `RecommendationEngineModel.generateRecommendations(baseInsight)` анализирует базовый объект и формирует список `RecommendationCandidate`.
+13. Фасад создаёт итоговый `FinancialInsight`, добавляя рекомендации и метаданные.
+14. Итоговый объект возвращается в контроллер и далее передаётся через API в мобильное приложение.
+
+### 13.8. Что показать внутри итогового объекта FinancialInsight
+
+В правой части рисунка можно изобразить `FinancialInsight` как контейнер с такими полями:
+
+| Поле | Источник формирования | Назначение |
+| --- | --- | --- |
+| `periodStart`, `periodEnd` | Входные параметры фасада | Фиксируют анализируемый период |
+| `summary` | `TransactionAnalyticsModel.analyzeSpending()` | Общие доходы, расходы, экономия, норма накоплений, качество данных |
+| `healthScore` | `FinancialHealthScoreModel.calculate()` | Интегральная оценка финансового состояния |
+| `cashflow` | `TransactionAnalyticsModel.analyzeDailyCashflow()` | Динамика доходов и расходов по дням |
+| `categories` | `TransactionAnalyticsModel.analyzeCategories()` | Распределение расходов по категориям |
+| `merchants` | `TransactionAnalyticsModel.analyzeMerchants()` | Крупнейшие получатели платежей |
+| `budgets` | `BudgetInsightModel.analyzeBudgets()` | Использование бюджетов и риск перерасхода |
+| `goals` | `GoalInsightModel.analyzeGoals()` | Прогресс финансовых целей и риск невыполнения |
+| `anomalies` | `TransactionAnalyticsModel.detectAnomalies()` | Необычные операции и всплески расходов |
+| `recommendations` | `RecommendationEngineModel.generateRecommendations()` | Практические рекомендации для пользователя |
+| `metadata` | `FinancialAnalysisFacade.buildMetadata()` | Дата генерации, версия модели, источники данных и ограничения |
+
+### 13.9. Подписи стрелок для рисунка 16
+
+| Откуда | Куда | Подпись стрелки |
+| --- | --- | --- |
+| REST-контроллер | `FinancialAnalysisFacade` | `userId`, `periodStart`, `periodEnd` |
+| `FinancialAnalysisFacade` | `validatePeriod()` | Проверка корректности периода |
+| `FinancialAnalysisFacade` | `TransactionAnalyticsModel` | Запрос транзакционной аналитики |
+| `TransactionAnalyticsModel` | PostgreSQL | Чтение транзакций, категорий и ML-признаков |
+| `TransactionAnalyticsModel` | `FinancialAnalysisFacade` | `summary`, `cashflow`, `categories`, `merchants`, `anomalies` |
+| `FinancialAnalysisFacade` | `BudgetInsightModel` | Анализ активных бюджетов на дату `periodEnd` |
+| `BudgetInsightModel` | `FinancialAnalysisFacade` | `budgets` |
+| `FinancialAnalysisFacade` | `GoalInsightModel` | Анализ целей на дату `periodEnd` |
+| `GoalInsightModel` | `FinancialAnalysisFacade` | `goals` |
+| `FinancialAnalysisFacade` | `FinancialHealthScoreModel` | `summary`, `budgets`, `goals`, `anomalies` |
+| `FinancialHealthScoreModel` | `FinancialAnalysisFacade` | `healthScore` |
+| `FinancialAnalysisFacade` | `RecommendationEngineModel` | `baseInsight` |
+| `RecommendationEngineModel` | `FinancialAnalysisFacade` | `recommendations` |
+| `FinancialAnalysisFacade` | REST API | `FinancialInsight` |
+| REST API | Мобильное приложение | `ApiResponse<FinancialInsight>` |
+
+### 13.10. Готовый пояснительный текст под рисунок 16
+
+На рисунке 16 представлена схема формирования объекта `FinancialInsight` центральным фасадом аналитики `FinancialAnalysisFacade`. На вход фасад получает идентификатор пользователя и период анализа, после чего выполняет проверку корректности периода и последовательно координирует работу специализированных моделей. Транзакционная аналитика формирует финансовую сводку, дневной cashflow, распределение расходов по категориям и торговым точкам, а также список выявленных отклонений. Модель бюджетов рассчитывает использование лимитов и риск перерасхода, а модель целей определяет прогресс накоплений, оставшуюся сумму и риск невыполнения цели.
+
+После получения частных аналитических результатов фасад передаёт сводку, бюджеты, цели и аномалии в `FinancialHealthScoreModel`, где рассчитывается интегральная оценка финансового состояния пользователя. Затем фасад собирает промежуточный объект `baseInsight`, содержащий все рассчитанные показатели без рекомендаций, и передаёт его в `RecommendationEngineModel`. Это позволяет формировать рекомендации не из одного показателя, а на основе полной финансовой картины за выбранный период.
+
+Итоговым результатом работы фасада является объект `FinancialInsight`, включающий период анализа, финансовую сводку, health score, cashflow, категории, торговые точки, бюджеты, цели, аномалии, рекомендации и метаданные расчёта. Объект возвращается через REST API в мобильное приложение и используется экранами анализа, бюджетов, целей, уведомлений, рекомендаций и отчётов. Такое построение отделяет координационную логику от частных расчётов и упрощает развитие аналитического модуля: отдельные модели можно изменять независимо, сохраняя общий контракт `FinancialInsight` для клиентского приложения.
+
+### 13.11. Краткая версия для вставки в раздел 3.3.2
+
+Центральным компонентом серверной части является `FinancialAnalysisFacade`. Он принимает `userId`, `periodStart` и `periodEnd`, проверяет корректность периода и координирует работу специализированных аналитических моделей. `TransactionAnalyticsModel` рассчитывает финансовую сводку, daily cashflow, распределение расходов по категориям и торговым точкам, а также выявляет аномалии. `BudgetInsightModel` анализирует активные бюджеты пользователя, `GoalInsightModel` оценивает прогресс финансовых целей, `FinancialHealthScoreModel` формирует интегральную оценку финансового состояния, а `RecommendationEngineModel` подготавливает рекомендации на основе промежуточного объекта `baseInsight`.
+
+На рисунке 16 показано, что `FinancialInsight` формируется не одним расчётом, а последовательной сборкой нескольких групп данных: `summary`, `cashflow`, `categories`, `merchants`, `budgets`, `goals`, `anomalies`, `healthScore`, `recommendations` и `metadata`. Итоговый объект передаётся через API в мобильное приложение и используется для отображения аналитики, бюджетов, целей, уведомлений, рекомендаций и отчётов.
