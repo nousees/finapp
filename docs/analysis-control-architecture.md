@@ -1367,3 +1367,531 @@ Output --> "FinancialHealthScoreModel" : учет риска целей в об�
 Контроль финансовых целей реализован компонентом `GoalInsightModel`. Он получает активные цели пользователя, анализирует целевую сумму, текущую накопленную сумму, срок достижения и параметры автосбережения. На основе этих данных рассчитываются `remainingAmount`, `progressPercent`, `daysRemaining`, `requiredMonthlyContribution`, `monthlyAutoSaveEquivalent` и уровень риска `LOW`, `MEDIUM` или `HIGH`.
 
 Если цель уже достигнута или текущий регулярный взнос достаточен для выполнения цели в срок, устанавливается риск `LOW`. Если дедлайн наступил либо до него осталось не более 45 дней при недостаточном темпе накопления, устанавливается риск `HIGH`. В остальных случаях недостаточного автосбережения устанавливается риск `MEDIUM`. Сформированный объект `GoalInsight` используется на экране `GoalsScreen`, включается в `FinancialInsight`, а также применяется при генерации рекомендаций, уведомлений и общей оценки финансового состояния пользователя.
+
+## 16. Схема формирования рекомендаций
+
+Этот раздел можно использовать для подготовки «Рисунок 19 — Схема формирования рекомендаций». Рисунок должен показывать, как результаты работы `FinancialAnalysisFacade` и объект `FinancialInsight` преобразуются в прикладные рекомендации для пользователя. Важно подчеркнуть, что `RecommendationEngineModel` не является отдельной неподтверждённой ML-моделью: он работает как набор правил и эвристик поверх уже рассчитанных финансовых показателей.
+
+### 16.1. Назначение рисунка 19
+
+Схема формирования рекомендаций должна показать завершающий аналитический этап, на котором рассчитанные показатели становятся понятными действиями для пользователя. Если `FinancialInsight` отвечает на вопрос «что происходит с финансами пользователя», то рекомендации отвечают на вопрос «что пользователю следует сделать дальше».
+
+На схеме рекомендуется отразить:
+
+- входной объект `FinancialInsight`;
+- источники рекомендаций внутри `FinancialInsight`;
+- работу `RecommendationEngineModel`;
+- формирование объектов `RecommendationCandidate`;
+- сортировку и ограничение списка рекомендаций;
+- передачу кандидатов в `RecommendationService`;
+- сохранение рекомендаций в таблицу `recommendations`;
+- фиксацию пользовательских действий в `recommendation_events`;
+- создание уведомлений для наиболее важных рекомендаций;
+- отображение результата в мобильном приложении.
+
+### 16.2. Компоненты, которые нужно показать на схеме
+
+Для рисунка 19 рекомендуется использовать следующие блоки:
+
+1. `FinancialAnalysisFacade` — формирует `FinancialInsight`.
+2. `FinancialInsight` — единый источник рассчитанных показателей.
+3. `RecommendationEngineModel` — анализирует инсайты и создаёт кандидаты рекомендаций.
+4. Группы правил рекомендаций:
+   - cashflow-рекомендации;
+   - бюджетные рекомендации;
+   - рекомендации по целям;
+   - рекомендации по аномалиям;
+   - рекомендации по крупным получателям платежей;
+   - рекомендации по качеству данных.
+5. `RecommendationCandidate` — промежуточный объект рекомендации.
+6. Блок сортировки по `priority` и `estimatedSavings`.
+7. `RecommendationService` — сохраняет рекомендации и управляет жизненным циклом.
+8. PostgreSQL-таблицы `recommendations` и `recommendation_events`.
+9. `NotificationService` — создаёт уведомления для рекомендаций с `shouldNotify = true`.
+10. Получатели результата: экран рекомендаций, `AnalysisHomeScreen`, `NotificationsScreen`.
+
+### 16.3. Входные данные RecommendationEngineModel
+
+`RecommendationEngineModel` получает на вход объект `FinancialInsight`, внутри которого уже собраны:
+
+| Данные из `FinancialInsight` | Как используются при формировании рекомендаций |
+| --- | --- |
+| `summary` | Анализ отрицательного cashflow, низкой нормы накоплений, регулярных расходов и качества данных |
+| `budgets` | Поиск бюджетов с риском `HIGH` или `MEDIUM` |
+| `goals` | Поиск активных целей с риском `HIGH` или `MEDIUM` |
+| `anomalies` | Проверка крупных или нетипичных операций |
+| `merchants` | Поиск торговых точек или получателей, на которых приходится значительная доля расходов |
+| `healthScore` | Может использоваться как общий контекст финансового состояния |
+| `metadata.limitations` | Объясняет ограничения результата, например низкое качество данных |
+
+Таким образом, рекомендательный механизм не обращается к сырым данным напрямую как к основному источнику, а использует агрегированные и интерпретированные результаты аналитики.
+
+### 16.4. Основные группы рекомендаций
+
+На схеме можно показать `RecommendationEngineModel` как центральный блок, внутри которого есть несколько ветвей правил.
+
+| Группа рекомендаций | Условие формирования | Пример типа рекомендации |
+| --- | --- | --- |
+| Cashflow | Нет транзакций, расходы выше доходов, низкая или высокая норма накоплений | `DATA_START`, `CASHFLOW_PROTECTION`, `SAVINGS_RATE`, `GOOD_FINANCIAL_HABIT` |
+| Регулярные расходы | Есть регулярные расходы за период | `RECURRING_PAYMENT_REVIEW` |
+| Бюджеты | Бюджет имеет риск `HIGH` или `MEDIUM` | `BUDGET_OPTIMIZATION` |
+| Цели | Активная цель имеет риск `HIGH` или `MEDIUM` | `GOAL_ACCELERATION` |
+| Аномалии | Найдена аномалия с важностью `HIGH` или `MEDIUM` | `ANOMALY_REVIEW` |
+| Получатели платежей | Один получатель занимает значительную долю расходов и встречается несколько раз | `MERCHANT_SPENDING_REVIEW` |
+| Качество данных | Есть транзакции, но `dataQualityScore` ниже порога | `DATA_QUALITY` |
+
+### 16.5. Структура RecommendationCandidate
+
+Результатом работы `RecommendationEngineModel` является список объектов `RecommendationCandidate`. На схеме этот объект можно показать как контейнер со следующими полями:
+
+| Поле | Назначение |
+| --- | --- |
+| `type` | Тип рекомендации, например `BUDGET_OPTIMIZATION` или `GOAL_ACCELERATION` |
+| `title` | Краткий заголовок для отображения пользователю |
+| `description` | Пояснение, почему рекомендация сформирована |
+| `actionItems` | Список практических действий |
+| `estimatedSavings` | Оценка потенциальной экономии или финансового эффекта |
+| `priority` | Приоритет рекомендации: чем выше значение, тем важнее рекомендация |
+| `shouldNotify` | Признак необходимости создать уведомление |
+| `entityType` | Тип связанной сущности: `budget`, `goal`, `transaction`, `category` или другое значение |
+| `entityId` | Идентификатор связанной сущности |
+| `sourceModel` | Компонент-источник, например `BudgetInsightModel` или `GoalInsightModel` |
+
+### 16.6. Сортировка и ограничение списка
+
+После генерации рекомендаций из разных групп общий список упорядочивается:
+
+1. сначала по `priority` в порядке убывания;
+2. затем по `estimatedSavings` в порядке убывания;
+3. после сортировки выбираются наиболее значимые рекомендации.
+
+В текущей логике итоговый список ограничивается восемью рекомендациями. Это нужно, чтобы пользователь не получил слишком много советов одновременно, а интерфейс показывал наиболее важные действия.
+
+### 16.7. Сохранение рекомендаций и фиксация действий пользователя
+
+После генерации кандидатов `RecommendationService` преобразует `RecommendationCandidate` в сохраняемую сущность `Recommendation` и записывает её в таблицу `recommendations`.
+
+На схеме рекомендуется показать следующие операции:
+
+- удаление старых неприменённых рекомендаций, не относящихся к исключённым типам;
+- преобразование `actionItems` в JSON;
+- сохранение новых рекомендаций;
+- создание уведомлений для кандидатов с `shouldNotify = true`;
+- фиксация пользовательских событий:
+  - `SHOWN` — рекомендация показана;
+  - `CLICKED` — пользователь открыл рекомендацию;
+  - `APPLIED` — пользователь применил рекомендацию;
+  - `DISMISSED` — пользователь отклонил или удалил рекомендацию.
+
+События взаимодействия сохраняются в `recommendation_events` и могут использоваться для оценки полезности рекомендаций.
+
+### 16.8. Mermaid-схема формирования рекомендаций
+
+```mermaid
+flowchart TB
+    facade["FinancialAnalysisFacade\nформирует FinancialInsight"]
+    insight["FinancialInsight\nsummary, budgets, goals, anomalies\nmerchants, healthScore, metadata"]
+
+    engine["RecommendationEngineModel\ngenerateRecommendations(insight)"]
+
+    cashflow["Cashflow rules\nDATA_START\nCASHFLOW_PROTECTION\nSAVINGS_RATE\nGOOD_FINANCIAL_HABIT\nRECURRING_PAYMENT_REVIEW"]
+    budget["Budget rules\nbudgets risk HIGH / MEDIUM\nBUDGET_OPTIMIZATION"]
+    goal["Goal rules\ngoals risk HIGH / MEDIUM\nGOAL_ACCELERATION"]
+    anomaly["Anomaly rules\nanomalies severity HIGH / MEDIUM\nANOMALY_REVIEW"]
+    merchant["Merchant rules\nlarge merchant share\nMERCHANT_SPENDING_REVIEW"]
+    quality["Data quality rules\nlow dataQualityScore\nDATA_QUALITY"]
+
+    candidates["List<RecommendationCandidate>\ntype, title, description, actionItems\nestimatedSavings, priority\nshouldNotify, entityType, entityId, sourceModel"]
+    sort["Сортировка\npriority desc\nestimatedSavings desc\nlimit 8"]
+
+    service["RecommendationService\ngenerateRecommendations(userId)"]
+    convert["Преобразование в Recommendation\nactionItems -> JSON"]
+    recdb[("PostgreSQL\nrecommendations")]
+    events[("PostgreSQL\nrecommendation_events")]
+
+    notifyDecision{"shouldNotify = true?"}
+    notificationService["NotificationService\ncreateNotification(...)"]
+    notifications[("PostgreSQL\nnotifications")]
+
+    ui["Мобильное приложение\nAnalysisHomeScreen\nэкран рекомендаций\nNotificationsScreen"]
+    userActions["Действия пользователя\nshown / clicked / applied / dismissed"]
+
+    facade --> insight --> engine
+    engine --> cashflow --> candidates
+    engine --> budget --> candidates
+    engine --> goal --> candidates
+    engine --> anomaly --> candidates
+    engine --> merchant --> candidates
+    engine --> quality --> candidates
+
+    candidates --> sort --> service --> convert --> recdb
+    service --> notifyDecision
+    notifyDecision -- да --> notificationService --> notifications
+    notifyDecision -- нет --> recdb
+
+    recdb --> ui
+    notifications --> ui
+    ui --> userActions --> events
+```
+
+### 16.9. Компактная Mermaid-схема для рисунка 19
+
+```mermaid
+flowchart LR
+    fi["FinancialInsight"] --> re["RecommendationEngineModel"]
+    re --> c["RecommendationCandidate[]"]
+    c --> s["Сортировка по priority\nи estimatedSavings"]
+    s --> rs["RecommendationService"]
+    rs --> db[("recommendations")]
+    rs --> n{"shouldNotify?"}
+    n -- да --> ns["NotificationService"] --> ndb[("notifications")]
+    db --> ui["Мобильное приложение"]
+    ndb --> ui
+    ui --> ev[("recommendation_events")]
+```
+
+### 16.10. PlantUML-вариант схемы формирования рекомендаций
+
+```plantuml
+@startuml
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam wrapWidth 220
+
+title Схема формирования рекомендаций
+
+component "FinancialAnalysisFacade" as Facade
+artifact "FinancialInsight" as Insight
+component "RecommendationEngineModel" as Engine
+component "Правила cashflow" as CashflowRules
+component "Правила бюджетов" as BudgetRules
+component "Правила целей" as GoalRules
+component "Правила аномалий" as AnomalyRules
+component "Правила крупных получателей" as MerchantRules
+component "Правила качества данных" as QualityRules
+artifact "RecommendationCandidate[]" as Candidates
+component "Сортировка и limit 8" as Sort
+component "RecommendationService" as Service
+component "NotificationService" as NotificationService
+
+database "recommendations" as RecommendationsDB
+database "recommendation_events" as EventsDB
+database "notifications" as NotificationsDB
+
+Facade --> Insight
+Insight --> Engine : summary, budgets, goals, anomalies, merchants
+Engine --> CashflowRules
+Engine --> BudgetRules
+Engine --> GoalRules
+Engine --> AnomalyRules
+Engine --> MerchantRules
+Engine --> QualityRules
+CashflowRules --> Candidates
+BudgetRules --> Candidates
+GoalRules --> Candidates
+AnomalyRules --> Candidates
+MerchantRules --> Candidates
+QualityRules --> Candidates
+Candidates --> Sort : priority desc, estimatedSavings desc
+Sort --> Service : candidates
+Service --> RecommendationsDB : save Recommendation
+Service --> NotificationService : candidates with shouldNotify=true
+NotificationService --> NotificationsDB : save Notification
+Service --> EventsDB : shown/clicked/applied/dismissed
+RecommendationsDB --> "Mobile UI" : display recommendations
+NotificationsDB --> "NotificationsScreen" : in-app notifications
+@enduml
+```
+
+### 16.11. Последовательность формирования рекомендаций
+
+Алгоритм можно описать под рисунком 19 следующим образом:
+
+1. `FinancialAnalysisFacade` формирует объект `FinancialInsight` за выбранный период.
+2. `RecommendationEngineModel` получает `FinancialInsight` и анализирует его составные части.
+3. По `summary` формируются рекомендации, связанные с cashflow, нормой накоплений, регулярными расходами и качеством данных.
+4. По `budgets` формируются рекомендации для бюджетов с риском `HIGH` или `MEDIUM`.
+5. По `goals` формируются рекомендации для активных целей с риском `HIGH` или `MEDIUM`.
+6. По `anomalies` формируются рекомендации проверить крупные или нетипичные операции.
+7. По `merchants` формируются рекомендации, если отдельный получатель занимает значительную долю расходов.
+8. Все рекомендации собираются в список `RecommendationCandidate`.
+9. Список сортируется по приоритету и потенциальной экономии.
+10. Итоговый набор кандидатов передаётся в `RecommendationService`.
+11. `RecommendationService` сохраняет рекомендации в таблицу `recommendations`.
+12. Для рекомендаций с `shouldNotify = true` создаются уведомления через `NotificationService`.
+13. При показе, клике, применении или отклонении рекомендации фиксируются события в `recommendation_events`.
+14. Сохранённые рекомендации отображаются пользователю в мобильном приложении.
+
+### 16.12. Подписи стрелок для рисунка 19
+
+| Откуда | Куда | Подпись стрелки |
+| --- | --- | --- |
+| `FinancialAnalysisFacade` | `FinancialInsight` | Сводный результат аналитики и контроля |
+| `FinancialInsight` | `RecommendationEngineModel` | `summary`, `budgets`, `goals`, `anomalies`, `merchants` |
+| `RecommendationEngineModel` | Правила рекомендаций | Анализ финансовых показателей |
+| Правила рекомендаций | `RecommendationCandidate` | Сформированные кандидаты рекомендаций |
+| `RecommendationCandidate` | Сортировка | `priority desc`, `estimatedSavings desc`, `limit 8` |
+| Сортировка | `RecommendationService` | Итоговый список кандидатов |
+| `RecommendationService` | `recommendations` | Сохранение рекомендаций |
+| `RecommendationService` | `NotificationService` | Важные рекомендации с `shouldNotify = true` |
+| `NotificationService` | `notifications` | Создание внутрисистемного уведомления |
+| Мобильное приложение | `recommendation_events` | `shown`, `clicked`, `applied`, `dismissed` |
+
+### 16.13. Готовый пояснительный текст под рисунок 19
+
+На рисунке 19 представлена схема формирования рекомендаций в модуле анализа и контроля финансов. Источником данных для рекомендательного механизма является объект `FinancialInsight`, сформированный фасадом `FinancialAnalysisFacade`. Он содержит финансовую сводку, результаты контроля бюджетов, анализ финансовых целей, выявленные аномалии, сведения о крупных получателях платежей, оценку финансового состояния и метаданные расчёта.
+
+Центральным компонентом формирования рекомендаций является `RecommendationEngineModel`. Он анализирует готовые финансовые инсайты и формирует объекты `RecommendationCandidate`. Рекомендации могут быть связаны с отрицательным cashflow, низкой нормой накоплений, регулярными расходами, риском перерасхода бюджета, риском невыполнения цели, крупными или нетипичными операциями, высокой долей расходов у отдельного получателя и недостаточным качеством данных. Рекомендательная логика рассматривается как результат анализа финансовых показателей и правил контроля, а не как отдельная ML-модель.
+
+Сформированные кандидаты сортируются по приоритету и потенциальной экономии, после чего передаются в `RecommendationService`. Сервис сохраняет рекомендации в таблице `recommendations`, фиксирует действия пользователя в `recommendation_events` и при необходимости создаёт уведомления для наиболее важных рекомендаций. В мобильном приложении рекомендации используются для отображения пользователю практических действий, направленных на снижение расходов, поддержание финансовых целей и повышение качества аналитики.
+
+### 16.14. Краткая версия для вставки в раздел 3.5
+
+Рекомендации формируются компонентом `RecommendationEngineModel` на основе объекта `FinancialInsight`. Модель анализирует финансовую сводку, бюджеты, цели, аномалии, крупных получателей платежей и качество данных, после чего создаёт список `RecommendationCandidate`. Каждая рекомендация содержит тип, заголовок, описание, практические действия, оценку потенциальной экономии, приоритет, связанную сущность и признак необходимости уведомления.
+
+После сортировки по приоритету и потенциальной экономии рекомендации передаются в `RecommendationService`, сохраняются в таблице `recommendations` и отображаются пользователю. Действия пользователя с рекомендациями фиксируются в `recommendation_events`, а наиболее важные рекомендации могут дополнительно создавать уведомления через `NotificationService`.
+
+## 17. Схема формирования уведомлений
+
+Этот раздел можно использовать для подготовки «Рисунок 20 — Схема формирования уведомлений». Рисунок должен показать, как финансовые события и важные рекомендации преобразуются во внутрисистемные уведомления, сохраняемые в таблице `notifications` и отображаемые на `NotificationsScreen`.
+
+### 17.1. Назначение рисунка 20
+
+Схема формирования уведомлений должна показать, что уведомления являются прикладным способом донести до пользователя важные результаты финансового контроля. Они не заменяют сами аналитические модели, а используют их результаты и дополнительные проверки для создания коротких сообщений внутри приложения.
+
+Важно отметить ограничение реализации: уведомления рассматриваются как сообщения внутри приложения. Схема не должна утверждать наличие полноценной внешней push-доставки, если она не реализована отдельно.
+
+### 17.2. Компоненты, которые нужно показать на схеме
+
+Для рисунка 20 рекомендуется использовать следующие блоки:
+
+1. Источники финансовых событий:
+   - бюджеты;
+   - цели;
+   - транзакции и категории;
+   - подписки;
+   - важные рекомендации.
+2. `FinancialNotificationService` — определяет, нужно ли создавать уведомление по финансовому событию.
+3. Группы генераторов уведомлений:
+   - `generateBudgetNotifications()`;
+   - `generateGoalNotifications()`;
+   - `generateOperationNotifications()`;
+   - `generateSubscriptionNotifications()`;
+   - уведомления от `RecommendationService` для важных рекомендаций.
+4. `NotificationService` — создаёт и сохраняет уведомления.
+5. PostgreSQL-таблица `notifications`.
+6. `NotificationController` и клиентский API.
+7. `NotificationsScreen` — отображение уведомлений пользователю.
+
+### 17.3. Источники событий для уведомлений
+
+На схеме можно показать несколько входных потоков.
+
+| Источник | Примеры событий |
+| --- | --- |
+| Бюджеты | Достижение 70%, 85%, 95% или 100% лимита; прогноз перерасхода; безопасный дневной лимит; завершение периода бюджета |
+| Цели | Цель почти достигнута; цель выполнена; требуется регулярный взнос; отставание от графика; риск дедлайна |
+| Операции | Крупная или нетипичная транзакция; всплеск расходов по категории; новое регулярное списание |
+| Подписки | Скорое продление, неиспользуемая подписка, дублирующая подписка, рост стоимости |
+| Рекомендации | Важная рекомендация с `shouldNotify = true` |
+
+### 17.4. Логика FinancialNotificationService
+
+`FinancialNotificationService` выполняет роль фильтра и интерпретатора финансовых событий. Он не просто сохраняет любое событие как уведомление, а проверяет условия значимости.
+
+Основные направления проверки:
+
+- бюджетные пороги и риск перерасхода;
+- цели, приближающиеся к дедлайну или отстающие от ожидаемого прогресса;
+- крупные и нетипичные операции;
+- всплески расходов по категориям;
+- события подписок;
+- важные рекомендации, которые требуют внимания пользователя.
+
+Если условие выполнено, сервис формирует параметры уведомления:
+
+- `type` — тип уведомления;
+- `title` — заголовок;
+- `message` — текст сообщения;
+- `sourceModule` — модуль-источник, для данного сервиса обычно `JAVA`;
+- `entityType` — тип связанной сущности, например `budget`, `goal`, `transaction`, `category`, `subscription`, `recommendation`;
+- `entityId` — идентификатор связанной сущности;
+- `data` — дополнительные данные в JSON.
+
+### 17.5. Роль NotificationService
+
+`NotificationService` отвечает за техническое создание уведомления. Он получает готовые параметры, создаёт сущность `Notification`, сериализует дополнительные данные в JSON и сохраняет запись в таблице `notifications`.
+
+На схеме `NotificationService` лучше показать отдельным блоком после `FinancialNotificationService`, чтобы подчеркнуть разделение ответственности:
+
+- `FinancialNotificationService` решает, нужно ли уведомление и каким оно должно быть;
+- `NotificationService` сохраняет уведомление и предоставляет операции получения, чтения и очистки уведомлений.
+
+### 17.6. Структура Notification
+
+Итоговая запись уведомления содержит:
+
+| Поле | Назначение |
+| --- | --- |
+| `id` | Идентификатор уведомления |
+| `userId` | Пользователь, которому адресовано уведомление |
+| `type` | Тип уведомления: бюджет, цель, операция, подписка, рекомендация и т.д. |
+| `title` | Заголовок уведомления |
+| `message` | Основной текст уведомления |
+| `sourceModule` | Источник уведомления: `JAVA`, `GO`, `ML` или `SYSTEM` |
+| `entityType` | Тип связанной сущности |
+| `entityId` | Идентификатор связанной сущности |
+| `data` | Дополнительные структурированные данные в JSON |
+| `isRead` | Признак прочтения |
+| `isArchived` | Признак архивации |
+| `scheduledFor` | Плановая дата показа, если используется отложенное уведомление |
+| `createdAt` | Дата создания уведомления |
+
+### 17.7. Mermaid-схема формирования уведомлений
+
+```mermaid
+flowchart TB
+    subgraph sources["Источники финансовых событий"]
+        budgets["Бюджеты\nпорог лимита, риск перерасхода\nзавершение периода"]
+        goals["Финансовые цели\nриск дедлайна, отставание\nцель почти достигнута"]
+        operations["Операции и категории\nкрупная трата\nнетипичная операция\nвсплеск категории"]
+        subscriptions["Подписки\nпродление, дубли\nнеиспользуемая подписка\nрост стоимости"]
+        recommendations["Важные рекомендации\nshouldNotify = true"]
+    end
+
+    fns["FinancialNotificationService\nопределяет необходимость уведомления"]
+
+    budgetGen["generateBudgetNotifications()\nпороги 70 / 85 / 95 / 100\nпрогноз перерасхода"]
+    goalGen["generateGoalNotifications()\nпрогресс, дедлайн\nотставание от графика"]
+    operationGen["generateOperationNotifications()\nlarge / unusual transaction\ncategory spike"]
+    subscriptionGen["generateSubscriptionNotifications()\nrenewal / unused / duplicate\nprice increase"]
+    recommendationGen["RecommendationService\nсоздаёт уведомление\nдля важных рекомендаций"]
+
+    decision{"Событие значимо\nдля пользователя?"}
+    payload["Параметры уведомления\ntype, title, message\nsourceModule, entityType, entityId, data"]
+    ns["NotificationService\ncreateNotification(...)"]
+    db[("PostgreSQL\nnotifications")]
+
+    api["NotificationController / API\nсписок, непрочитанные\nmarkAsRead"]
+    screen["NotificationsScreen\nвнутренние уведомления приложения"]
+    user["Пользователь\nпрочитал / архивировал"]
+
+    budgets --> budgetGen --> fns
+    goals --> goalGen --> fns
+    operations --> operationGen --> fns
+    subscriptions --> subscriptionGen --> fns
+    recommendations --> recommendationGen --> ns
+
+    fns --> decision
+    decision -- нет --> stop["Уведомление не создаётся"]
+    decision -- да --> payload --> ns --> db --> api --> screen --> user
+    user --> api
+```
+
+### 17.8. Компактная Mermaid-схема для рисунка 20
+
+```mermaid
+flowchart LR
+    e["Финансовые события\nбюджеты, цели, операции, подписки\nважные рекомендации"] --> f["FinancialNotificationService"]
+    f --> d{"Нужно уведомление?"}
+    d -- нет --> x["не создавать"]
+    d -- да --> p["type + title + message\nentityType + entityId + data"]
+    p --> n["NotificationService"]
+    n --> db[("notifications")]
+    db --> ui["NotificationsScreen"]
+```
+
+### 17.9. PlantUML-вариант схемы формирования уведомлений
+
+```plantuml
+@startuml
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam wrapWidth 220
+
+title Схема формирования уведомлений
+
+component "Бюджетные события" as BudgetEvents
+component "События целей" as GoalEvents
+component "Операции и категории" as OperationEvents
+component "События подписок" as SubscriptionEvents
+component "Важные рекомендации" as RecommendationEvents
+component "FinancialNotificationService" as FinancialNotificationService
+component "RecommendationService" as RecommendationService
+component "NotificationService" as NotificationService
+artifact "Notification payload" as Payload
+database "notifications" as NotificationsDB
+component "NotificationController / API" as Api
+component "NotificationsScreen" as Screen
+
+BudgetEvents --> FinancialNotificationService : thresholds, overspend risk
+GoalEvents --> FinancialNotificationService : deadline risk, behind schedule
+OperationEvents --> FinancialNotificationService : large/unusual transaction, category spike
+SubscriptionEvents --> FinancialNotificationService : renewal, unused, duplicate, price increase
+RecommendationEvents --> RecommendationService : shouldNotify=true
+RecommendationService --> NotificationService : recommendation notification
+FinancialNotificationService --> Payload : type, title, message, entity link, data
+Payload --> NotificationService : createNotification(...)
+NotificationService --> NotificationsDB : save Notification
+NotificationsDB --> Api : list / unread / count
+Api --> Screen : display in-app notifications
+Screen --> Api : markAsRead / archive
+@enduml
+```
+
+### 17.10. Последовательность формирования уведомлений
+
+Алгоритм можно описать под рисунком 20 следующим образом:
+
+1. В системе появляется финансовое событие: бюджет приближается к лимиту, цель отстаёт от графика, обнаружена крупная операция, выявлен всплеск категории, наступает событие по подписке или создана важная рекомендация.
+2. `FinancialNotificationService` запускает соответствующий блок генерации уведомлений: бюджетный, целевой, операционный или подписочный.
+3. Для каждого события рассчитываются или проверяются условия значимости.
+4. Если событие не требует внимания пользователя, уведомление не создаётся.
+5. Если событие значимо, формируются `type`, `title`, `message`, `entityType`, `entityId` и дополнительные данные `data`.
+6. Подготовленные параметры передаются в `NotificationService.createNotification()`.
+7. `NotificationService` создаёт сущность `Notification`, сериализует `data` в JSON и сохраняет запись в таблицу `notifications`.
+8. Мобильное приложение получает список уведомлений через API.
+9. `NotificationsScreen` отображает уведомления пользователю как сообщения внутри приложения.
+10. При прочтении или архивировании уведомления обновляется его состояние.
+
+### 17.11. Подписи стрелок для рисунка 20
+
+| Откуда | Куда | Подпись стрелки |
+| --- | --- | --- |
+| Бюджеты | `FinancialNotificationService` | Порог лимита, прогноз перерасхода, завершение периода |
+| Цели | `FinancialNotificationService` | Риск дедлайна, отставание от графика, достижение цели |
+| Операции | `FinancialNotificationService` | Крупная или нетипичная трата, всплеск категории |
+| Подписки | `FinancialNotificationService` | Продление, дубли, неиспользуемые подписки, рост стоимости |
+| `RecommendationService` | `NotificationService` | Важная рекомендация с `shouldNotify = true` |
+| `FinancialNotificationService` | `NotificationService` | Параметры уведомления |
+| `NotificationService` | `notifications` | Сохранение уведомления |
+| `notifications` | `NotificationsScreen` | Список уведомлений пользователя |
+| `NotificationsScreen` | API | Отметить как прочитанное или архивировать |
+
+### 17.12. Готовый пояснительный текст под рисунок 20
+
+На рисунке 20 представлена схема формирования уведомлений в модуле анализа и контроля финансов. Уведомления создаются на основе финансовых событий, связанных с бюджетами, целями, операциями, категориями, подписками и важными рекомендациями. Центральным компонентом механизма является `FinancialNotificationService`, который определяет необходимость создания уведомления и формирует его смысловое содержание.
+
+Для бюджетов уведомления могут создаваться при приближении к лимиту, риске перерасхода или завершении периода. Для целей учитываются риск невыполнения, отставание от ожидаемого прогресса, приближение дедлайна и достижение цели. Для операций и категорий учитываются крупные или нетипичные траты и всплески расходов. Отдельным источником уведомлений являются рекомендации, для которых установлен признак `shouldNotify = true`.
+
+После определения необходимости уведомления параметры сообщения передаются в `NotificationService`. Этот сервис создаёт объект `Notification`, сохраняет его в таблицу `notifications` и предоставляет данные для отображения в мобильном приложении. В рамках данной реализации уведомления рассматриваются как внутренние сообщения приложения, отображаемые на `NotificationsScreen`; полноценная внешняя push-доставка в схеме не предполагается.
+
+### 17.13. Краткая версия для вставки в раздел 3.5
+
+Уведомления формируются на основе финансовых событий: приближения к лимиту бюджета, риска перерасхода, риска невыполнения цели, обнаружения крупной или нетипичной траты, событий подписок и появления важной рекомендации. `FinancialNotificationService` определяет необходимость создания уведомления и формирует его параметры, а `NotificationService` сохраняет уведомление в таблицу `notifications`.
+
+Сохранённые уведомления отображаются на `NotificationsScreen` как внутренние сообщения приложения. В рамках данной реализации не утверждается наличие полноценной внешней push-доставки: уведомления рассматриваются как часть серверной и клиентской логики внутри приложения.
+
+## 18. Отчётность как завершающее представление аналитики
+
+Хотя для отчётности в данном фрагменте не требуется отдельный рисунок, её можно кратко показать рядом с рекомендациями и уведомлениями как третий способ прикладного представления результатов анализа.
+
+`ReportService` формирует отчётные представления на основе данных `FinancialAnalysisFacade` и сохраняет их в таблицу `reports`. В рамках модуля используются следующие типы отчётов:
+
+| Тип отчёта | Источник данных | Содержание |
+| --- | --- | --- |
+| `MONTHLY_SUMMARY` | Полный `FinancialInsight` | Общая финансовая сводка за период |
+| `CATEGORY_ANALYSIS` | `FinancialInsight.categories` | Структура расходов по категориям |
+| `GOAL_PROGRESS` | `FinancialInsight.goals` | Прогресс финансовых целей |
+
+Краткое описание для вставки в раздел 3.5: отчётность реализована через компонент `ReportService`, который запрашивает данные у `FinancialAnalysisFacade`, формирует отчётное представление выбранного типа и сохраняет результат в таблицу `reports`. Отчёты дополняют рекомендации и уведомления, так как предоставляют пользователю не точечное предупреждение или совет, а структурированную сводку за выбранный период.
