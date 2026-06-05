@@ -1041,3 +1041,329 @@ Output --> "FinancialNotificationService" : уведомления при рис
 Контроль бюджетов реализован компонентом `BudgetInsightModel`. Он получает активные бюджеты пользователя, проверяет их применимость к дате анализа и сопоставляет заданные лимиты с фактическими расходами за соответствующий период. Для общего бюджета учитываются все расходные транзакции пользователя, а для категорийного бюджета — только транзакции соответствующей категории, определяемой по `category_id` или, при его отсутствии, по `ml_category_id`.
 
 На основе лимита и расходов рассчитываются `spentAmount`, `remainingAmount`, `progressPercent`, `daysRemaining`, `forecastedOverspend` и уровень риска `LOW`, `MEDIUM` или `HIGH`. Сформированный объект `BudgetInsight` используется на экране `BudgetsScreen`, включается в `FinancialInsight`, а также применяется при генерации рекомендаций, уведомлений и общей оценки финансового состояния пользователя.
+
+## 15. Схема контроля финансовой цели
+
+Этот раздел можно использовать для подготовки «Рисунок 18 — Схема контроля финансовой цели». Рисунок должен показывать, как компонент `GoalInsightModel` анализирует активные финансовые цели пользователя, сопоставляет целевую сумму с текущей накопленной суммой, учитывает срок достижения цели, рассчитывает требуемый регулярный взнос и формирует объект `GoalInsight` с уровнем риска `LOW`, `MEDIUM` или `HIGH`.
+
+### 15.1. Назначение рисунка 18
+
+Схема контроля финансовой цели должна отражать отдельный механизм финансового контроля, который отвечает за оценку достижимости цели в установленный срок. В отличие от контроля бюджета, где анализируется риск перерасхода лимита, контроль цели оценивает риск недостижения целевой суммы к дедлайну.
+
+Схема должна помочь понять:
+
+- какая цель анализируется;
+- какая сумма уже накоплена;
+- сколько осталось накопить до целевой суммы;
+- сколько дней осталось до дедлайна;
+- какой ежемесячный взнос нужен для достижения цели;
+- достаточен ли текущий автоплатёж или автосбережение;
+- какой уровень риска нужно присвоить цели;
+- какое сообщение нужно показать пользователю на `GoalsScreen`.
+
+### 15.2. Компоненты, которые нужно показать на схеме
+
+Для рисунка 18 рекомендуется использовать следующие блоки:
+
+1. `FinancialAnalysisFacade` или сценарий запроса аналитики — источник вызова `GoalInsightModel.analyzeGoals(userId, analysisDate)`.
+2. `GoalService` — получение активных финансовых целей пользователя.
+3. `GoalInsightModel` — центральный блок контроля целей.
+4. PostgreSQL — источник целей и связанных операций пополнения.
+5. Блок получения параметров цели.
+6. Блок расчёта прогресса и остатка.
+7. Блок расчёта срока до дедлайна.
+8. Блок расчёта требуемого ежемесячного взноса.
+9. Блок пересчёта автосбережения в месячный эквивалент.
+10. Блок классификации риска.
+11. Блок формирования `GoalInsight`.
+12. Получатели результата: `GoalsScreen`, `RecommendationEngineModel`, `FinancialNotificationService` и `FinancialHealthScoreModel`.
+
+### 15.3. Входные данные GoalInsightModel
+
+На вход модели поступают:
+
+- `userId` — идентификатор пользователя;
+- `analysisDate` — дата, относительно которой оценивается состояние цели;
+- активные цели пользователя из `GoalService.getActiveGoals(userId)`;
+- параметры каждой цели:
+  - `goalId`;
+  - `name`;
+  - `status`;
+  - `priority`;
+  - `targetAmount`;
+  - `currentAmount`;
+  - `deadline`;
+  - `goalType`;
+  - `autoSaveAmount`;
+  - `autoSaveFrequency`;
+  - `currency`;
+  - `icon` и `color` для отображения в интерфейсе;
+- связанные операции пополнения цели из `goal_transactions`, если они используются для обновления накопленной суммы.
+
+В текущей логике контроля ключевыми числовыми параметрами являются `targetAmount`, `currentAmount`, `deadline`, `autoSaveAmount` и `autoSaveFrequency`. Они позволяют оценить, насколько цель близка к выполнению и достаточно ли текущего регулярного пополнения.
+
+### 15.4. Расчётные показатели финансовой цели
+
+После получения активной цели модель рассчитывает показатели, которые затем отображаются пользователю и используются в других аналитических механизмах.
+
+| Показатель | Формула / источник | Назначение |
+| --- | --- | --- |
+| `targetAmount` | Целевая сумма из цели | Сумма, которую пользователь планирует накопить |
+| `currentAmount` | Текущая накопленная сумма | Сколько уже накоплено |
+| `remainingAmount` | `max(targetAmount - currentAmount, 0)` | Сколько осталось накопить |
+| `progressPercent` | `currentAmount / targetAmount * 100%` | Процент выполнения цели |
+| `daysRemaining` | `max(deadline - analysisDate, 0)` | Сколько дней осталось до дедлайна |
+| `monthsRemaining` | `max(ceil(daysRemaining / 30), 1)` | Условное количество месяцев до дедлайна |
+| `requiredMonthlyContribution` | `remainingAmount / monthsRemaining` | Какой ежемесячный взнос нужен для достижения цели |
+| `monthlyAutoSaveEquivalent` | Пересчёт автосбережения в месяц | Сколько пользователь уже планирует откладывать ежемесячно |
+| `riskLevel` | Правила `LOW` / `MEDIUM` / `HIGH` | Риск невыполнения цели |
+| `message` | Текст по уровню риска | Пояснение для пользователя |
+
+### 15.5. Пересчёт автосбережения в месячный эквивалент
+
+Если для цели настроено автосбережение, модель приводит его к месячному эквиваленту. Это нужно, чтобы сравнить текущую регулярную стратегию накопления с требуемым ежемесячным взносом.
+
+Правила пересчёта:
+
+| Частота автосбережения | Расчёт месячного эквивалента |
+| --- | --- |
+| `DAILY` | `autoSaveAmount * 30` |
+| `WEEKLY` | `autoSaveAmount * 4` |
+| `MONTHLY` или значение по умолчанию | `autoSaveAmount` |
+| `YEARLY` | `autoSaveAmount / 12` |
+| Не задано или сумма равна нулю | `0` |
+
+Например, если пользователь откладывает 500 рублей в неделю, месячный эквивалент будет равен примерно 2000 рублей. Если требуемый ежемесячный взнос выше этого значения, цель может перейти в зону `MEDIUM` или `HIGH` в зависимости от оставшегося срока.
+
+### 15.6. Правила определения уровня риска цели
+
+Для рисунка 18 рекомендуется выделить отдельный блок «Классификация риска невыполнения цели».
+
+Уровень `LOW` устанавливается, если:
+
+- `progressPercent >= 100%`, то есть цель уже достигнута;
+- или `monthlyAutoSaveEquivalent >= requiredMonthlyContribution`, то есть текущий регулярный взнос достаточен для достижения цели в срок.
+
+Уровень `HIGH` устанавливается, если:
+
+- цель ещё не достигнута, но `daysRemaining <= 0`, то есть дедлайн наступил или прошёл;
+- или `monthlyAutoSaveEquivalent < requiredMonthlyContribution` и до дедлайна осталось `45` дней или меньше.
+
+Уровень `MEDIUM` устанавливается, если:
+
+- цель ещё не достигнута;
+- дедлайн ещё не наступил;
+- текущий месячный эквивалент автосбережения меньше требуемого ежемесячного взноса;
+- при этом до дедлайна осталось больше `45` дней.
+
+На рисунке это удобно представить как последовательность условий:
+
+1. «Цель достигнута?» → `LOW`.
+2. «Дедлайн наступил или прошёл?» → `HIGH`.
+3. «Автосбережение меньше требуемого взноса?» → если да, проверить срок.
+4. «До дедлайна 45 дней или меньше?» → `HIGH`.
+5. «До дедлайна больше 45 дней?» → `MEDIUM`.
+6. «Автосбережение достаточно?» → `LOW`.
+
+### 15.7. Формирование объекта GoalInsight
+
+Результатом обработки одной цели является объект `GoalInsight`. На схеме его можно показать как контейнер с такими полями:
+
+| Поле `GoalInsight` | Смысл |
+| --- | --- |
+| `goalId` | Идентификатор финансовой цели |
+| `name` | Название цели |
+| `status` | Текущий статус цели |
+| `priority` | Приоритет цели, если задан пользователем |
+| `deadline` | Плановая дата достижения цели |
+| `targetAmount` | Целевая сумма |
+| `currentAmount` | Уже накопленная сумма |
+| `remainingAmount` | Остаток до целевой суммы |
+| `progressPercent` | Процент выполнения цели |
+| `riskLevel` | Уровень риска `LOW`, `MEDIUM` или `HIGH` |
+| `daysRemaining` | Количество дней до дедлайна |
+| `requiredMonthlyContribution` | Требуемый ежемесячный взнос |
+| `monthlyAutoSaveEquivalent` | Текущий автоплатёж, пересчитанный в месяц |
+| `message` | Текстовая интерпретация состояния цели |
+
+После формирования всех объектов список `GoalInsight` сортируется по уровню риска: сначала цели с `HIGH`, затем `MEDIUM`, затем `LOW`. Благодаря этому пользователь видит в интерфейсе наиболее проблемные цели первыми.
+
+### 15.8. Mermaid-схема контроля финансовой цели
+
+Ниже приведён готовый вариант схемы для вставки в Mermaid-редактор.
+
+```mermaid
+flowchart TB
+    start["Запрос аналитики\nFinancialAnalysisFacade"]
+    call["GoalInsightModel\nanalyzeGoals(userId, analysisDate)"]
+    service["GoalService\ngetActiveGoals(userId)"]
+    db[("PostgreSQL\ngoals, goal_transactions")]
+
+    active["Список активных финансовых целей"]
+    params["Параметры цели\ntargetAmount, currentAmount\ndeadline, priority\nautoSaveAmount, autoSaveFrequency"]
+
+    progress["Расчёт прогресса\nremainingAmount = max(target - current, 0)\nprogressPercent = current / target * 100"]
+    dates["Расчёт срока\ndaysRemaining = max(deadline - analysisDate, 0)\nmonthsRemaining = max(ceil(daysRemaining / 30), 1)"]
+    required["Требуемый взнос\nrequiredMonthlyContribution = remainingAmount / monthsRemaining"]
+    autosave["Месячный эквивалент автосбережения\nDAILY * 30\nWEEKLY * 4\nMONTHLY\nYEARLY / 12"]
+
+    reached{"progressPercent >= 100%?"}
+    overdue{"daysRemaining <= 0?"}
+    enough{"monthlyAutoSaveEquivalent >=\nrequiredMonthlyContribution?"}
+    urgent{"daysRemaining <= 45?"}
+
+    low["riskLevel = LOW\nцель достигнута или темп достаточный"]
+    medium["riskLevel = MEDIUM\nнужно увеличить регулярный взнос"]
+    high["riskLevel = HIGH\nдедлайн близко или уже прошёл"]
+
+    insight["GoalInsight\ngoalId, name, status, priority\ndeadline, targetAmount, currentAmount\nremainingAmount, progressPercent\nriskLevel, daysRemaining\nrequiredMonthlyContribution\nmonthlyAutoSaveEquivalent, message"]
+    sort["Сортировка списка\nHIGH -> MEDIUM -> LOW"]
+    output["List<GoalInsight>"]
+
+    consumers["Использование результата\nGoalsScreen\nFinancialHealthScoreModel\nRecommendationEngineModel\nуведомления"]
+
+    start --> call --> service --> active
+    service --> db
+    db --> service
+    active --> params
+    db -. "операции пополнения\nпри обновлении currentAmount" .-> params
+
+    params --> progress --> dates --> required --> autosave --> reached
+    reached -- да --> low
+    reached -- нет --> overdue
+    overdue -- да --> high
+    overdue -- нет --> enough
+    enough -- да --> low
+    enough -- нет --> urgent
+    urgent -- да --> high
+    urgent -- нет --> medium
+
+    low --> insight
+    medium --> insight
+    high --> insight
+    insight --> sort --> output --> consumers
+```
+
+### 15.9. Компактная Mermaid-схема для рисунка 18
+
+Если нужна более простая схема для вставки в документ, можно использовать компактный вариант.
+
+```mermaid
+flowchart LR
+    in["userId + analysisDate"] --> m["GoalInsightModel"]
+    db[("PostgreSQL\ngoals + goal_transactions")] --> m
+    m --> g["Активные цели"]
+    g --> c["targetAmount\ncurrentAmount\ndeadline\nautoSave"]
+    c --> p["remainingAmount\nprogressPercent\ndaysRemaining"]
+    p --> r["requiredMonthlyContribution\nmonthlyAutoSaveEquivalent"]
+    r --> risk{"Риск невыполнения"}
+    risk --> low["LOW"]
+    risk --> med["MEDIUM"]
+    risk --> high["HIGH"]
+    low --> out["GoalInsight"]
+    med --> out
+    high --> out
+    out --> ui["GoalsScreen\nрекомендации\nуведомления"]
+```
+
+### 15.10. PlantUML-вариант схемы контроля финансовой цели
+
+```plantuml
+@startuml
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam wrapWidth 220
+
+title Схема контроля финансовой цели
+
+actor "FinancialAnalysisFacade" as Facade
+component "GoalInsightModel" as Model
+component "GoalService" as GoalService
+component "Получение параметров цели" as Params
+component "Расчёт прогресса" as Progress
+component "Расчёт срока до дедлайна" as Dates
+component "Расчёт требуемого взноса" as Required
+component "Месячный эквивалент автосбережения" as AutoSave
+component "Классификация риска" as Risk
+artifact "GoalInsight" as Insight
+artifact "List<GoalInsight>" as Output
+
+database "PostgreSQL\ngoals, goal_transactions" as DB
+
+Facade --> Model : analyzeGoals(userId, analysisDate)
+Model --> GoalService : getActiveGoals(userId)
+GoalService --> DB : чтение активных целей
+DB --> GoalService : goals
+GoalService --> Model : active goals
+Model --> Params : targetAmount, currentAmount,\ndeadline, autoSaveAmount, autoSaveFrequency
+Params --> Progress : targetAmount, currentAmount
+Progress --> Dates : remainingAmount, progressPercent
+Dates --> Required : daysRemaining, monthsRemaining
+Required --> AutoSave : requiredMonthlyContribution
+AutoSave --> Risk : requiredMonthlyContribution,\nmonthlyAutoSaveEquivalent, daysRemaining
+Risk --> Insight : LOW / MEDIUM / HIGH + message
+Insight --> Output : сортировка HIGH -> MEDIUM -> LOW
+Output --> Facade : goals для FinancialInsight
+Output --> "GoalsScreen" : отображение прогресса и риска
+Output --> "RecommendationEngineModel" : рекомендации по увеличению взноса
+Output --> "FinancialNotificationService" : уведомления при риске невыполнения
+Output --> "FinancialHealthScoreModel" : учет риска целей в общей оценке
+@enduml
+```
+
+### 15.11. Последовательность контроля финансовой цели
+
+Алгоритм можно описать под рисунком 18 следующим образом:
+
+1. `FinancialAnalysisFacade` вызывает `GoalInsightModel.analyzeGoals(userId, analysisDate)`.
+2. `GoalInsightModel` получает активные цели пользователя через `GoalService.getActiveGoals(userId)`.
+3. Для каждой цели извлекаются `targetAmount`, `currentAmount`, `deadline`, `autoSaveAmount`, `autoSaveFrequency`, `status` и `priority`.
+4. Модель рассчитывает `remainingAmount` как остаток между целевой и текущей суммой.
+5. Модель рассчитывает `progressPercent` как долю текущей суммы от целевой.
+6. На основе `analysisDate` и `deadline` определяется `daysRemaining`.
+7. `daysRemaining` переводится в условное количество месяцев `monthsRemaining`.
+8. На основе остатка и количества месяцев рассчитывается `requiredMonthlyContribution`.
+9. Настроенное автосбережение пересчитывается в `monthlyAutoSaveEquivalent`.
+10. Модель сравнивает `monthlyAutoSaveEquivalent` с `requiredMonthlyContribution`.
+11. Если цель уже достигнута или текущего автосбережения достаточно, устанавливается риск `LOW`.
+12. Если дедлайн наступил или до него осталось не более 45 дней при недостаточном автосбережении, устанавливается риск `HIGH`.
+13. Если автосбережение недостаточно, но до дедлайна осталось больше 45 дней, устанавливается риск `MEDIUM`.
+14. Для цели формируется поясняющее сообщение.
+15. Модель создаёт объект `GoalInsight`.
+16. Все `GoalInsight` сортируются по риску, чтобы цели с наибольшей угрозой невыполнения отображались первыми.
+17. Список целей передаётся в `FinancialInsight`, на экран `GoalsScreen`, а также используется при формировании рекомендаций, уведомлений и общей оценки финансового состояния.
+
+### 15.12. Подписи стрелок для рисунка 18
+
+| Откуда | Куда | Подпись стрелки |
+| --- | --- | --- |
+| `FinancialAnalysisFacade` | `GoalInsightModel` | `analyzeGoals(userId, analysisDate)` |
+| `GoalInsightModel` | `GoalService` | Запрос активных целей пользователя |
+| `GoalService` | PostgreSQL | Чтение `goals` и связанных пополнений |
+| PostgreSQL | `GoalInsightModel` | Активные цели и параметры накопления |
+| `GoalInsightModel` | Расчёт прогресса | `targetAmount`, `currentAmount` |
+| Расчёт прогресса | Расчёт срока | `remainingAmount`, `progressPercent`, `deadline` |
+| Расчёт срока | Расчёт взноса | `daysRemaining`, `monthsRemaining` |
+| Расчёт взноса | Автосбережение | `requiredMonthlyContribution` |
+| Автосбережение | Классификация риска | `monthlyAutoSaveEquivalent`, `requiredMonthlyContribution`, `daysRemaining` |
+| Классификация риска | `GoalInsight` | `LOW` / `MEDIUM` / `HIGH`, `message` |
+| `GoalInsight` | `GoalsScreen` | Отображение прогресса, срока, требуемого взноса и риска |
+| `GoalInsight` | `RecommendationEngineModel` | Основание для рекомендации увеличить взнос или изменить срок |
+| `GoalInsight` | `FinancialNotificationService` | Основание для уведомлений о риске невыполнения цели |
+| `GoalInsight` | `FinancialHealthScoreModel` | Учёт риска целей в общей оценке финансового состояния |
+
+### 15.13. Готовый пояснительный текст под рисунок 18
+
+На рисунке 18 представлена схема контроля финансовой цели в модуле анализа и контроля финансов. Центральным компонентом механизма является `GoalInsightModel`, который получает активные цели пользователя, анализирует параметры накопления и оценивает вероятность достижения цели в установленный срок. Источником данных выступает PostgreSQL, где хранятся финансовые цели и связанные операции пополнения. Первичный ввод данных и предварительная обработка транзакций в рамках данного механизма не выполняются.
+
+Для каждой цели модель сопоставляет целевую сумму с текущей накопленной суммой, рассчитывает остаток до цели, процент выполнения, количество дней до дедлайна и требуемый ежемесячный взнос. Если для цели настроено автосбережение, оно приводится к месячному эквиваленту и сравнивается с требуемым взносом. Это позволяет определить, достаточно ли текущего темпа накопления для выполнения цели в срок.
+
+На основании рассчитанных показателей `GoalInsightModel` присваивает цели уровень риска. Уровень `LOW` означает, что цель уже достигнута или текущий регулярный взнос достаточен. Уровень `MEDIUM` показывает, что цель пока достижима, но требуется увеличить ежемесячное пополнение. Уровень `HIGH` используется, если дедлайн уже наступил либо до него осталось мало времени при недостаточном темпе накопления. Итогом работы модели является объект `GoalInsight`, содержащий целевую сумму, накопленную сумму, остаток, процент прогресса, срок до дедлайна, требуемый ежемесячный взнос, месячный эквивалент автосбережения, уровень риска и поясняющее сообщение.
+
+Результаты контроля финансовых целей отображаются на `GoalsScreen`, входят в состав объекта `FinancialInsight`, учитываются при расчёте общей оценки финансового состояния пользователя и используются при формировании рекомендаций и уведомлений, связанных с риском невыполнения цели.
+
+### 15.14. Краткая версия для вставки в раздел 3.4.2
+
+Контроль финансовых целей реализован компонентом `GoalInsightModel`. Он получает активные цели пользователя, анализирует целевую сумму, текущую накопленную сумму, срок достижения и параметры автосбережения. На основе этих данных рассчитываются `remainingAmount`, `progressPercent`, `daysRemaining`, `requiredMonthlyContribution`, `monthlyAutoSaveEquivalent` и уровень риска `LOW`, `MEDIUM` или `HIGH`.
+
+Если цель уже достигнута или текущий регулярный взнос достаточен для выполнения цели в срок, устанавливается риск `LOW`. Если дедлайн наступил либо до него осталось не более 45 дней при недостаточном темпе накопления, устанавливается риск `HIGH`. В остальных случаях недостаточного автосбережения устанавливается риск `MEDIUM`. Сформированный объект `GoalInsight` используется на экране `GoalsScreen`, включается в `FinancialInsight`, а также применяется при генерации рекомендаций, уведомлений и общей оценки финансового состояния пользователя.
