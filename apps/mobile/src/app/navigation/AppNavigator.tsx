@@ -1,4 +1,4 @@
-﻿// @ts-nocheck
+// @ts-nocheck
 import React from 'react';
 import { Feather } from "@expo/vector-icons";
 import { DarkTheme, DefaultTheme, NavigationContainer } from "@react-navigation/native";
@@ -29,12 +29,20 @@ const INPUT_MODES: Array<{ id: InputModeId; screen: "ImportCenter" | "VoiceCaptu
 const SWIPE_DISTANCE_THRESHOLD = 28;
 const SWIPE_VELOCITY_THRESHOLD = 0.35;
 
-function getAdjacentInputMode(currentMode: InputModeId, direction: SwipeDirection): InputModeId {
-  const currentIndex = Math.max(0, INPUT_MODES.findIndex((mode) => mode.id === currentMode));
-  const nextIndex = direction === "right" ? currentIndex + 1 : currentIndex - 1;
-  const clampedIndex = Math.min(Math.max(nextIndex, 0), INPUT_MODES.length - 1);
+function getInputModeAfterSwipe(currentMode: InputModeId, direction: SwipeDirection): InputModeId {
+  if (currentMode === "voice") {
+    return direction === "right" ? "manual" : "import";
+  }
 
-  return INPUT_MODES[clampedIndex].id;
+  if (currentMode === "manual") {
+    return direction === "left" ? "voice" : "manual";
+  }
+
+  return direction === "right" ? "voice" : "import";
+}
+
+function getSwipeDirection(dx: number, vx: number): SwipeDirection {
+  return dx !== 0 ? (dx > 0 ? "right" : "left") : vx > 0 ? "right" : "left";
 }
 
 export function AppNavigator({ onLogout }: { onLogout?: () => void }) {
@@ -154,7 +162,8 @@ function FinAppTabBar({ state, descriptors, navigation }) {
             return;
           }
 
-          setInputMode((currentMode) => getAdjacentInputMode(currentMode, gesture.dx > 0 ? "right" : "left"));
+          const direction = getSwipeDirection(gesture.dx, gesture.vx);
+          setInputMode((currentMode) => getInputModeAfterSwipe(currentMode, direction));
         },
       }),
     [],
