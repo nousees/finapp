@@ -14,6 +14,8 @@ interface Props {
   innerRadius?: number;
   centerLabel?: string;
   centerSub?: string;
+  centerLabelColor?: string;
+  centerSubColor?: string;
 }
 
 export default function DonutChart({
@@ -22,6 +24,8 @@ export default function DonutChart({
   innerRadius = 55,
   centerLabel,
   centerSub,
+  centerLabelColor = "#FFFFFF",
+  centerSubColor = "rgba(255,255,255,0.7)",
 }: Props) {
   const radius = size / 2;
   const strokeWidth = radius - innerRadius;
@@ -64,8 +68,10 @@ export default function DonutChart({
       </Svg>
       {centerLabel && (
         <View style={styles.center}>
-          <Text style={styles.centerLabel}>{centerLabel}</Text>
-          {centerSub && <Text style={styles.centerSub}>{centerSub}</Text>}
+          <Text style={[styles.centerLabel, { color: centerLabelColor }]}>{centerLabel}</Text>
+          {centerSub && (
+            <Text style={[styles.centerSub, { color: centerSubColor }]}>{centerSub}</Text>
+          )}
         </View>
       )}
     </View>
@@ -85,11 +91,9 @@ const styles = StyleSheet.create({
   centerLabel: {
     fontSize: 16,
     fontFamily: "Inter_700Bold",
-    color: "#FFFFFF",
   },
   centerSub: {
     fontSize: 11,
     fontFamily: "Inter_400Regular",
-    color: "rgba(255,255,255,0.7)",
   },
 });

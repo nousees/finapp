@@ -193,20 +193,17 @@ export default function AnalyticsScreen() {
           <View style={[styles.chartCard, { backgroundColor: colors.card }]}>
             <Text style={[styles.chartTitle, { color: colors.foreground }]}>По категориям</Text>
             <View style={styles.donutRow}>
-              <LinearGradient
-                colors={["#6B46C1", "#8B5CF6", "#7ED9B6"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.donutGradient}
-              >
+              <View style={styles.donutChart}>
                 <DonutChart
                   data={expenseByCategory.slice(0, 5)}
                   size={130}
                   innerRadius={44}
                   centerLabel={`${expenseByCategory.length}`}
                   centerSub="категорий"
+                  centerLabelColor={colors.foreground}
+                  centerSubColor={colors.mutedForeground}
                 />
-              </LinearGradient>
+              </View>
               <View style={styles.catList}>
                 {expenseByCategory.slice(0, 5).map((e) => {
                   const cat = CATEGORIES.find((c) => c.id === e.category);
@@ -369,10 +366,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 16,
   },
-  donutGradient: {
+  donutChart: {
     width: 130,
     height: 130,
-    borderRadius: 65,
     alignItems: "center",
     justifyContent: "center",
   },

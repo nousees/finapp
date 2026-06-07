@@ -246,7 +246,6 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
               </LinearGradient>
             </Pressable>
           </Animated.View>
-          <View style={[styles.micGlow, { backgroundColor: colors.purple + "30" }]} />
         </View>
 
         {rightRoutes.map((route, index) => {
@@ -330,14 +329,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 12,
     elevation: 10,
-  },
-  micGlow: {
-    position: "absolute",
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    bottom: -10,
-    zIndex: -1,
   },
   overlay: {
     flex: 1,
